@@ -3,19 +3,38 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './api/auth/auth.module';
 import { CampaignModule } from './api/campaign/campaign.module';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ConfigModule } from '@nestjs/config';
 import { dataSourceOptions } from './config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { UserModule } from './api/user/user.module';
+import { environmentValidationSchema } from './config/env.validation';
+import { ThrottlerModule } from '@nestjs/throttler';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      validationSchema: environmentValidationSchema,
     }),
-    TypeOrmModule.forRoot(dataSourceOptions),
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          ttl: 60,
+          limit: 10,
+        },
+      ],
+    }),
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: () => ({
+        ...dataSourceOptions,
+      }),
+    }),
     AuthModule,
     CampaignModule,
+    UserModule,
   ],
   controllers: [AppController],
   providers: [AppService],

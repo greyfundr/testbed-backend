@@ -1,26 +1,26 @@
 import { DataSource, DataSourceOptions } from 'typeorm';
 import { config } from 'dotenv';
+import * as path from 'path';
 
 config();
-
 export const dataSourceOptions: DataSourceOptions = {
   type: 'mysql',
   host: process.env.DB_HOST || 'localhost',
-  port: Number(process.env.DB_PORT) || 3306,
+  port: parseInt(process.env.DB_PORT || '3306', 10),
   username: process.env.DB_USERNAME || 'root',
   password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_DATABASE || 'nestjs_db',
-  entities: [__dirname + '/../**/*.entity{.ts,.js}'],
-  migrations: ['dist/database/migrations/*.js'],
+  database: process.env.DB_DATABASE || 'greyfundr_db',
+  entities: [path.join(__dirname, '..', '**', '*.entity.{ts,js}')],
+  migrations: [
+    path.join(__dirname, '..', 'database', 'migrations', '*.{ts,js}'),
+  ],
   migrationsTableName: 'migrations',
-  synchronize: process.env.NODE_ENV === 'development',
-  logging: process.env.NODE_ENV === 'development',
+  synchronize: false,
+  logging: false,
   extra: {
     connectionLimit: 10,
   },
   timezone: 'Z',
 };
 
-const dataSource = new DataSource(dataSourceOptions);
-
-export default dataSource;
+export const AppDataSource = new DataSource(dataSourceOptions);
