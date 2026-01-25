@@ -5,7 +5,8 @@ export const environmentValidationSchema = Joi.object({
     .valid('development', 'production', 'test')
     .default('development')
     .required(),
-  PORT: Joi.number().port(),
+  API_PORT: Joi.number().port(),
+  ALLOWED_ORIGINS: Joi.string().required(),
 
   // Database Configuration
   DB_HOST: Joi.string().required(),
@@ -21,6 +22,7 @@ export const environmentValidationSchema = Joi.object({
   // TERMII - SMS and EMAIL SERVICES
   TERMII_API_KEY: Joi.string().required(),
   TERMII_SENDER_ID: Joi.string().required(),
+  TERMII_BASE_URL: Joi.string().required(),
 
   // Cloudinary Configuration
   CLOUDINARY_CLOUD_NAME: Joi.string().required(),

@@ -7,6 +7,7 @@ import { ConfigModule } from '@nestjs/config';
 import { dataSourceOptions } from './config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserModule } from './api/user/user.module';
+import { CommonModule } from './common/common.module';
 import { environmentValidationSchema } from './config/env.validation';
 import { ThrottlerModule } from '@nestjs/throttler';
 
@@ -35,8 +36,9 @@ import { ThrottlerModule } from '@nestjs/throttler';
     AuthModule,
     CampaignModule,
     UserModule,
+    CommonModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }

@@ -10,7 +10,7 @@ import { AbstractEntity } from './index';
 export abstract class AbstractRepository<T extends AbstractEntity> {
   protected constructor(protected readonly repository: Repository<T>) {}
 
-  private getManager(em?: EntityManager): EntityManager {
+  getManager(em?: EntityManager): EntityManager {
     return em || this.repository.manager;
   }
 

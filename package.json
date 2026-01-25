@@ -22,7 +22,7 @@
     "migration:generate": "npm run typeorm -- migration:generate -d src/config/database.config.ts",
     "migration:run": "npm run build && npx typeorm migration:run -d dist/config/database.config.js",
     "migration:revert": "npm run build && npx typeorm migration:revert -d dist/config/database.config.js",
-    "migration:create": "npx typeorm migration:create src/database/migrations/migration"
+    "migration:create": "npx typeorm migration:create src/migrations/migration"
   },
   "dependencies": {
     "@nestjs/cache-manager": "^3.1.0",
@@ -37,6 +37,7 @@
     "@nestjs/swagger": "^11.2.5",
     "@nestjs/throttler": "^6.5.0",
     "@nestjs/typeorm": "^11.0.0",
+    "axios": "^1.13.2",
     "bcrypt": "^6.0.0",
     "cache-manager": "^7.2.8",
     "class-transformer": "^0.5.1",
