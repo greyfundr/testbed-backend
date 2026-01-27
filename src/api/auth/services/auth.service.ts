@@ -49,8 +49,9 @@ export class AuthService {
 
       const hashedPassword = await bcrypt.hash(password, 10);
 
-      const phoneOtp = generateNumericToken(4);
+      const phoneOtp = generateNumericToken(6);
       const otpExpiration = new Date(Date.now() + 5 * 60 * 1000);
+
       await this.userRepository.create(
         {
           email,
@@ -62,6 +63,7 @@ export class AuthService {
         },
         queryRunner.manager,
       );
+      
       await this.smsService.sendSMS(phoneNumber, `Your OTP is ${phoneOtp}`);
     } catch (error) {
       await queryRunner.rollbackTransaction();
@@ -71,6 +73,7 @@ export class AuthService {
       await queryRunner.release();
     }
   }
+
   async login(params: LoginDto) {
     const user = await this.userRepository.findOne({
       where: [

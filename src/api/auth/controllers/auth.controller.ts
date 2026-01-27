@@ -50,6 +50,7 @@ export class AuthController {
       accessToken: response.access_token,
     };
   }
+  
   @ApiOperation({ summary: 'Verify OTP' })
   @Patch('verify-otp')
   async verifyOtp(@Body() body: VerifyOtpDto) {

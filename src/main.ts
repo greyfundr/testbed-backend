@@ -32,11 +32,12 @@ async function bootstrap() {
       defaultVersion: '1',
     });
 
-    const allowedOrigins = configService
-      .get<string>('ALLOWED_ORIGINS')
-      ?.split(',') || ['http://localhost:6500'];
+    // const allowedOrigins = configService
+    //   .get<string>('ALLOWED_ORIGINS')
+    //   ?.split(',') || ['http://localhost:6500'];
     app.enableCors({
-      origin: allowedOrigins,
+      // origin: allowedOrigins,
+      origin: true,
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization'],
@@ -54,7 +55,7 @@ async function bootstrap() {
       }),
     );
 
-    const port = configService.get<number>('API_PORT') || 3000;
+    const port = configService.get<number>('API_PORT') || 8080;
     // Swagger documentation (disable in production)
     const nodeEnv = configService.get<string>('NODE_ENV');
     if (nodeEnv !== 'production') {
@@ -63,13 +64,17 @@ async function bootstrap() {
         .setDescription('API for Grey Fundr platform')
         .setVersion('1.0')
         .addServer(`http://localhost:${port}`, 'Local Development Server')
-        .addBearerAuth({
-          type: 'http',
-          scheme: 'bearer',
-          bearerFormat: 'JWT',
-          description: 'Enter JWT token',
-        })
-        .addSecurityRequirements('accessToken')
+        .addBearerAuth(
+          {
+            type: 'http',
+            scheme: 'bearer',
+            bearerFormat: 'JWT',
+            description: 'Enter JWT token',
+            in: 'header',
+          },
+          'JWT-auth',
+        )
+        .addSecurityRequirements('JWT-auth')
         .build();
 
       const document = SwaggerModule.createDocument(app, config);
