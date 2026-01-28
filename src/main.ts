@@ -55,7 +55,7 @@ async function bootstrap() {
       }),
     );
 
-    const port = configService.get<number>('API_PORT') || 8080;
+    const port = configService.get<number>('PORT') || 8080;
     // Swagger documentation (disable in production)
     const nodeEnv = configService.get<string>('NODE_ENV');
     if (nodeEnv !== 'production') {
