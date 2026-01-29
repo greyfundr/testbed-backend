@@ -12,7 +12,7 @@ import {
   ValidatorConstraintInterface,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { AccountType } from '../user/user.enum';
+import { AccountType } from '../user/enums/user.enum';
 import { Transform } from 'class-transformer';
 
 export class SignupDto {

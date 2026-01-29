@@ -1,6 +1,7 @@
-import { Entity, Column } from 'typeorm';
+import { Entity, Column, OneToOne } from 'typeorm';
 import { AbstractEntity } from '../../../common/entities';
-import { AccountType } from '../user.enum';
+import { AccountType } from '../enums/user.enum';
+import { Settings } from './settings.entity';
 
 @Entity('users')
 export class User extends AbstractEntity {
@@ -54,4 +55,7 @@ export class User extends AbstractEntity {
 
   @Column({ type: 'varchar', nullable: true, name: 'tin' })
   tin: string | null;
+
+  @OneToOne(() => Settings, (settings) => settings.user, { cascade: true })
+  settings: Settings;
 }

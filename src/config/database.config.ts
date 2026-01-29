@@ -13,7 +13,7 @@ export const dataSourceOptions: DataSourceOptions = {
   entities: [path.join(__dirname, '..', '**', '*.entity.{ts,js}')],
   migrations: [path.join(__dirname, '..', 'migrations', '*.{ts,js}')],
   migrationsTableName: 'migrations',
-  synchronize: false,
+  synchronize: true,
   logging: false,
   extra: {
     connectionLimit: 10,

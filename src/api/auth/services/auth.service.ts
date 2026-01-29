@@ -16,10 +16,11 @@ import {
   SubmitBasicInfoDto,
   VerifyOtpDto,
 } from '../auth.dto';
-import { UserRepository } from '../../user/user.repository';
+import { UserRepository } from '../../user/repository';
 import { generateNumericToken } from '../../../common/helpers/token-generator';
 import { TermiiService } from '../../../common/services/termii.service';
 import * as bcrypt from 'bcrypt';
+import { SettingsService } from '../../user/services';
 
 @Injectable()
 export class AuthService {
@@ -28,6 +29,7 @@ export class AuthService {
     private readonly userRepository: UserRepository,
     private readonly jwtService: JwtService,
     private readonly smsService: TermiiService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   async signup(params: SignupDto) {
@@ -52,7 +54,7 @@ export class AuthService {
       const phoneOtp = generateNumericToken(6);
       const otpExpiration = new Date(Date.now() + 5 * 60 * 1000);
 
-      await this.userRepository.create(
+      const user = await this.userRepository.create(
         {
           email,
           password: hashedPassword,
@@ -63,7 +65,9 @@ export class AuthService {
         },
         queryRunner.manager,
       );
-      
+
+      await this.settingsService.createDefaultSettings(user.uuid);
+
       await this.smsService.sendSMS(phoneNumber, `Your OTP is ${phoneOtp}`);
     } catch (error) {
       await queryRunner.rollbackTransaction();

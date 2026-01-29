@@ -24,3 +24,5 @@ export class CreateUserDto {
   @IsOptional()
   lastName?: string;
 }
+
+export class UpdateUserDto extends CreateUserDto {}
