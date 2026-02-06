@@ -5,12 +5,14 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthController } from './controllers/auth.controller';
 import { AuthService } from './services/auth.service';
 import { UserModule } from '../user/user.module';
+import { SettingsModule } from '../settings/settings.module';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { TermiiService } from '../../common/services/termii.service';
 
 @Module({
   imports: [
     UserModule,
+    SettingsModule,
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -24,4 +26,4 @@ import { TermiiService } from '../../common/services/termii.service';
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, TermiiService],
 })
-export class AuthModule {}
+export class AuthModule { }

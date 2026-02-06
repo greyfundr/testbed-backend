@@ -8,6 +8,7 @@ import { dataSourceOptions } from './config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserModule } from './api/user/user.module';
 import { CommonModule } from './common/common.module';
+import { SettingsModule } from './api/settings/settings.module';
 import { environmentValidationSchema } from './config/env.validation';
 import { ThrottlerModule } from '@nestjs/throttler';
 
@@ -36,6 +37,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
     AuthModule,
     CampaignModule,
     UserModule,
+    SettingsModule,
     CommonModule,
   ],
   controllers: [AppController],

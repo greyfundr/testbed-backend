@@ -1,14 +1,15 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { SettingsService, UserService } from './services';
-import { UserController, SettingsController } from './controllers';
-import { User, Settings } from './entities';
-import { SettingsRepository, UserRepository } from './repository';
+import { UserService } from './services';
+import { UserController } from './controllers';
+import { User } from './entities';
+import { UserRepository } from './repository';
+import { SettingsModule } from '../settings/settings.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User, Settings])],
-  controllers: [UserController, SettingsController],
-  providers: [UserService, UserRepository, SettingsService, SettingsRepository],
-  exports: [UserService, UserRepository, SettingsService, SettingsRepository],
+  imports: [TypeOrmModule.forFeature([User]), SettingsModule],
+  controllers: [UserController],
+  providers: [UserService, UserRepository],
+  exports: [UserService, UserRepository],
 })
-export class UserModule {}
+export class UserModule { }

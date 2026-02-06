@@ -4,8 +4,8 @@ import { ConfigModule } from '@nestjs/config';
 
 @Global()
 @Module({
-    imports: [ConfigModule],
-    providers: [TermiiService],
-    exports: [TermiiService],
+  imports: [ConfigModule],
+  providers: [TermiiService],
+  exports: [TermiiService],
 })
-export class CommonModule { }
+export class CommonModule {}

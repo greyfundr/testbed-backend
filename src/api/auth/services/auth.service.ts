@@ -20,7 +20,7 @@ import { UserRepository } from '../../user/repository';
 import { generateNumericToken } from '../../../common/helpers/token-generator';
 import { TermiiService } from '../../../common/services/termii.service';
 import * as bcrypt from 'bcrypt';
-import { SettingsService } from '../../user/services';
+import { SettingsService } from '../../settings/services';
 
 @Injectable()
 export class AuthService {
@@ -30,7 +30,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly smsService: TermiiService,
     private readonly settingsService: SettingsService,
-  ) {}
+  ) { }
 
   async signup(params: SignupDto) {
     const queryRunner = this.userRepository
@@ -79,6 +79,7 @@ export class AuthService {
   }
 
   async login(params: LoginDto) {
+    this.logger.log(`Login attempt for ${params.emailOrPhone}`);
     const user = await this.userRepository.findOne({
       where: [
         { email: params.emailOrPhone },

@@ -1,7 +1,7 @@
 import { Entity, Column, OneToOne } from 'typeorm';
 import { AbstractEntity } from '../../../common/entities';
 import { AccountType } from '../enums/user.enum';
-import { Settings } from './settings.entity';
+import { Settings } from '../../settings/entities/settings.entity';
 
 @Entity('users')
 export class User extends AbstractEntity {

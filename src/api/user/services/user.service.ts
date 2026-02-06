@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { UpdateUserDto } from '../dtos';
+import { UpdateUserDto, UpdateProfileDto } from '../dtos';
+import { User } from '../entities';
 import { UserRepository } from '../repository/user.repository';
 
 @Injectable()
@@ -18,5 +19,15 @@ export class UserService {
 
   remove(id: number) {
     return this.userRepository.remove(id);
+  }
+
+  async updateProfile(user: User, updateProfileDto: UpdateProfileDto) {
+    if (updateProfileDto.firstName) {
+      user.firstName = updateProfileDto.firstName;
+    }
+    if (updateProfileDto.lastName) {
+      user.lastName = updateProfileDto.lastName;
+    }
+    return await this.userRepository.save(user);
   }
 }

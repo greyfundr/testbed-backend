@@ -26,3 +26,13 @@ export class CreateUserDto {
 }
 
 export class UpdateUserDto extends CreateUserDto {}
+
+export class UpdateProfileDto {
+  @IsString()
+  @IsOptional()
+  firstName?: string;
+
+  @IsString()
+  @IsOptional()
+  lastName?: string;
+}
