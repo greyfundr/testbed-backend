@@ -58,4 +58,10 @@ export class User extends AbstractEntity {
 
   @OneToOne(() => Settings, (settings) => settings.user, { cascade: true })
   settings: Settings;
+
+  @Column({ type: 'varchar', nullable: true, name: 'refresh_token' })
+  refreshToken: string | null;
+
+  @Column({ type: 'varchar', nullable: true, name: 'pin' })
+  pin: string | null;
 }

@@ -16,6 +16,9 @@ import {
   VerifyOtpDto,
   SubmitBasicInfoDto,
   CompleteKycDto,
+  RefreshTokenDto,
+  LoginPinDto,
+  SetPinDto,
 } from '../auth.dto';
 import { ApiBody, ApiOperation } from '@nestjs/swagger';
 import { CurrentUser } from '../decorators/current-user.decorator';
@@ -24,7 +27,7 @@ import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(private authService: AuthService) { }
 
   @ApiOperation({ summary: 'Register a new user' })
   @ApiBody({ type: SignupDto })
@@ -47,7 +50,20 @@ export class AuthController {
       success: true,
       message: 'Login successful!',
       data: response.data,
-      accessToken: response.access_token,
+      accessToken: response.accessToken,
+      refreshToken: response.refreshToken,
+    };
+  }
+
+  @ApiOperation({ summary: 'Refresh tokens' })
+  @HttpCode(200)
+  @Post('refresh')
+  async refresh(@Body() body: RefreshTokenDto) {
+    const response = await this.authService.refreshTokens(body.refreshToken);
+    return {
+      success: true,
+      message: 'Tokens refreshed successful!',
+      ...response,
     };
   }
 
@@ -58,7 +74,8 @@ export class AuthController {
     return {
       success: true,
       message: 'Verification successful!',
-      accessToken: response.access_token,
+      accessToken: response.accessToken,
+      refreshToken: response.refreshToken,
     };
   }
 
@@ -112,6 +129,32 @@ export class AuthController {
     return {
       success: true,
       message: 'KYC completed successfully!',
+    };
+  }
+
+  @ApiOperation({ summary: 'Login with PIN' })
+  @HttpCode(200)
+  @Post('login-pin')
+  async loginPin(@Body() body: LoginPinDto): Promise<LoginResponseDto> {
+    const response = await this.authService.loginWithPin(body);
+    return {
+      success: true,
+      message: 'Login successful!',
+      data: response.data,
+      accessToken: response.accessToken,
+      refreshToken: response.refreshToken,
+    };
+  }
+
+  @ApiOperation({ summary: 'Set 6-digit PIN' })
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  @Post('set-pin')
+  async setPin(@Body() body: SetPinDto, @CurrentUser() user: User) {
+    await this.authService.setPin(user.uuid, body.pin);
+    return {
+      success: true,
+      message: 'PIN set successfully!',
     };
   }
 }

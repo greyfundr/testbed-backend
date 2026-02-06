@@ -6,6 +6,7 @@ import {
   IsPhoneNumber,
   IsString,
   IsStrongPassword,
+  Matches,
   Validate,
   ValidationArguments,
   ValidatorConstraint,
@@ -128,6 +129,34 @@ export class CompleteKycDto {
   tin: string;
 }
 
+export class RefreshTokenDto {
+  @ApiProperty({ description: 'Refresh token' })
+  @IsNotEmpty({ message: 'Refresh token is required' })
+  @IsString()
+  refreshToken: string;
+}
+
+export class SetPinDto {
+  @ApiProperty({ description: '6-digit PIN', example: '123456' })
+  @IsNotEmpty({ message: 'PIN is required' })
+  @IsString()
+  @Matches(/^\d{6}$/, { message: 'PIN must be 6 numeric digits' })
+  pin: string;
+}
+
+export class LoginPinDto {
+  @IsNotEmpty({ message: 'emailOrPhone is required' })
+  @IsString({ message: 'emailOrPhone must be a string' })
+  @Validate(IsEmailOrPhoneConstraint)
+  emailOrPhone: string;
+
+  @ApiProperty({ description: '6-digit PIN', example: '123456' })
+  @IsNotEmpty({ message: 'PIN is required' })
+  @IsString()
+  @Matches(/^\d{6}$/, { message: 'PIN must be 6 numeric digits' })
+  pin: string;
+}
+
 export class BaseResponseDto {
   success: boolean;
   message: string;
@@ -136,4 +165,5 @@ export class BaseResponseDto {
 export class LoginResponseDto extends BaseResponseDto {
   data: Record<string, any>;
   accessToken: string | null;
+  refreshToken: string | null;
 }
