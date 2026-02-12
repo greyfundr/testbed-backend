@@ -7,6 +7,7 @@ import {
   NotificationFrequency,
   ProfileVisibility,
 } from '../enums/settings.enum';
+import { EntityManager } from 'typeorm';
 
 @Injectable()
 export class SettingsService {
@@ -16,9 +17,15 @@ export class SettingsService {
     private configService: ConfigService,
   ) {}
 
-  async findOneByUuid(uuid: string) {
+  async findOneByid(id: string) {
     return this.settingsRepository.findOne({
-      where: { uuid },
+      where: { id },
+    });
+  }
+
+  async findByUserId(userId: string): Promise<Settings | null> {
+    return this.settingsRepository.findOne({
+      where: { user: { id: userId } },
     });
   }
 
@@ -33,7 +40,7 @@ export class SettingsService {
   async getSettings(userId: string): Promise<Settings> {
     try {
       const settings = await this.settingsRepository.findOne({
-        where: { user: { uuid: userId } },
+        where: { user: { id: userId } },
       });
 
       if (!settings) {
@@ -92,9 +99,16 @@ export class SettingsService {
     return this.settingsRepository.save(settings);
   }
 
-  async createDefaultSettings(userId: string): Promise<Settings> {
-    const settings = await this.settingsRepository.create({
-      user: { uuid: userId },
+  async createDefaultSettings(
+    userId: string,
+    manager?: EntityManager,
+  ): Promise<Settings> {
+    const repository = manager
+      ? manager.getRepository(Settings)
+      : this.settingsRepository;
+
+    const settings = await repository.create({
+      user: { id: userId },
       notificationPrefs: {
         campaignUpdates: {
           push: true,
@@ -149,6 +163,6 @@ export class SettingsService {
       currency: 'NGN',
     });
 
-    return await this.settingsRepository.save(settings);
+    return repository.save(settings);
   }
 }

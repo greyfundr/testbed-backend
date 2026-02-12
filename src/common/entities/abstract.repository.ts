@@ -3,6 +3,7 @@ import {
   DeepPartial,
   FindOneOptions,
   FindManyOptions,
+  FindOptionsWhere,
   EntityManager,
 } from 'typeorm';
 import { AbstractEntity } from './index';
@@ -33,7 +34,17 @@ export abstract class AbstractRepository<T extends AbstractEntity> {
     return await this.repository.findOne(options);
   }
 
-  async findOneById(id: any, em?: EntityManager): Promise<T | null> {
+  async findOneById(id: number, em?: EntityManager): Promise<T | null> {
+    const options: FindOneOptions<T> = {
+      where: { id } as any,
+    };
+    if (em) {
+      return await em.findOne(this.repository.target, options);
+    }
+    return await this.repository.findOne(options);
+  }
+
+  async findOneByid(id: string, em?: EntityManager): Promise<T | null> {
     const options: FindOneOptions<T> = {
       where: { id } as any,
     };
@@ -53,12 +64,31 @@ export abstract class AbstractRepository<T extends AbstractEntity> {
     return await this.repository.find(options);
   }
 
-  async update(id: any, data: DeepPartial<T>, em?: EntityManager): Promise<T> {
-    await this.getManager(em).update(this.repository.target, id, data as any);
-    const updatedEntity = await this.findOneById(id, em);
+  async update(
+    criteria: number | string | FindOptionsWhere<T>,
+    data: DeepPartial<T>,
+    em?: EntityManager,
+  ): Promise<T> {
+    await this.getManager(em).update(
+      this.repository.target,
+      criteria as any,
+      data as any,
+    );
+
+    let updatedEntity: T | null = null;
+
+    if (typeof criteria === 'number') {
+      updatedEntity = await this.findOneById(criteria, em);
+    } else if (typeof criteria === 'string') {
+      updatedEntity = await this.findOneByid(criteria, em);
+    } else {
+      updatedEntity = await this.findOne({ where: criteria }, em);
+    }
+
     if (!updatedEntity) {
       throw new Error('Entity not found after update');
     }
+
     return updatedEntity;
   }
 

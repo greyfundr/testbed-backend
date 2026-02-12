@@ -1,8 +1,9 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsEnum,
+  IsNotEmpty,
   IsObject,
   IsOptional,
   IsString,
@@ -18,7 +19,7 @@ import {
   PrivacyControls,
 } from '../interface/settings.interface';
 
-export class CreateSettingsDto { }
+export class CreateSettingsDto {}
 
 export class UpdateNotificationPreferencesDto {
   @ApiPropertyOptional()
@@ -173,12 +174,24 @@ export class UpdateSettingsDto {
   currency?: string;
 }
 
-export class Enable2FADto {
-  @IsEnum(TwoFactorMethod)
-  method: TwoFactorMethod;
-}
+// export class Enable2FADto {
+//   @IsEnum(TwoFactorMethod)
+//   method: TwoFactorMethod;
+// }
 
-export class Verify2FADto {
+// export class Verify2FADto {
+//   @IsString()
+//   code: string;
+// }
+
+export class VerifyTwoFactorDto {
+  @IsNotEmpty()
   @IsString()
-  code: string;
+  @ApiProperty({
+    description: 'Token',
+    example: '204509',
+    required: true,
+    title: 'token',
+  })
+  token: string;
 }

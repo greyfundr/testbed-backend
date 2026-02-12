@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
+import { formatPhoneForTermii } from '../helpers';
 
 @Injectable()
 export class TermiiService {
@@ -18,9 +19,11 @@ export class TermiiService {
 
   async sendSMS(to: string, sms: string): Promise<any> {
     try {
+      const formattedNumber = formatPhoneForTermii(to);
+
       const payload = {
         api_key: this.configService.get<string>('TERMII_API_KEY'),
-        to,
+        to: formattedNumber,
         from: this.configService.get<string>('TERMII_SENDER_ID'),
         sms,
         type: 'plain',

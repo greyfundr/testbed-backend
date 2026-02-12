@@ -7,9 +7,9 @@ import { UserRepository } from '../repository/user.repository';
 export class UserService {
   constructor(private readonly userRepository: UserRepository) {}
 
-  async findOneByUuid(uuid: string) {
+  async findOneByid(id: string) {
     return this.userRepository.findOne({
-      where: { uuid },
+      where: { id },
     });
   }
 

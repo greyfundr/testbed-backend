@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Patch,
+  Post,
   UseGuards,
 } from '@nestjs/common';
 import { SettingsService } from '../services/settings.service';
@@ -12,7 +13,7 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { User } from '../../user/entities/user.entity';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { UpdateSettingsDto } from '../dtos/settings.dto';
+import { UpdateSettingsDto, VerifyTwoFactorDto } from '../dtos/settings.dto';
 
 @ApiTags('Settings')
 @Controller('settings')
@@ -24,7 +25,7 @@ export class SettingsController {
   @ApiBearerAuth('JWT-auth')
   @Get()
   async getSettings(@CurrentUser() user: User) {
-    return await this.settingsService.getSettings(user.uuid);
+    return await this.settingsService.getSettings(user.id);
   }
 
   @Patch('/update')
@@ -34,6 +35,6 @@ export class SettingsController {
     @CurrentUser() user: User,
     @Body() updateDto: UpdateSettingsDto,
   ) {
-    return this.settingsService.updateSettings(user.uuid, updateDto);
+    return this.settingsService.updateSettings(user.id, updateDto);
   }
 }

@@ -32,10 +32,10 @@ export class User extends AbstractEntity {
   @Column({ nullable: true, name: 'phone_otp' })
   phoneOtp: string;
 
-  @Column({ default: false, name: 'has_verified_email' })
+  @Column({ default: false, name: 'has_verified_phone' })
   hasVerifiedPhone: boolean;
 
-  @Column({ type: 'date', nullable: true, name: 'otp_expiration' })
+  @Column({ type: 'timestamp', nullable: true, name: 'otp_expiration' })
   otpExpiration: Date | null;
 
   @Column({ default: false, name: 'has_submitted_basic_info' })

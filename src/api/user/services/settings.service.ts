@@ -13,9 +13,9 @@ export class SettingsService {
     private configService: ConfigService,
   ) {}
 
-  async findOneByUuid(uuid: string) {
+  async findOneByid(id: string) {
     return this.settingsRepository.findOne({
-      where: { uuid },
+      where: { id },
     });
   }
 
@@ -30,7 +30,7 @@ export class SettingsService {
   async getSettings(userId: string): Promise<Settings> {
     try {
       const settings = await this.settingsRepository.findOne({
-        where: { user: { uuid: userId } },
+        where: { user: { id: userId } },
       });
 
       if (!settings) {
@@ -157,7 +157,7 @@ export class SettingsService {
 
   async createDefaultSettings(userId: string): Promise<Settings> {
     const settings = await this.settingsRepository.create({
-      user: { uuid: userId },
+      user: { id: userId },
       notificationPrefs: {
         campaignUpdates: {
           push: true,
