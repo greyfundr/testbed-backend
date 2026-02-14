@@ -11,6 +11,8 @@ import { CommonModule } from './common/common.module';
 import { SettingsModule } from './api/settings/settings.module';
 import { environmentValidationSchema } from './config/env.validation';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { EventEmitterModule } from '@nestjs/event-emitter';
+import { NotificationModule } from './api/notification/notification.module';
 
 @Module({
   imports: [
@@ -39,6 +41,8 @@ import { ThrottlerModule } from '@nestjs/throttler';
     UserModule,
     SettingsModule,
     CommonModule,
+    NotificationModule,
+    EventEmitterModule.forRoot(),
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -23,6 +23,7 @@ import { generateNumericToken } from '../../../common/helpers/token-generator';
 import { TermiiService } from '../../../common/services/termii.service';
 import * as bcrypt from 'bcrypt';
 import { SettingsService } from '../../settings/services';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Injectable()
 export class AuthService {
@@ -32,6 +33,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly smsService: TermiiService,
     private readonly settingsService: SettingsService,
+    private readonly eventEmitter: EventEmitter2,
   ) { }
 
   async signup(params: SignupDto) {
@@ -71,6 +73,12 @@ export class AuthService {
       await this.settingsService.createDefaultSettings(user.uuid);
 
       await this.smsService.sendSMS(phoneNumber, `Your OTP is ${phoneOtp}`);
+
+      this.eventEmitter.emit('user.created', {
+        userUuid: user.uuid,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+      });
     } catch (error) {
       await queryRunner.rollbackTransaction();
       this.logger.error('Unable to signup user', error);
