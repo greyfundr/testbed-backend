@@ -1,7 +1,8 @@
-import { Entity, Column, OneToOne } from 'typeorm';
+import { Entity, Column, OneToOne, OneToMany } from 'typeorm';
 import { AbstractEntity } from '../../../common/entities';
 import { AccountType } from '../enums/user.enum';
-import { Settings } from '../../settings/entities/settings.entity';
+import { Settings } from '../../settings';
+import { Notification } from '../../notification/entities/notification.entity';
 
 @Entity('users')
 export class User extends AbstractEntity {
@@ -32,10 +33,10 @@ export class User extends AbstractEntity {
   @Column({ nullable: true, name: 'phone_otp' })
   phoneOtp: string;
 
-  @Column({ default: false, name: 'has_verified_email' })
+  @Column({ default: false, name: 'has_verified_phone' })
   hasVerifiedPhone: boolean;
 
-  @Column({ type: 'date', nullable: true, name: 'otp_expiration' })
+  @Column({ type: 'timestamp', nullable: true, name: 'otp_expiration' })
   otpExpiration: Date | null;
 
   @Column({ default: false, name: 'has_submitted_basic_info' })
@@ -64,4 +65,7 @@ export class User extends AbstractEntity {
 
   @Column({ type: 'varchar', nullable: true, name: 'pin' })
   pin: string | null;
+
+  @OneToMany(() => Notification, (notification) => notification.user)
+  notifications: Notification[];
 }

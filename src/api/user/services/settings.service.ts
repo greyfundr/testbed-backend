@@ -1,13 +1,9 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { UpdateSettingsDto } from '../dtos/settings.dto';
-import { SettingsRepository } from '../repository/settings.repository';
+import { UpdateSettingsDto } from '../../settings/dtos';
+import { SettingsRepository } from '../../settings/repository';
 import { ConfigService } from '@nestjs/config';
-import { Settings } from '../entities/settings.entity';
-import {
-  NotificationFrequency,
-  ProfileVisibility,
-} from '../enums/settings.enum';
-import { EntityManager } from 'typeorm';
+import { Settings } from '../../settings/entities';
+import { NotificationFrequency, ProfileVisibility } from '../enums/user.enum';
 
 @Injectable()
 export class SettingsService {
@@ -23,12 +19,6 @@ export class SettingsService {
     });
   }
 
-  async findByUserId(userId: string): Promise<Settings | null> {
-    return this.settingsRepository.findOne({
-      where: { user: { id: userId } },
-    });
-  }
-
   update(id: number, updateSettingsDto: UpdateSettingsDto) {
     return this.settingsRepository.update(id, updateSettingsDto);
   }
@@ -40,11 +30,7 @@ export class SettingsService {
   async getSettings(userId: string): Promise<Settings> {
     try {
       const settings = await this.settingsRepository.findOne({
-        where: {
-          user: {
-            id: userId,
-          },
-        },
+        where: { user: { id: userId } },
       });
 
       if (!settings) {
@@ -65,24 +51,10 @@ export class SettingsService {
     const settings = await this.getSettings(userId);
 
     if (updateDto.notificationPrefs) {
-      for (const key of Object.keys(updateDto.notificationPrefs)) {
-        if (
-          updateDto.notificationPrefs[
-            key as keyof typeof updateDto.notificationPrefs
-          ]
-        ) {
-          settings.notificationPrefs[
-            key as keyof typeof settings.notificationPrefs
-          ] = {
-            ...((settings.notificationPrefs[
-              key as keyof typeof settings.notificationPrefs
-            ] as any) || {}),
-            ...(updateDto.notificationPrefs[
-              key as keyof typeof updateDto.notificationPrefs
-            ] as any),
-          };
-        }
-      }
+      settings.notificationPrefs = {
+        ...settings.notificationPrefs,
+        ...updateDto.notificationPrefs,
+      };
     }
 
     if (updateDto.privacyControls) {
@@ -103,15 +75,88 @@ export class SettingsService {
     return this.settingsRepository.save(settings);
   }
 
-  async createDefaultSettings(
-    userId: string,
-    manager?: EntityManager,
-  ): Promise<Settings> {
-    const repository = manager
-      ? manager.getRepository(Settings)
-      : this.settingsRepository;
+  // async setup2FA(
+  //   userId: string,
+  //   method: string,
+  // ): Promise<{ secret: string; qrCode?: string }> {
+  //   const settings = await this.getSettings(userId);
 
-    const settings = await repository.create({
+  //   if (settings.twoFactorEnabled) {
+  //     throw new BadRequestException('2FA is already enabled');
+  //   }
+
+  //   const secret = speakeasy.generateSecret({
+  //     name: `GreyFundr (${userId})`,
+  //     issuer: 'GreyFundr',
+  //   });
+
+  //   settings.twoFactorSecret = secret.base32;
+
+  //   await this.settingsRepository.save(settings);
+
+  //   if (method === 'app') {
+  //     const qrCode = await QRCode.toDataURL(secret.otpauth_url);
+  //     return { secret: secret.base32, qrCode };
+  //   }
+
+  //   return { secret: secret.base32 };
+  // }
+
+  // async verify2FA(
+  //   userId: string,
+  //   code: string,
+  // ): Promise<{ backupCodes: string[] }> {
+  //   const settings = await this.getSettings(userId);
+
+  //   if (!settings.twoFactorSecret) {
+  //     throw new BadRequestException('2FA setup not initiated');
+  //   }
+
+  //   const verified = speakeasy.totp.verify({
+  //     secret: settings.twoFactorSecret,
+  //     encoding: 'base32',
+  //     token: code,
+  //     window: 2,
+  //   });
+
+  //   if (!verified) {
+  //     throw new BadRequestException('Invalid verification code');
+  //   }
+
+  //   // Generate backup codes
+  //   const backupCodes = Array.from({ length: 10 }, () =>
+  //     Math.random().toString(36).substring(2, 10).toUpperCase(),
+  //   );
+
+  //   settings.twoFactorEnabled = true;
+
+  //   await this.settingsRepository.save(settings);
+
+  //   return { backupCodes };
+  // }
+
+  // async disable2FA(userId: string, code: string): Promise<void> {
+  //   const settings = await this.getSettings(userId);
+
+  //   if (!settings.twoFactorEnabled) {
+  //     throw new BadRequestException('2FA is not enabled');
+  //   }
+
+  //   const verified = speakeasy.totp.verify({
+  //     secret: settings.twoFactorSecret,
+  //     encoding: 'base32',
+  //     token: code,
+  //     window: 2,
+  //   });
+
+  //   settings.twoFactorEnabled = false;
+  //   settings.twoFactorSecret = null;
+
+  //   await this.settingsRepository.save(settings);
+  // }
+
+  async createDefaultSettings(userId: string): Promise<Settings> {
+    const settings = await this.settingsRepository.create({
       user: { id: userId },
       notificationPrefs: {
         campaignUpdates: {
@@ -167,6 +212,6 @@ export class SettingsService {
       currency: 'NGN',
     });
 
-    return repository.save(settings);
+    return await this.settingsRepository.save(settings);
   }
 }

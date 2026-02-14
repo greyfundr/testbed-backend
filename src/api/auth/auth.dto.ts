@@ -69,6 +69,16 @@ export class VerifyOtpDto {
   otp: string;
 }
 
+export class ResendOtpDto {
+  @ApiProperty({
+    description: 'Email address or phone number',
+    example: '+2347042674347',
+  })
+  @IsNotEmpty({ message: 'Email or phone number is required' })
+  @IsString()
+  emailOrPhone: string;
+}
+
 export class ForgotPasswordDto {
   @IsNotEmpty({ message: 'emailOrPhone is required' })
   @IsString({ message: 'emailOrPhone must be a string' })

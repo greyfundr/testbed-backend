@@ -5,6 +5,8 @@ import {
   Patch,
   UseGuards,
   HttpCode,
+  Get,
+  HttpStatus,
 } from '@nestjs/common';
 import { AuthService } from '../services/auth.service';
 import {
@@ -19,15 +21,17 @@ import {
   RefreshTokenDto,
   LoginPinDto,
   SetPinDto,
+  ResendOtpDto,
 } from '../auth.dto';
-import { ApiBody, ApiOperation } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation } from '@nestjs/swagger';
 import { CurrentUser } from '../decorators/current-user.decorator';
 import { User } from '../../user/entities/user.entity';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
+import { VerifyTwoFactorDto } from 'src/api/settings';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) { }
+  constructor(private authService: AuthService) {}
 
   @ApiOperation({ summary: 'Register a new user' })
   @ApiBody({ type: SignupDto })
@@ -79,6 +83,16 @@ export class AuthController {
     };
   }
 
+  @ApiOperation({ summary: 'Resend OTP' })
+  @Patch('resend-otp')
+  async resendOtp(@Body() body: ResendOtpDto) {
+    const response = await this.authService.resendOtp(body);
+    return {
+      success: true,
+      message: response.message,
+    };
+  }
+
   @ApiOperation({ summary: 'Forgot password' })
   @ApiBody({ type: ForgotPasswordDto })
   @Patch('forgot-password')
@@ -98,7 +112,7 @@ export class AuthController {
     @Body() body: CreatePasswordDto,
     @CurrentUser() user: User,
   ) {
-    await this.authService.createNewPassword(body, user.uuid);
+    await this.authService.createNewPassword(body, user.id);
     return {
       success: true,
       message: 'Password updated successfully!',
@@ -113,7 +127,7 @@ export class AuthController {
     @Body() body: SubmitBasicInfoDto,
     @CurrentUser() user: User,
   ) {
-    await this.authService.submitBasicInfo(body, user.uuid);
+    await this.authService.submitBasicInfo(body, user.id);
     return {
       success: true,
       message: 'Basic information submitted successfully!',
@@ -125,7 +139,7 @@ export class AuthController {
   @Patch('complete-kyc')
   @UseGuards(JwtAuthGuard)
   async completeKyc(@Body() body: CompleteKycDto, @CurrentUser() user: User) {
-    await this.authService.completeKyc(body, user.uuid);
+    await this.authService.completeKyc(body, user.id);
     return {
       success: true,
       message: 'KYC completed successfully!',
@@ -151,10 +165,57 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Post('set-pin')
   async setPin(@Body() body: SetPinDto, @CurrentUser() user: User) {
-    await this.authService.setPin(user.uuid, body.pin);
+    await this.authService.setPin(user.id, body.pin);
     return {
       success: true,
       message: 'PIN set successfully!',
     };
+  }
+
+  @ApiOperation({ summary: 'Endpoint to enable two factor authentication' })
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  @Get('generate')
+  async generate(@CurrentUser() user: User) {
+    const data = await this.authService.enable2FA(user.id);
+
+    return {
+      success: true,
+      message: `Two factor enabled for user successfully`,
+      data,
+    };
+  }
+
+  @ApiOperation({ summary: 'Endpoint to verify two factor authentication' })
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('verify')
+  async verify(
+    @CurrentUser() user: User,
+    @Body() verifyDto: VerifyTwoFactorDto,
+  ) {
+    return await this.authService.verify2FA(user.id, verifyDto.token);
+  }
+
+  @ApiOperation({ summary: 'Endpoint to validate two factor authentication' })
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('validate')
+  async validate2FA(
+    @CurrentUser() user: User,
+    @Body() body: VerifyTwoFactorDto,
+  ) {
+    return this.authService.validate2FALogin(user.id, body.token);
+  }
+
+  @ApiOperation({ summary: 'Endpoint to disable two factor authentication' })
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('disable')
+  async disable(
+    @CurrentUser() user: User,
+    @Body() verifyDto: VerifyTwoFactorDto,
+  ) {
+    return await this.authService.disable2FA(user.id, verifyDto.token);
   }
 }

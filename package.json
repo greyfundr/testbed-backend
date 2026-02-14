@@ -22,7 +22,9 @@
     "migration:generate": "npm run typeorm -- migration:generate -d src/config/database.config.ts",
     "migration:run": "npm run build && npx typeorm migration:run -d dist/config/database.config.js",
     "migration:revert": "npm run build && npx typeorm migration:revert -d dist/config/database.config.js",
-    "migration:create": "npx typeorm migration:create src/migrations/migration"
+    "migration:create": "npx typeorm migration:create src/migrations/migration",
+    "schema:drop": "npm run build && npx typeorm schema:drop -d dist/config/database.config.js",
+    "schema:reset": "npm run schema:drop && npm run migration:run"
   },
   "dependencies": {
     "@nestjs/cache-manager": "^3.1.0",
@@ -45,8 +47,10 @@
     "helmet": "^8.1.0",
     "joi": "^18.0.2",
     "mysql2": "^3.16.1",
+    "otpauth": "^9.5.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
+    "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "typeorm": "^0.3.28"

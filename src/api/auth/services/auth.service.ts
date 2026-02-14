@@ -2,7 +2,10 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpStatus,
+  Inject,
   Injectable,
+  InternalServerErrorException,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
@@ -16,7 +19,7 @@ import {
   SubmitBasicInfoDto,
   VerifyOtpDto,
   LoginPinDto,
-  SetPinDto,
+  ResendOtpDto,
 } from '../auth.dto';
 import { UserRepository } from '../../user/repository';
 import { generateNumericToken } from '../../../common/helpers/token-generator';
@@ -24,6 +27,7 @@ import { TermiiService } from '../../../common/services/termii.service';
 import * as bcrypt from 'bcrypt';
 import { SettingsService } from '../../settings/services';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { OtpAuthService } from './otp-auth.service';
 
 @Injectable()
 export class AuthService {
@@ -34,28 +38,33 @@ export class AuthService {
     private readonly smsService: TermiiService,
     private readonly settingsService: SettingsService,
     private readonly eventEmitter: EventEmitter2,
-  ) { }
+    @Inject(OtpAuthService) private readonly otpAuthService: OtpAuthService,
+  ) {}
 
   async signup(params: SignupDto) {
     const queryRunner = this.userRepository
       .getManager()
       .connection.createQueryRunner();
+
     await queryRunner.connect();
     await queryRunner.startTransaction();
+
+    let committed = false;
+
     try {
       const { email, phoneNumber, password, accountType } = params;
 
-      const existingUser = await this.userRepository.findOne({
-        where: { email },
-      });
+      const [existingEmail, existingPhone] = await Promise.all([
+        this.userRepository.findOne({ where: { email } }),
+        this.userRepository.findOne({ where: { phoneNumber } }),
+      ]);
 
-      if (existingUser) {
-        throw new ConflictException('Email already exists');
-      }
+      if (existingEmail) throw new ConflictException('Email already exists');
+      if (existingPhone)
+        throw new ConflictException('Phone number already exists');
 
       const hashedPassword = await bcrypt.hash(password, 10);
-
-      const phoneOtp = generateNumericToken(6);
+      const otp = generateNumericToken(6);
       const otpExpiration = new Date(Date.now() + 5 * 60 * 1000);
 
       const user = await this.userRepository.create(
@@ -63,24 +72,38 @@ export class AuthService {
           email,
           password: hashedPassword,
           accountType,
-          phoneOtp,
+          phoneOtp: otp,
+          emailOtp: otp,
           phoneNumber,
           otpExpiration,
         },
         queryRunner.manager,
       );
 
-      await this.settingsService.createDefaultSettings(user.uuid);
+      await queryRunner.manager.save(user);
 
-      await this.smsService.sendSMS(phoneNumber, `Your OTP is ${phoneOtp}`);
+      await this.smsService.sendSMS(phoneNumber, `Your OTP is ${otp}`);
 
       this.eventEmitter.emit('user.created', {
-        userUuid: user.uuid,
+        userUuid: user.id,
         email: user.email,
         phoneNumber: user.phoneNumber,
       });
+      await this.settingsService.createDefaultSettings(
+        user.id,
+        queryRunner.manager,
+      );
+
+      await queryRunner.commitTransaction();
+      committed = true;
+
+      await this.smsService.sendSMS(phoneNumber, otp);
+
+      return { message: 'Account created. Please verify your phone number.' };
     } catch (error) {
-      await queryRunner.rollbackTransaction();
+      if (!committed) {
+        await queryRunner.rollbackTransaction();
+      }
       this.logger.error('Unable to signup user', error);
       throw error;
     } finally {
@@ -96,7 +119,7 @@ export class AuthService {
         { phoneNumber: params.emailOrPhone },
       ],
       select: [
-        'uuid',
+        'id',
         'password',
         'firstName',
         'lastName',
@@ -131,7 +154,7 @@ export class AuthService {
 
       return {
         data: {
-          uuid: user.uuid,
+          id: user.id,
           firstName: user.firstName,
           lastName: user.lastName,
           email: user.email,
@@ -144,11 +167,11 @@ export class AuthService {
       };
     }
 
-    const tokens = await this.generateTokens(user.uuid);
-    await this.updateRefreshToken(user.uuid, tokens.refreshToken);
+    const tokens = await this.generateTokens(user.id);
+    await this.updateRefreshToken(user.id, tokens.refreshToken);
     return {
       data: {
-        uuid: user.uuid,
+        id: user.id,
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,
@@ -168,18 +191,22 @@ export class AuthService {
           { phoneNumber: params.emailOrPhone },
         ],
       });
+
       if (!user) throw new NotFoundException('Account not found');
+
       const currentDate = new Date();
       if (currentDate > user.otpExpiration!)
         throw new NotFoundException('OTP expired');
+
       if (user.phoneOtp !== params.otp) {
         throw new BadRequestException('Invalid OTP');
       }
+
       user.hasVerifiedPhone = true;
       user.otpExpiration = null;
       await this.userRepository.save(user);
-      const tokens = await this.generateTokens(user.uuid);
-      await this.updateRefreshToken(user.uuid, tokens.refreshToken);
+      const tokens = await this.generateTokens(user.id);
+      await this.updateRefreshToken(user.id, tokens.refreshToken);
       return tokens;
     } catch (error) {
       this.logger.error('Unable to verify OTP', error);
@@ -187,25 +214,32 @@ export class AuthService {
     }
   }
 
-  async resendOtpForPasswordChange(params: ForgotPasswordDto) {
+  async resendOtp(params: ResendOtpDto) {
     try {
+      const { emailOrPhone } = params;
+
       const user = await this.userRepository.findOne({
-        where: [
-          {
-            email: params.emailOrPhone,
-          },
-          {
-            phoneNumber: params.emailOrPhone,
-          },
-        ],
+        where: [{ email: emailOrPhone }, { phoneNumber: emailOrPhone }],
       });
+
       if (!user) throw new NotFoundException('Account not found');
-      const phoneOtp = generateNumericToken(4);
+
+      if (user.hasVerifiedPhone) {
+        throw new BadRequestException('Account is already verified');
+      }
+
+      const otp = generateNumericToken(6);
       const otpExpiration = new Date(Date.now() + 5 * 60 * 1000);
 
-      user.phoneOtp = phoneOtp;
+      user.phoneOtp = otp;
+      user.emailOtp = otp;
       user.otpExpiration = otpExpiration;
+
       await this.userRepository.save(user);
+
+      await this.smsService.sendSMS(user.phoneNumber, otp);
+
+      return { message: 'OTP sent successfully. It expires in 5 minutes.' };
     } catch (error) {
       this.logger.error('Unable to resend OTP', error);
       throw error;
@@ -226,7 +260,7 @@ export class AuthService {
       });
 
       if (!user) throw new NotFoundException('Account not found');
-      const otp = generateNumericToken(4);
+      const otp = generateNumericToken(6);
       const otpExpiration = new Date(Date.now() + 5 * 60 * 1000);
 
       user.phoneOtp = otp;
@@ -242,11 +276,11 @@ export class AuthService {
     }
   }
 
-  async createNewPassword(params: CreatePasswordDto, userUuid: string) {
+  async createNewPassword(params: CreatePasswordDto, userId: string) {
     try {
       const existingUser = await this.userRepository.findOne({
         where: {
-          uuid: userUuid,
+          id: userId,
         },
       });
       if (!existingUser) throw new NotFoundException('Account not found');
@@ -259,9 +293,9 @@ export class AuthService {
     }
   }
 
-  async submitBasicInfo(params: SubmitBasicInfoDto, userUuid: string) {
+  async submitBasicInfo(params: SubmitBasicInfoDto, userId: string) {
     const user = await this.userRepository.findOne({
-      where: { uuid: userUuid },
+      where: { id: userId },
     });
     if (!user) throw new NotFoundException('Account not found');
     user.firstName = params.firstName;
@@ -270,9 +304,9 @@ export class AuthService {
     await this.userRepository.save(user);
   }
 
-  async completeKyc(params: CompleteKycDto, userUuid: string) {
+  async completeKyc(params: CompleteKycDto, userId: string) {
     const user = await this.userRepository.findOne({
-      where: { uuid: userUuid },
+      where: { id: userId },
     });
     if (!user) throw new NotFoundException('Account not found');
     user.firstName = params.companyName;
@@ -285,13 +319,13 @@ export class AuthService {
     let payload;
     try {
       payload = await this.jwtService.verifyAsync(refreshToken);
-    } catch (e) {
+    } catch (error) {
       throw new ForbiddenException('Access Denied');
     }
 
-    const userUuid = payload.sub;
+    const userId = payload.sub;
     const user = await this.userRepository.findOne({
-      where: { uuid: userUuid },
+      where: { id: userId },
     });
     if (!user || !user.refreshToken)
       throw new ForbiddenException('Access Denied');
@@ -302,21 +336,21 @@ export class AuthService {
     );
     if (!refreshTokenMatches) throw new ForbiddenException('Access Denied');
 
-    const tokens = await this.generateTokens(user.uuid);
-    await this.updateRefreshToken(user.uuid, tokens.refreshToken);
+    const tokens = await this.generateTokens(user.id);
+    await this.updateRefreshToken(user.id, tokens.refreshToken);
     return tokens;
   }
 
-  async updateRefreshToken(userUuid: string, refreshToken: string) {
+  async updateRefreshToken(userId: string, refreshToken: string) {
     const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
     await this.userRepository.update(
-      { uuid: userUuid },
+      { id: userId },
       { refreshToken: hashedRefreshToken },
     );
   }
 
-  async generateTokens(userUuid: string) {
-    const payload = { sub: userUuid };
+  async generateTokens(userId: string) {
+    const payload = { sub: userId };
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
         expiresIn: '1h',
@@ -332,9 +366,9 @@ export class AuthService {
     };
   }
 
-  async setPin(userUuid: string, pin: string) {
+  async setPin(userId: string, pin: string) {
     const hashedPin = await bcrypt.hash(pin, 10);
-    await this.userRepository.update({ uuid: userUuid }, { pin: hashedPin });
+    await this.userRepository.update({ id: userId }, { pin: hashedPin });
   }
 
   async loginWithPin(params: LoginPinDto) {
@@ -345,7 +379,7 @@ export class AuthService {
         { phoneNumber: params.emailOrPhone },
       ],
       select: [
-        'uuid',
+        'id',
         'pin',
         'firstName',
         'lastName',
@@ -356,7 +390,8 @@ export class AuthService {
       ],
     });
 
-    if (!user || !user.pin) throw new BadRequestException('Invalid credentials');
+    if (!user || !user.pin)
+      throw new BadRequestException('Invalid credentials');
 
     const isPinValid = await bcrypt.compare(params.pin, user.pin);
     if (!isPinValid) throw new BadRequestException('Invalid credentials');
@@ -376,7 +411,7 @@ export class AuthService {
 
       return {
         data: {
-          uuid: user.uuid,
+          id: user.id,
           firstName: user.firstName,
           lastName: user.lastName,
           email: user.email,
@@ -389,11 +424,11 @@ export class AuthService {
       };
     }
 
-    const tokens = await this.generateTokens(user.uuid);
-    await this.updateRefreshToken(user.uuid, tokens.refreshToken);
+    const tokens = await this.generateTokens(user.id);
+    await this.updateRefreshToken(user.id, tokens.refreshToken);
     return {
       data: {
-        uuid: user.uuid,
+        id: user.id,
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,
@@ -403,5 +438,158 @@ export class AuthService {
       },
       ...tokens,
     };
+  }
+
+  async updateSettings(id, data) {
+    await this.settingsService.update(id, data);
+  }
+
+  async enable2FA(userId: string) {
+    try {
+      const user = await this.userRepository.findOne({
+        where: { id: userId },
+        relations: ['settings'],
+      });
+
+      console.log('user', user);
+
+      if (!user) {
+        throw new NotFoundException('User not found not found');
+      }
+
+      if (!user.settings) {
+        throw new InternalServerErrorException('Failed to load user settings');
+      }
+
+      const { secret, qrCode } = await this.otpAuthService.enable2FA(
+        user,
+        user.settings.id,
+        user.email,
+        async (id, data) => {
+          await this.updateSettings(id, data);
+        },
+      );
+
+      return { secret, qrCode };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async verify2FA(userId: string, token: string) {
+    try {
+      const user = await this.userRepository.findOne({
+        where: { id: userId },
+        relations: ['settings'],
+      });
+
+      if (!user) {
+        throw new NotFoundException('User not found not found');
+      }
+
+      const verified = await this.otpAuthService.verify2FA(
+        user,
+        user.settings.id,
+        token,
+        (user) => user.settings.twoFactorSecret,
+        async (id, data) => {
+          await this.updateSettings(id, data);
+        },
+      );
+
+      if (!verified) {
+        throw new InternalServerErrorException('Token verification failed');
+      }
+
+      return {
+        status: 'success',
+        statusCode: HttpStatus.OK,
+        message: `Two factor verified for user successfully`,
+        data: verified,
+        error: null,
+      };
+    } catch (error) {
+      console.log('Error', error);
+      throw error;
+    }
+  }
+
+  async validate2FALogin(userId: string, token: string) {
+    try {
+      const user = await this.userRepository.findOne({
+        where: { id: userId },
+        relations: ['settings'],
+      });
+
+      if (!user) {
+        throw new NotFoundException('User not found not found');
+      }
+
+      const { twoFactorSecret, twoFactorEnabled } = user.settings;
+
+      const result = await this.otpAuthService.validate2FALogin(
+        token,
+        twoFactorSecret,
+        twoFactorEnabled,
+      );
+
+      if (!result) {
+        throw new InternalServerErrorException(
+          `Error in validating user two factor authentication`,
+        );
+      }
+
+      const tokens = await this.generateTokens(user.id);
+      await this.updateRefreshToken(user.id, tokens.refreshToken);
+
+      return {
+        status: 'success',
+        statusCode: HttpStatus.OK,
+        message: `Two factor authentication validated for user successfully`,
+        data: tokens,
+        error: null,
+      };
+    } catch (error) {
+      console.log('Error', error);
+      throw error;
+    }
+  }
+
+  async disable2FA(userId: string, token: string) {
+    try {
+      const user = await this.userRepository.findOne({
+        where: { id: userId },
+        relations: ['settings'],
+      });
+
+      if (!user) {
+        throw new NotFoundException('User not found not found');
+      }
+
+      const result = await this.otpAuthService.disable2FA(
+        user,
+        user.settings.id,
+        token,
+        (user) => user.settings.twoFactorSecret,
+        (user) => user.settings.twoFactorEnabled,
+        async (id, data) => {
+          await this.updateSettings(id, data);
+        },
+      );
+
+      if (!result) {
+        throw new InternalServerErrorException('Token verification failed');
+      }
+
+      return {
+        status: 'success',
+        statusCode: HttpStatus.OK,
+        message: `Two factor disabled for user successfully`,
+        data: result,
+        error: null,
+      };
+    } catch (error) {
+      throw error;
+    }
   }
 }
