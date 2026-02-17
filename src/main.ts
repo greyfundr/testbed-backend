@@ -38,7 +38,7 @@ async function bootstrap() {
     app.enableCors({
       // origin: allowedOrigins,
       origin: true,
-      credentials: true,
+      // credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization'],
     });
@@ -63,7 +63,6 @@ async function bootstrap() {
         .setTitle('Grey Fundr API Documentation')
         .setDescription('API for Grey Fundr platform')
         .setVersion('1.0')
-        .addServer(`http://localhost:${port}`, 'Local Development Server')
         .addBearerAuth(
           {
             type: 'http',
@@ -75,6 +74,7 @@ async function bootstrap() {
           'JWT-auth',
         )
         .addSecurityRequirements('JWT-auth')
+        .setExternalDoc('Postman Collection', '/api-json')
         .build();
 
       const document = SwaggerModule.createDocument(app, config);
