@@ -28,6 +28,7 @@ import * as bcrypt from 'bcrypt';
 import { SettingsService } from '../../settings/services';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { OtpAuthService } from './otp-auth.service';
+import { WalletService } from '../../wallet/services';
 
 @Injectable()
 export class AuthService {
@@ -38,6 +39,7 @@ export class AuthService {
     private readonly smsService: TermiiService,
     private readonly settingsService: SettingsService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly walletService: WalletService,
     @Inject(OtpAuthService) private readonly otpAuthService: OtpAuthService,
   ) {}
 
@@ -92,6 +94,11 @@ export class AuthService {
       await this.settingsService.createDefaultSettings(
         user.id,
         queryRunner.manager,
+      );
+
+      await this.walletService.createWalletForUser(
+        { id: user.id },
+        queryRunner,
       );
 
       await queryRunner.commitTransaction();

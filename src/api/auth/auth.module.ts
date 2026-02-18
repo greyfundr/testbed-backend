@@ -9,11 +9,13 @@ import { SettingsModule } from '../settings/settings.module';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { TermiiService } from '../../common/services/termii.service';
 import { OtpAuthService } from './services';
+import { WalletModule } from '../wallet/wallet.module';
 
 @Module({
   imports: [
     UserModule,
     SettingsModule,
+    WalletModule,
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

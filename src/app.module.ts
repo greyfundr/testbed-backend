@@ -13,6 +13,9 @@ import { environmentValidationSchema } from './config/env.validation';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { NotificationModule } from './api/notification/notification.module';
+import { TransactionModule } from './api/transaction/transaction.module';
+import { WalletModule } from './api/wallet/wallet.module';
+import { PaymentModule } from './api/payment/payment.module';
 
 @Module({
   imports: [
@@ -43,8 +46,11 @@ import { NotificationModule } from './api/notification/notification.module';
     CommonModule,
     NotificationModule,
     EventEmitterModule.forRoot(),
+    TransactionModule,
+    WalletModule,
+    PaymentModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule { }
+export class AppModule {}
