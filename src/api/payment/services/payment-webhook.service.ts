@@ -24,6 +24,7 @@ import {
   VirtualAccountRepository,
   WithdrawalRequestRepository,
 } from 'src/api/wallet/repository';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Injectable()
 export class PaymentWebhookService {
@@ -39,27 +40,11 @@ export class PaymentWebhookService {
     private readonly walletService: WalletService,
     private readonly paymentService: PaymentService,
     private readonly dataSource: DataSource,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  // ─── Webhook Entry Point ──────────────────────────────────────────────────────
-
-  /**
-   * Main dispatcher. Called from the controller after signature verification.
-   *
-   * Architecture:
-   *   1. Log the raw webhook immediately (idempotency guard first).
-   *   2. Dispatch to the correct handler based on event type.
-   *   3. Mark the log as processed (or record error + increment retry count).
-   *
-   * Any unhandled event is silently acknowledged (200 OK) — Paystack re-sends
-   * unacknowledged webhooks with exponential backoff, so always return 200.
-   */
   async dispatch(event: string, data: Record<string, any>): Promise<void> {
     const reference = this.extractReference(event, data);
-
-    // ── Idempotency guard ───────────────────────────────────────────────────
-    // Upsert the log row. If paystackReference already exists AND isProcessed=true,
-    // skip processing entirely — Paystack sometimes delivers duplicates.
     const [log, isNew] = await this.upsertWebhookLog(event, reference, data);
 
     if (!isNew && log.isProcessed) {
@@ -119,27 +104,13 @@ export class PaymentWebhookService {
     }
   }
 
-  // ─── charge.success ──────────────────────────────────────────────────────────
-
-  /**
-   * Fires when a DVA (bank transfer) or card charge succeeds.
-   * We use this exclusively for wallet top-ups.
-   *
-   * Defence in depth:
-   *   - We verify the transaction independently against Paystack before crediting.
-   *   - We match via customer_code → virtual_account → wallet.
-   *   - If the virtual account is not found, we log and alert but don't error
-   *     (so Paystack doesn't keep retrying a webhook we can't handle).
-   */
   private async handleChargeSuccess(
     data: PaystackChargeSuccessData,
   ): Promise<void> {
     const { reference, amount, customer, channel } = data;
 
-    // Defence: verify independently (don't rely solely on the webhook payload)
     await this.paymentService.verifyTransaction(reference);
 
-    // Find the virtual account by customer code
     const virtualAccount = await this.virtualAccountRepo.findOne({
       where: { paystackCustomerCode: customer.customer_code },
       relations: ['wallet'],
@@ -149,7 +120,11 @@ export class PaymentWebhookService {
       this.logger.error(
         `charge.success — no virtual account for customer ${customer.customer_code} (ref: ${reference})`,
       );
-      // Do NOT throw — Paystack would retry indefinitely. Alert ops instead.
+      //   this.eventEmitter.emit('user.created', {
+      //     userId: user.id,
+      //     email: user.email,
+      //     phoneNumber: user.phoneNumber,
+      //   });
       return;
     }
 
@@ -161,14 +136,13 @@ export class PaymentWebhookService {
     }
 
     const walletId = virtualAccount.walletId;
-    const amountKobo = amount; // Paystack sends in kobo
+    const amountKobo = amount;
 
     const qr = this.dataSource.createQueryRunner();
     await qr.connect();
     await qr.startTransaction();
 
     try {
-      // Create completed transaction record
       const txRef = `WF-${uuidv4().replace(/-/g, '').substring(0, 20).toUpperCase()}`;
 
       const tx = await qr.manager.save(Transaction, {
@@ -191,7 +165,6 @@ export class PaymentWebhookService {
         },
       });
 
-      // Credit the wallet
       await this.walletService.creditWallet({
         walletId,
         amount: amountKobo,
@@ -214,13 +187,6 @@ export class PaymentWebhookService {
     }
   }
 
-  // ─── transfer.success ────────────────────────────────────────────────────────
-
-  /**
-   * Fires when a Paystack transfer (withdrawal) completes successfully.
-   * Updates the withdrawal request and the corresponding transaction to COMPLETED.
-   * The funds were already debited at request time — no balance change needed here.
-   */
   private async handleTransferSuccess(
     data: PaystackTransferEventData,
   ): Promise<void> {
@@ -232,7 +198,6 @@ export class PaymentWebhookService {
     });
 
     if (!withdrawal) {
-      // Could be a transfer initiated outside the app — log and skip
       this.logger.warn(
         `transfer.success — no withdrawal found for transfer_code: ${transfer_code}`,
       );
@@ -263,15 +228,6 @@ export class PaymentWebhookService {
     );
   }
 
-  // ─── transfer.failed ─────────────────────────────────────────────────────────
-
-  /**
-   * Fires when a Paystack transfer fails permanently.
-   * We must reverse the debit — return funds to the user's available balance.
-   *
-   * Paystack returns funds to your Paystack balance automatically on failure.
-   * We mirror this by crediting the user's wallet back.
-   */
   private async handleTransferFailed(
     data: PaystackTransferEventData,
   ): Promise<void> {
@@ -301,7 +257,6 @@ export class PaymentWebhookService {
     await qr.startTransaction();
 
     try {
-      // Reverse the debit — return funds to user's wallet
       const reversalRef = `REV-${uuidv4().replace(/-/g, '').substring(0, 16).toUpperCase()}`;
 
       const reversalTx = await qr.manager.save(Transaction, {
@@ -321,7 +276,6 @@ export class PaymentWebhookService {
         },
       });
 
-      // Credit the wallet back from withdrawal transit
       await this.walletService.creditWallet({
         walletId: withdrawal.walletId,
         amount: withdrawal.amount,
@@ -331,13 +285,11 @@ export class PaymentWebhookService {
         qr,
       });
 
-      // Mark withdrawal as failed
       await qr.manager.update(WithdrawalRequest, withdrawal.id, {
         status: WithdrawalStatus.FAILED,
         failureReason: `Paystack transfer failed: ${data.reason ?? 'Unknown reason'}`,
       });
 
-      // Mark original transaction as failed
       if (withdrawal.transactionId) {
         await qr.manager.update(Transaction, withdrawal.transactionId, {
           status: TransactionStatus.FAILED,
@@ -359,12 +311,6 @@ export class PaymentWebhookService {
     }
   }
 
-  // ─── transfer.reversed ───────────────────────────────────────────────────────
-
-  /**
-   * Fires when Paystack reverses a transfer after it appeared to succeed.
-   * Extremely rare but must be handled — treat identically to transfer.failed.
-   */
   private async handleTransferReversed(
     data: PaystackTransferEventData,
   ): Promise<void> {
@@ -374,12 +320,6 @@ export class PaymentWebhookService {
     await this.handleTransferFailed(data);
   }
 
-  // ─── dedicatedaccount.assign.success ────────────────────────────────────────
-
-  /**
-   * Fires when Paystack finishes assigning a DVA to a customer.
-   * DVA assignment is sometimes asynchronous — this confirms it completed.
-   */
   private async handleDvaAssigned(data: Record<string, any>): Promise<void> {
     const customerCode = data.customer?.customer_code;
     if (!customerCode) return;
@@ -409,10 +349,7 @@ export class PaymentWebhookService {
     );
   }
 
-  // ─── Helpers ─────────────────────────────────────────────────────────────────
-
   private extractReference(event: string, data: Record<string, any>): string {
-    // Each event type puts the unique reference in a different field
     if (event === PaystackWebhookEvent.CHARGE_SUCCESS) {
       return data.reference;
     }
@@ -429,10 +366,6 @@ export class PaymentWebhookService {
     return data.reference ?? data.id ?? uuidv4();
   }
 
-  /**
-   * Inserts a new webhook log row, or returns the existing one if already present.
-   * Returns [log, isNew] — if isNew=false and isProcessed=true, skip processing.
-   */
   private async upsertWebhookLog(
     event: string,
     reference: string,
