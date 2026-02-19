@@ -13,6 +13,7 @@ import {
   PaystackTransferResponse,
   PaystackResolveAccountResponse,
   PaystackRefundResponse,
+  PaystackInitializeTransactionResponse,
 } from '../interfaces/payment.interface';
 
 @Injectable()
@@ -26,7 +27,7 @@ export class PaymentService {
     this.client = axios.create({
       baseURL: 'https://api.paystack.co',
       headers: {
-        Authorization: `Bearer ${secretKey}`,   
+        Authorization: `Bearer ${secretKey}`,
         'Content-Type': 'application/json',
       },
       timeout: 30_000,
@@ -108,13 +109,17 @@ export class PaymentService {
    * Each user gets one account number permanently tied to their profile.
    */
   async createDedicatedVirtualAccount(params: {
-    customerCode: string;
-    preferredBank?: 'wema-bank' | 'titan-paystack' | 'access-bank';
+    customer: string;
+    preferredBank?:
+      | 'wema-bank'
+      | 'titan-paystack'
+      | 'access-bank'
+      | 'test-bank';
   }): Promise<PaystackDVAResponse['data']> {
     const { data } = await this.client.post<PaystackDVAResponse>(
       '/dedicated_account',
       {
-        customer: params.customerCode,
+        customer: params.customer,
         preferred_bank: params.preferredBank ?? 'wema-bank',
       },
     );
@@ -167,6 +172,59 @@ export class PaymentService {
     return data.data;
   }
 
+  // ─── Transactions  ─────────────────────────────────────────────────────
+
+  /**
+   * Initiates a transaction to the virtual account number on paystack.
+   * Requires OTP confirmation if 2FA is enabled on the Paystack dashboard.
+   *
+   * @param idempotencyKey - Unique key to prevent duplicate transactions. Pass your
+   *                         withdrawal request ID. Paystack will return the same
+   *                         response if the same key is reused.
+   */
+  async initiateTransactions(body: {
+    amount: number;
+    userId: string;
+    email: string;
+    walletId: string;
+    reference: string;
+    reason?: string;
+  }): Promise<PaystackInitializeTransactionResponse> {
+    const { email, reference, walletId, userId, amount } = body;
+    const { data } =
+      await this.client.post<PaystackInitializeTransactionResponse>(
+        '/transaction/initialize',
+        {
+          email,
+          amount,
+          reference,
+          currency: 'NGN',
+          channels: [
+            'card',
+            'bank',
+            'ussd',
+            'qr',
+            'mobile_money',
+            'bank_transfer',
+          ],
+          metadata: {
+            wallet_id: walletId,
+            user_id: userId,
+            purpose: 'wallet_funding',
+            custom_fields: [
+              {
+                display_name: 'Purpose',
+                variable_name: 'purpose',
+                value: 'Wallet Top-up',
+              },
+            ],
+          },
+          callback_url: `${this.config.get('APP_URL')}/wallet/fund/callback`,
+        },
+      );
+    return data;
+  }
+
   // ─── Transfer Recipients ─────────────────────────────────────────────────────
 
   /**
@@ -205,7 +263,7 @@ export class PaymentService {
    *                         response if the same key is reused.
    */
   async initiateTransfer(params: {
-    amount: number; // in kobo
+    amount: number;
     recipientCode: string;
     reference: string;
     reason?: string;

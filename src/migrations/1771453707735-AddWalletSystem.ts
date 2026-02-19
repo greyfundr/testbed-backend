@@ -15,12 +15,12 @@ export class AddWalletSystem1771453707735 implements MigrationInterface {
         \`account_name\`           varchar(255)  NOT NULL,
         \`bank_name\`              varchar(255)  NOT NULL,
         \`bank_code\`              varchar(255)  NOT NULL,
-        \`gateway_customer_id\`    varchar(255)  NOT NULL,
-        \`gateway_customer_code\`  varchar(255)  NOT NULL,
-        \`gateway_dva_id\`         varchar(255)  NULL,
+        \`paystack_customer_id\`    varchar(255)  NOT NULL,
+        \`paystack_customer_code\`  varchar(255)  NOT NULL,
+        \`paystack_dva_id\`         varchar(255)  NULL,
         \`status\`                 varchar(255)  NOT NULL DEFAULT 'active',
         \`is_assigned\`            tinyint       NOT NULL DEFAULT 0,
-        \`gateway_meta\`           json          NULL,
+        \`paystack_meta\`           json          NULL,
         UNIQUE INDEX \`IDX_08eb7dc513ac945268a3ad0281\` (\`account_number\`),
         UNIQUE INDEX \`REL_3fc9524655cb89bcce857fe217\` (\`wallet_id\`),
         PRIMARY KEY (\`id\`)
@@ -99,7 +99,6 @@ export class AddWalletSystem1771453707735 implements MigrationInterface {
         PRIMARY KEY (\`id\`)
       ) ENGINE=InnoDB
     `);
-    // ↑ duplicate non-unique INDEX on gateway_reference removed — UNIQUE already covers lookups
 
     await queryRunner.query(`
       CREATE TABLE \`wallets\` (
@@ -121,7 +120,6 @@ export class AddWalletSystem1771453707735 implements MigrationInterface {
         PRIMARY KEY (\`id\`)
       ) ENGINE=InnoDB
     `);
-    // ↑ redundant REL_ unique index removed — IDX_ unique already enforces uniqueness
 
     await queryRunner.query(`
       CREATE TABLE \`withdrawal_requests\` (

@@ -3,6 +3,7 @@ import {
   IsEmail,
   IsEnum,
   IsNotEmpty,
+  IsOptional,
   IsPhoneNumber,
   IsString,
   IsStrongPassword,
@@ -121,22 +122,28 @@ export class SubmitBasicInfoDto {
   @ApiProperty({ description: 'Agree to terms and conditions' })
   @IsBoolean({ message: 'Agree to terms and conditions must be a boolean' })
   @IsNotEmpty({ message: 'Agree to terms and conditions is required' })
-  @Transform(({ value }) => value === 'true')
+  // @Transform(({ value }) => value === 'true')
   agreeToTerms: boolean;
 }
 
 export class CompleteKycDto {
-  @ApiProperty({ description: 'CAC number' })
-  @IsNotEmpty({ message: 'CAC number is required' })
-  cacNumber: string;
+  @ApiProperty({ description: 'CAC number', required: false })
+  @IsOptional()
+  @IsString()
+  cacNumber?: string;
 
-  @ApiProperty({ description: 'Company name' })
-  @IsNotEmpty({ message: 'Company name is required' })
-  companyName: string;
+  @ApiProperty({ description: 'Company name', required: false })
+  @IsOptional()
+  @IsString()
+  companyName?: string;
 
-  @ApiProperty({ description: 'Tax Identification Number (TIN)' })
-  @IsNotEmpty({ message: 'TIN is required' })
-  tin: string;
+  @ApiProperty({
+    description: 'Tax Identification Number (TIN)',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  tin?: string;
 }
 
 export class RefreshTokenDto {

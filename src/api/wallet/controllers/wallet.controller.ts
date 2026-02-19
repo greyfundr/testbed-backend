@@ -15,30 +15,26 @@ import { WalletService } from '../services';
 import { TransactionService } from '../../transaction/services';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
-import { AddBankAccountDto, WithdrawDto } from '../dto';
-import { TransactionQueryDto } from '../../transaction/dto';
+import { AddBankAccountDto, InitiateFundingDto, WithdrawDto } from '../dto';
 import { User } from 'src/api/user/entities';
 import { ApiBearerAuth } from '@nestjs/swagger';
+import { KycGuard } from 'src/api/auth/guards/kyc.guard';
 
 @Controller('wallet')
-@UseGuards(JwtAuthGuard) // all wallet routes require authentication
+@UseGuards(JwtAuthGuard)
 export class WalletController {
   constructor(
     private readonly walletService: WalletService,
     private readonly transactionService: TransactionService,
   ) {}
 
-  // ─── Wallet Overview ─────────────────────────────────────────────────────────
-
   @ApiBearerAuth('JWT-auth')
   @Get()
   async getWallet(@CurrentUser() user: User) {
-      console.log("user", user)
     const [wallet, balance] = await Promise.all([
       this.walletService.getWalletByUserId(user.id),
       this.walletService.getWalletBalance(user.id),
     ]);
-    console.log('wallet and balance', wallet, balance);
     return {
       id: wallet.id,
       status: wallet.status,
@@ -61,14 +57,9 @@ export class WalletController {
     return this.walletService.getWalletBalance(user.id);
   }
 
-  /**
-   * Provisions DVA — called after user completes KYC.
-   * Idempotent: safe to call multiple times.
-   */
   @ApiBearerAuth('JWT-auth')
   @Post('provision-virtual-account')
-  //   @UseGuards(KycGuard) // only KYC-verified users can provision
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, KycGuard)
   @HttpCode(HttpStatus.OK)
   async provisionVirtualAccount(@CurrentUser() user: User) {
     const va = await this.walletService.provisionVirtualAccount(user.id);
@@ -80,7 +71,93 @@ export class WalletController {
     };
   }
 
-  // ─── Bank Accounts ───────────────────────────────────────────────────────────
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard, KycGuard)
+  @Get('funding-account')
+  @HttpCode(HttpStatus.OK)
+  async getFundingAccount(@CurrentUser() user: User) {
+    const account = await this.walletService.getFundingAccount(user.id);
+
+    if (!account.accountNumber) {
+      return {
+        message:
+          'Virtual account not yet provisioned. Complete KYC verification first, then call POST /wallet/provision-virtual-account.',
+        provisioningPending: false,
+        account: null,
+      };
+    }
+
+    if (account.provisioningPending) {
+      return {
+        message:
+          'Your virtual account is being set up. This usually takes under 60 seconds. Please try again shortly.',
+        provisioningPending: true,
+        account: {
+          bankName: account.bankName,
+          accountName: account.accountName,
+        },
+      };
+    }
+
+    return {
+      message:
+        'Transfer to this account from any Nigerian bank to fund your wallet.',
+      provisioningPending: false,
+      account: {
+        accountNumber: account.accountNumber,
+        accountName: account.accountName,
+        bankName: account.bankName,
+      },
+    };
+  }
+
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard, KycGuard)
+  @Post('fund/initiate')
+  @HttpCode(HttpStatus.CREATED)
+  async initiateCardFunding(
+    @CurrentUser() user: User,
+    @Body() dto: InitiateFundingDto,
+  ) {
+    const result = await this.walletService.initiateWalletFunding(
+      user.id,
+      dto.amount,
+    );
+
+    return {
+      message: 'Payment initialized. Redirect user to authorizationUrl.',
+      ...result,
+    };
+  }
+
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard, KycGuard)
+  @Get('fund/verify/:reference')
+  @HttpCode(HttpStatus.OK)
+  async verifyFunding(
+    @CurrentUser() user: User,
+    @Param('reference') reference: string,
+  ) {
+    const result = await this.walletService.verifyAndCreditFunding(
+      user.id,
+      reference,
+    );
+
+    const messages = {
+      success: result.credited
+        ? `₦${result.amount / 100} has been added to your wallet.`
+        : `Payment already confirmed. ₦${result.amount / 100} is in your wallet.`,
+      failed: 'Payment was not completed. No funds have been deducted.',
+      pending: 'Payment is still being processed. Please check back shortly.',
+    };
+
+    return {
+      status: result.status,
+      message: messages[result.status] ?? 'Unknown status',
+      amount: result.amount,
+      amountFormatted: `₦${(result.amount / 100).toLocaleString('en-NG')}`,
+    };
+  }
 
   @ApiBearerAuth('JWT-auth')
   @Get('bank-accounts')
@@ -109,8 +186,6 @@ export class WalletController {
     await this.walletService.removeBankAccount(user.id, bankAccountId);
   }
 
-  // ─── Withdrawals ─────────────────────────────────────────────────────────────
-
   @ApiBearerAuth('JWT-auth')
   @Post('withdraw')
   @UseGuards(JwtAuthGuard)
@@ -118,35 +193,4 @@ export class WalletController {
   async withdraw(@CurrentUser() user: User, @Body() dto: WithdrawDto) {
     return this.walletService.requestWithdrawal(user.id, dto);
   }
-
-  // ─── Transaction History ──────────────────────────────────────────────────────
-
-  //   @Get('transactions')
-  //   async getTransactions(
-  //     @CurrentUser('id') userId: string,
-  //     @Query() query: TransactionQueryDto,
-  //   ) {
-  //     return this.transactionService.getTransactionHistory(userId, query);
-  //   }
-
-  //   @Get('transactions/summary')
-  //   async getTransactionSummary(@CurrentUser('id') userId: string) {
-  //     return this.transactionService.getTransactionSummary(userId);
-  //   }
-
-  //   @Get('transactions/:id')
-  //   async getTransaction(
-  //     @CurrentUser('id') userId: string,
-  //     @Param('id', ParseUUIDPipe) transactionId: string,
-  //   ) {
-  //     return this.transactionService.getTransactionById(userId, transactionId);
-  //   }
-
-  //   @Get('transactions/:id/ledger')
-  //   async getTransactionLedger(
-  //     @CurrentUser('id') userId: string,
-  //     @Param('id', ParseUUIDPipe) transactionId: string,
-  //   ) {
-  //     return this.transactionService.getTransactionLedger(userId, transactionId);
-  //   }
 }

@@ -29,6 +29,7 @@ import { SettingsService } from '../../settings/services';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { OtpAuthService } from './otp-auth.service';
 import { WalletService } from '../../wallet/services';
+import { AccountType } from 'src/api/user/enums/user.enum';
 
 @Injectable()
 export class AuthService {
@@ -84,13 +85,6 @@ export class AuthService {
 
       await queryRunner.manager.save(user);
 
-      await this.smsService.sendSMS(phoneNumber, `Your OTP is ${otp}`);
-
-      this.eventEmitter.emit('user.created', {
-        userUuid: user.id,
-        email: user.email,
-        phoneNumber: user.phoneNumber,
-      });
       await this.settingsService.createDefaultSettings(
         user.id,
         queryRunner.manager,
@@ -104,7 +98,13 @@ export class AuthService {
       await queryRunner.commitTransaction();
       committed = true;
 
-      await this.smsService.sendSMS(phoneNumber, otp);
+      this.eventEmitter.emit('user.created', {
+        userId: user.id,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+      });
+
+      await this.smsService.sendSMS(phoneNumber, `Your OTP is ${otp}`);
 
       return { message: 'Account created. Please verify your phone number.' };
     } catch (error) {
@@ -304,10 +304,14 @@ export class AuthService {
     const user = await this.userRepository.findOne({
       where: { id: userId },
     });
+
     if (!user) throw new NotFoundException('Account not found');
+
     user.firstName = params.firstName;
     user.lastName = params.lastName;
+    user.agreeToTerms = params.agreeToTerms;
     user.hasSubmittedBasicInfo = true;
+
     await this.userRepository.save(user);
   }
 
@@ -315,11 +319,42 @@ export class AuthService {
     const user = await this.userRepository.findOne({
       where: { id: userId },
     });
-    if (!user) throw new NotFoundException('Account not found');
-    user.firstName = params.companyName;
-    user.lastName = '';
+
+    if (!user) {
+      throw new NotFoundException('Account not found');
+    }
+
+    if (user.hasCompletedKyc) {
+      throw new BadRequestException('KYC already completed');
+    }
+
+    if (user.accountType === AccountType.BUSINESS) {
+      const { cacNumber, companyName, tin } = params;
+
+      if (!cacNumber || !companyName || !tin) {
+        throw new BadRequestException(
+          'CAC number, company name and TIN are required for business accounts',
+        );
+      }
+
+      user.cacNumber = cacNumber;
+      user.companyName = companyName;
+      user.tin = tin;
+    }
+
+    if (user.accountType === AccountType.PERSONAL) {
+      user.cacNumber = null;
+      user.companyName = null;
+      user.tin = null;
+    }
+
     user.hasCompletedKyc = true;
+
     await this.userRepository.save(user);
+
+    return {
+      message: 'KYC completed successfully',
+    };
   }
 
   async refreshTokens(refreshToken: string) {

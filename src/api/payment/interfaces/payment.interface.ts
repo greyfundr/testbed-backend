@@ -43,6 +43,16 @@ export interface PaystackDVAResponse {
   };
 }
 
+export interface PaystackInitializeTransactionResponse {
+  status: boolean;
+  message: string;
+  data: {
+    authorization_url: string;
+    access_code: string;
+    reference: string;
+  };
+}
+
 export interface PaystackTransferRecipientResponse {
   status: boolean;
   message: string;

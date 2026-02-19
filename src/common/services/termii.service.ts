@@ -23,7 +23,7 @@ export class TermiiService {
 
       const payload = {
         api_key: this.configService.get<string>('TERMII_API_KEY'),
-        to: formattedNumber,
+        to,
         from: this.configService.get<string>('TERMII_SENDER_ID'),
         sms,
         type: 'plain',

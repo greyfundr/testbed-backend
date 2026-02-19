@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TransactionController } from './controllers/transaction.controller';
 import { TransactionService } from './services/transaction.service';
 import { LedgerEntry, Transaction, WebhookLog } from './entities';
@@ -8,9 +8,15 @@ import {
   TransactionRepository,
   WebhookLogRepository,
 } from './repository';
+import { WalletModule } from '../wallet/wallet.module';
+import { UserModule } from '../user/user.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Transaction, LedgerEntry, WebhookLog])],
+  imports: [
+    TypeOrmModule.forFeature([Transaction, LedgerEntry, WebhookLog]),
+    forwardRef(() => WalletModule),
+    UserModule,
+  ],
   controllers: [TransactionController],
   providers: [
     TransactionService,

@@ -15,7 +15,11 @@ import {
   WithdrawalRequest,
   WithdrawalStatus,
 } from '../entities';
-import { Transaction, LedgerEntry } from '../../transaction/entities';
+import {
+  Transaction,
+  LedgerEntry,
+  WebhookLog,
+} from '../../transaction/entities';
 import {
   WalletStatus,
   WalletCurrency,
@@ -41,6 +45,8 @@ import {
   TransactionRepository,
 } from 'src/api/transaction/repository';
 import { PaymentService } from 'src/api/payment/services';
+import axios from 'axios';
+import { FundingAccountResponse, InitiateFundingResponse } from '../interfaces';
 
 interface CreditParams {
   walletId: string;
@@ -76,19 +82,10 @@ interface LockEscrowParams {
 export class WalletService {
   private readonly logger = new Logger(WalletService.name);
 
+  private readonly MIN_FUNDING_KOBO = 100_00;
+  private readonly MAX_FUNDING_KOBO = 10_000_000_00;
+
   constructor(
-    // @InjectRepository(Wallet)
-    // private readonly walletRepo: Repository<Wallet>,
-    // @InjectRepository(VirtualAccount)
-    // private readonly virtualAccountRepo: Repository<VirtualAccount>,
-    // @InjectRepository(BankAccount)
-    // private readonly bankAccountRepo: Repository<BankAccount>,
-    // @InjectRepository(WithdrawalRequest)
-    // private readonly withdrawalRepo: Repository<WithdrawalRequest>,
-    // @InjectRepository(Transaction)
-    // private readonly transactionRepo: Repository<Transaction>,
-    // @InjectRepository(LedgerEntry)
-    // private readonly ledgerRepo: Repository<LedgerEntry>,
     private readonly userRepository: UserRepository,
     private readonly walletRepository: WalletRepository,
     private readonly virtualAccountRepository: VirtualAccountRepository,
@@ -143,7 +140,6 @@ export class WalletService {
    * Idempotent — safe to retry if DVA assignment is still pending.
    */
   async provisionVirtualAccount(userId: string): Promise<VirtualAccount> {
-    // Check if already provisioned
     const existing = await this.virtualAccountRepository
       .createQueryBuilder('va')
       .innerJoin('va.wallet', 'w', 'w.user_id = :userId', { userId })
@@ -152,6 +148,7 @@ export class WalletService {
     if (existing?.isAssigned) return existing;
 
     const wallet = await this.getWalletByUserId(userId);
+
     const user = await this.userRepository.findOne({
       where: { id: userId },
       relations: ['settings'],
@@ -164,7 +161,6 @@ export class WalletService {
     await qr.startTransaction();
 
     try {
-      // 1. Create Paystack customer
       const customer = await this.paymentService.createCustomer({
         email: user.email,
         firstName: user.firstName ?? '',
@@ -172,13 +168,14 @@ export class WalletService {
         phone: user.phoneNumber,
       });
 
-      // 2. Assign DVA
+      const bank =
+        process.env.NODE_ENV === 'development' ? 'test-bank' : 'wema-bank';
+
       const dva = await this.paymentService.createDedicatedVirtualAccount({
-        customerCode: customer.customer_code,
-        preferredBank: 'wema-bank',
+        customer: customer.customer_code,
+        preferredBank: bank,
       });
 
-      // 3. Persist virtual account
       const virtualAccount = qr.manager.create(VirtualAccount, {
         walletId: wallet.id,
         accountNumber: dva.account_number,
@@ -210,11 +207,9 @@ export class WalletService {
     }
   }
 
-  // ─── Reads ───────────────────────────────────────────────────────────────────
-
   async getWalletByUserId(userId: string): Promise<Wallet> {
     const wallet = await this.walletRepository.findOne({
-      where: { userId },
+      where: { user: { id: userId } },
       relations: ['virtualAccount'],
     });
 
@@ -244,6 +239,296 @@ export class WalletService {
       escrow: wallet.escrowBalance,
       currency: wallet.currency,
     };
+  }
+
+  async getFundingAccount(userId: string): Promise<FundingAccountResponse> {
+    const wallet = await this.getWalletByUserId(userId);
+
+    const virtualAccount = await this.virtualAccountRepository.findOne({
+      where: { walletId: wallet.id },
+    });
+
+    if (!virtualAccount) {
+      return {
+        accountNumber: '',
+        accountName: '',
+        bankName: '',
+        bankCode: '',
+        isAssigned: false,
+        provisioningPending: false,
+      };
+    }
+
+    if (!virtualAccount.isAssigned) {
+      await this.syncDvaAssignmentStatus(virtualAccount);
+
+      return {
+        accountNumber: virtualAccount.accountNumber,
+        accountName: virtualAccount.accountName,
+        bankName: virtualAccount.bankName,
+        bankCode: virtualAccount.bankCode,
+        isAssigned: virtualAccount.isAssigned,
+        provisioningPending: true,
+      };
+    }
+
+    return {
+      accountNumber: virtualAccount.accountNumber,
+      accountName: virtualAccount.accountName,
+      bankName: virtualAccount.bankName,
+      bankCode: virtualAccount.bankCode,
+      isAssigned: true,
+      provisioningPending: false,
+    };
+  }
+
+  /**
+   * Polls Paystack for the latest DVA assignment status.
+   * Called when we have a DVA record but isAssigned is still false.
+   * Silently updates the record — never throws, this is a best-effort sync.
+   */
+  private async syncDvaAssignmentStatus(va: VirtualAccount): Promise<void> {
+    try {
+      if (!va.paystackDvaId) return;
+
+      const latest = await this.paymentService.getDedicatedVirtualAccount(
+        va.paystackDvaId,
+      );
+
+      if (latest.assigned && !va.isAssigned) {
+        await this.virtualAccountRepository.update(va.id, {
+          isAssigned: true,
+          accountNumber: latest.account_number,
+          accountName: latest.account_name,
+          paystackMeta: latest,
+        });
+
+        va.isAssigned = true;
+        va.accountNumber = latest.account_number;
+        va.accountName = latest.account_name;
+
+        this.logger.log(
+          `DVA assignment synced for virtual account ${va.id}: ${latest.account_number}`,
+        );
+      }
+    } catch (err) {
+      this.logger.warn(`DVA sync failed for ${va.id}: ${err?.message}`);
+    }
+  }
+
+  /**
+   * Initiates a card or bank charge top-up via Paystack Standard.
+   * Returns an authorization URL — redirect the user to this URL.
+   * The actual wallet credit happens when Paystack fires charge.success webhook.
+   *
+   * This is the secondary funding path for users who prefer card over bank transfer.
+   */
+  async initiateWalletFunding(
+    userId: string,
+    amountKobo: number,
+  ): Promise<InitiateFundingResponse> {
+    if (amountKobo < this.MIN_FUNDING_KOBO) {
+      throw new BadRequestException(
+        `Minimum top-up is ₦${this.MIN_FUNDING_KOBO / 100}`,
+      );
+    }
+    if (amountKobo > this.MAX_FUNDING_KOBO) {
+      throw new BadRequestException(
+        `Maximum top-up is ₦${this.MAX_FUNDING_KOBO / 100}`,
+      );
+    }
+
+    const wallet = await this.getWalletByUserId(userId);
+
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      select: ['id', 'email', 'firstName', 'lastName'],
+    });
+
+    if (!user) throw new NotFoundException('User not found');
+
+    const reference = `CF-${uuidv4().replace(/-/g, '').substring(0, 20).toUpperCase()}`;
+
+    await this.transactionRepository.save(
+      await this.transactionRepository.create({
+        walletId: wallet.id,
+        amount: amountKobo,
+        currency: 'NGN',
+        type: TransactionType.WALLET_FUNDING,
+        direction: TransactionDirection.CREDIT,
+        status: TransactionStatus.PENDING,
+        reference,
+        description: 'Wallet top-up via card',
+        metadata: { initiatedBy: 'card_funding', userId },
+      }),
+    );
+
+    // Initialize Paystack transaction
+    const data = await this.paymentService.initiateTransactions({
+      userId: user.id,
+      email: user.email,
+      walletId: wallet.id,
+      reference,
+      amount: amountKobo,
+    });
+
+    if (!data.status) {
+      await this.transactionRepository.update(
+        { reference },
+        { status: TransactionStatus.FAILED, failureReason: data.message },
+      );
+      throw new BadRequestException(
+        `Payment initialization failed: ${data.message}`,
+      );
+    }
+
+    this.logger.log(
+      `Card funding initiated: ${reference} — ${amountKobo} kobo for wallet ${wallet.id}`,
+    );
+
+    return {
+      reference,
+      authorizationUrl: data.data.authorization_url,
+      accessCode: data.data.access_code,
+      amount: amountKobo,
+      currency: 'NGN',
+      channel: ['card', 'bank', 'ussd', 'bank_transfer'],
+    };
+  }
+
+  /**
+   * Manual verification fallback — called when user returns from Paystack
+   * redirect and the webhook may not have fired yet (or at all).
+   *
+   * This does NOT duplicate the webhook handler's work:
+   *   - If the webhook already processed this reference → transaction is COMPLETED,
+   *     wallet is already credited → return success immediately, no double-credit.
+   *   - If the webhook hasn't fired yet → verify with Paystack directly and
+   *     credit the wallet ourselves, then mark so the webhook skips it.
+   */
+  async verifyAndCreditFunding(
+    userId: string,
+    reference: string,
+  ): Promise<{ status: string; credited: boolean; amount: number }> {
+    const wallet = await this.getWalletByUserId(userId);
+
+    const tx = await this.transactionRepository.findOne({
+      where: { reference, walletId: wallet.id },
+    });
+
+    if (!tx) {
+      throw new NotFoundException(
+        'Transaction not found. Ensure the reference belongs to your account.',
+      );
+    }
+
+    if (tx.status === TransactionStatus.COMPLETED) {
+      return { status: 'success', credited: false, amount: tx.amount };
+    }
+
+    if (tx.status === TransactionStatus.FAILED) {
+      return { status: 'failed', credited: false, amount: tx.amount };
+    }
+
+    let paystackData: any;
+    try {
+      paystackData = await this.paymentService.verifyTransaction(reference);
+    } catch {
+      await this.transactionRepository.update(tx.id, {
+        status: TransactionStatus.FAILED,
+        failureReason: 'Payment not completed on Paystack',
+      });
+      return { status: 'failed', credited: false, amount: tx.amount };
+    }
+
+    const qr = this.dataSource.createQueryRunner();
+    await qr.connect();
+    await qr.startTransaction();
+
+    try {
+      const claim = await qr.manager
+        .createQueryBuilder()
+        .update(Transaction)
+        .set({
+          status: TransactionStatus.PROCESSING,
+          gatewayReference: paystackData.reference,
+          paymentGateway: 'paystack',
+          gatewayResponse: paystackData,
+          confirmedAt: new Date(paystackData.paid_at ?? Date.now()),
+        })
+        .where('id = :id AND status = :status', {
+          id: tx.id,
+          status: TransactionStatus.PENDING,
+        })
+        .execute();
+
+      if (claim.affected === 0) {
+        await qr.rollbackTransaction();
+        return { status: 'success', credited: false, amount: tx.amount };
+      }
+
+      await this.creditWallet({
+        walletId: wallet.id,
+        amount: tx.amount,
+        transactionId: tx.id,
+        sourceAccountType: LedgerAccountType.PAYMENT_GATEWAY,
+        description: `Card top-up (verified) — ${reference}`,
+        qr,
+      });
+
+      await qr.manager.update(Transaction, tx.id, {
+        status: TransactionStatus.COMPLETED,
+      });
+
+      await qr.manager.upsert(
+        WebhookLog,
+        {
+          gatewayReference: reference,
+          event: 'charge.success',
+          payload: paystackData,
+          isProcessed: true,
+          processedAt: new Date(),
+          retryCount: 0,
+        },
+        ['paystackReference'],
+      );
+
+      await qr.commitTransaction();
+
+      this.logger.log(
+        `Card funding verified manually: ${reference} — ${tx.amount} kobo credited to wallet ${wallet.id}`,
+      );
+
+      return { status: 'success', credited: true, amount: tx.amount };
+    } catch (err) {
+      await qr.rollbackTransaction();
+      this.logger.error(
+        `Manual funding verification failed for ${reference}`,
+        err,
+      );
+      throw err;
+    } finally {
+      await qr.release();
+    }
+  }
+
+  async getFundingHistory(
+    userId: string,
+    page = 1,
+    limit = 20,
+  ): Promise<{ data: Transaction[]; total: number; page: number }> {
+    const wallet = await this.getWalletByUserId(userId);
+
+    const [data, total] = await this.transactionRepository
+      .createQueryBuilder('tx')
+      .where('tx.wallet_id = :walletId', { walletId: wallet.id })
+      .andWhere('tx.type = :type', { type: TransactionType.WALLET_FUNDING })
+      .orderBy('tx.created_at', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+
+    return { data, total, page };
   }
 
   // ─── Core Ledger Operations ──────────────────────────────────────────────────

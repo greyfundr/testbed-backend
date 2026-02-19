@@ -28,7 +28,7 @@ import { TransactionModule } from '../transaction/transaction.module';
     ]),
     forwardRef(() => PaymentModule),
     UserModule,
-    TransactionModule,
+    forwardRef(() => TransactionModule),
   ],
   controllers: [WalletController],
   providers: [
