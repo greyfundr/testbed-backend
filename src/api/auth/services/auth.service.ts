@@ -276,7 +276,7 @@ export class AuthService {
       await this.userRepository.save(user);
 
       //TODO: Add proper sms message for OTP
-      await this.smsService.sendSMS(params.emailOrPhone, `Your OTP is ${otp}`);
+      await this.smsService.sendSMS(user.phoneNumber, `Your OTP is ${otp}`);
     } catch (error) {
       this.logger.error('Unable to send OTP', error);
       throw error;
