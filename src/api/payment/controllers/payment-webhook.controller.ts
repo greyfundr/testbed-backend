@@ -19,7 +19,7 @@ export class PaymentWebhookController {
 
   constructor(
     private readonly webhookService: PaymentWebhookService,
-    private readonly paystackService: PaymentService,
+    private readonly paymentService: PaymentService,
   ) {}
 
   @Post('webhook')
@@ -39,7 +39,7 @@ export class PaymentWebhookController {
       return;
     }
 
-    const isValid = this.paystackService.verifyWebhookSignature(
+    const isValid = this.paymentService.verifyWebhookSignature(
       rawBody.toString(),
       signature,
     );

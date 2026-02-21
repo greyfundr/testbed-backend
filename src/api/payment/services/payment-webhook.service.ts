@@ -2,7 +2,11 @@ import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { DataSource, Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { WebhookLog, Transaction } from '../../transaction/entities';
-import { WithdrawalRequest, WithdrawalStatus } from '../../wallet/entities/';
+import {
+  VirtualAccount,
+  WithdrawalRequest,
+  WithdrawalStatus,
+} from '../../wallet/entities/';
 import {
   TransactionType,
   TransactionStatus,
@@ -111,73 +115,139 @@ export class PaymentWebhookService {
 
     await this.paymentService.verifyTransaction(reference);
 
-    const virtualAccount = await this.virtualAccountRepo.findOne({
-      where: { paystackCustomerCode: customer.customer_code },
-      relations: ['wallet'],
-    });
-
-    if (!virtualAccount) {
-      this.logger.error(
-        `charge.success — no virtual account for customer ${customer.customer_code} (ref: ${reference})`,
-      );
-      //   this.eventEmitter.emit('user.created', {
-      //     userId: user.id,
-      //     email: user.email,
-      //     phoneNumber: user.phoneNumber,
-      //   });
-      return;
-    }
-
-    if (!virtualAccount.wallet) {
-      this.logger.error(
-        `charge.success — virtual account has no wallet (id: ${virtualAccount.id})`,
-      );
-      return;
-    }
-
-    const walletId = virtualAccount.walletId;
-    const amountKobo = amount;
-
     const qr = this.dataSource.createQueryRunner();
     await qr.connect();
     await qr.startTransaction();
 
     try {
-      const txRef = `WF-${uuidv4().replace(/-/g, '').substring(0, 20).toUpperCase()}`;
-
-      const tx = await qr.manager.save(Transaction, {
-        walletId,
-        amount: amountKobo,
-        currency: 'NGN',
-        type: TransactionType.WALLET_FUNDING,
-        direction: TransactionDirection.CREDIT,
-        status: TransactionStatus.COMPLETED,
-        reference: txRef,
-        paystackReference: reference,
-        description: `Wallet top-up via ${this.channelLabel(channel)}`,
-        gatewayResponse: data,
-        confirmedAt: new Date(data.paid_at),
-        metadata: {
-          channel,
-          senderName: data.authorization?.sender_name ?? null,
-          senderBank: data.authorization?.sender_bank ?? null,
-          senderAccount: data.authorization?.sender_bank_account_number ?? null,
-        },
+      const existingTx = await qr.manager.findOne(Transaction, {
+        where: [
+          { gatewayReference: reference, status: TransactionStatus.PENDING },
+          { reference: reference, status: TransactionStatus.PENDING },
+        ],
       });
+
+      let walletId: string;
+      let transactionId: string;
+      let amountKobo: number = amount;
+
+      if (existingTx) {
+        if (Number(existingTx.amount) !== Number(amount)) {
+          this.logger.error(
+            `Amount mismatch on ${reference}: recorded ${existingTx.amount} kobo, Paystack sent ${amount} kobo`,
+          );
+          await qr.rollbackTransaction();
+          await this.webhookLogRepo.update(
+            { gatewayReference: reference },
+            {
+              processingError: `Amount mismatch: expected ${existingTx.amount}, got ${amount}`,
+            },
+          );
+          return;
+        }
+
+        const claimed = await qr.manager
+          .createQueryBuilder()
+          .update(Transaction)
+          .set({
+            status: TransactionStatus.PROCESSING,
+            gatewayReference: reference,
+            // paymentGateway: 'paystack',
+            gatewayResponse: data,
+            confirmedAt: new Date(data.paid_at),
+            metadata: () =>
+              `JSON_MERGE_PATCH(COALESCE(metadata, '{}'), '${JSON.stringify({
+                channel,
+                senderName: data.authorization?.sender_name ?? null,
+                senderBank: data.authorization?.sender_bank ?? null,
+                senderAccount:
+                  data.authorization?.sender_bank_account_number ?? null,
+              })}')`,
+          })
+          .where('id = :id AND status = :status', {
+            id: existingTx.id,
+            status: TransactionStatus.PENDING,
+          })
+          .execute();
+
+        if (claimed.affected === 0) {
+          this.logger.warn(
+            `Webhook arrived after manual verify for ${reference} — skipping`,
+          );
+          await qr.rollbackTransaction();
+          return;
+        }
+
+        walletId = existingTx.walletId;
+        transactionId = existingTx.id;
+        amountKobo = existingTx.amount;
+      } else {
+        const virtualAccount = await qr.manager.findOne(VirtualAccount, {
+          where: { paystackCustomerCode: customer.customer_code },
+          relations: ['wallet'],
+        });
+
+        if (!virtualAccount) {
+          this.logger.error(
+            `charge.success — no virtual account for customer ${customer.customer_code} (ref: ${reference})`,
+          );
+          await qr.rollbackTransaction();
+          return;
+        }
+
+        if (!virtualAccount.wallet) {
+          this.logger.error(
+            `charge.success — virtual account ${virtualAccount.id} has no wallet`,
+          );
+          await qr.rollbackTransaction();
+          return;
+        }
+
+        walletId = virtualAccount.walletId;
+
+        const newTx = await qr.manager.save(Transaction, {
+          walletId,
+          amount,
+          currency: 'NGN',
+          type: TransactionType.WALLET_FUNDING,
+          direction: TransactionDirection.CREDIT,
+          status: TransactionStatus.PROCESSING,
+          reference: `WF-${uuidv4().replace(/-/g, '').substring(0, 16).toUpperCase()}`,
+          gatewayReference: reference,
+          // paymentGateway: 'paystack',
+          description: `Wallet top-up via ${this.channelLabel(channel)}`,
+          gatewayResponse: data,
+          confirmedAt: new Date(data.paid_at),
+          metadata: {
+            channel,
+            senderName: data.authorization?.sender_name ?? null,
+            senderBank: data.authorization?.sender_bank ?? null,
+            senderAccount:
+              data.authorization?.sender_bank_account_number ?? null,
+          },
+        });
+
+        transactionId = newTx.id;
+        amountKobo = amount;
+      }
 
       await this.walletService.creditWallet({
         walletId,
         amount: amountKobo,
-        transactionId: tx.id,
+        transactionId,
         sourceAccountType: LedgerAccountType.PAYMENT_GATEWAY,
-        description: `Top-up via ${this.channelLabel(channel)}`,
+        description: `Top-up via ${this.channelLabel(channel)} — ${reference}`,
         qr,
+      });
+
+      await qr.manager.update(Transaction, transactionId, {
+        status: TransactionStatus.COMPLETED,
       });
 
       await qr.commitTransaction();
 
       this.logger.log(
-        `Wallet credited: ${amountKobo} kobo → wallet ${walletId} (ref: ${reference})`,
+        `Wallet credited: ${amountKobo} kobo → wallet ${walletId} (ref: ${reference}, path: ${existingTx ? 'card' : 'dva'})`,
       );
     } catch (err) {
       await qr.rollbackTransaction();

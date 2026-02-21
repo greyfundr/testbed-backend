@@ -688,23 +688,36 @@ export class TransactionService {
   }> {
     const wallet = await this.walletService.getWalletByUserId(userId);
     const periodStart = new Date();
-    periodStart.setDate(1); // start of current month
+    periodStart.setDate(1);
     const periodEnd = new Date();
 
     const result = await this.transactionRepo
       .createQueryBuilder('tx')
-      .select([
-        `SUM(CASE WHEN tx.direction = 'credit' AND tx.status = 'completed' THEN tx.amount ELSE 0 END)`,
-        '"totalIn"',
-        `SUM(CASE WHEN tx.direction = 'debit' AND tx.status = 'completed' THEN tx.amount ELSE 0 END)`,
-        '"totalOut"',
-        `SUM(CASE WHEN tx.type = 'campaign_donation' AND tx.status = 'completed' THEN tx.amount ELSE 0 END)`,
-        '"totalDonations"',
-        `SUM(CASE WHEN tx.type = 'split_bill_payment' AND tx.status = 'completed' THEN tx.amount ELSE 0 END)`,
-        '"totalBillPayments"',
-        `COUNT(*)`,
-        '"transactionCount"',
-      ])
+      .select(
+        `SUM(CASE WHEN tx.direction = 'credit' 
+              AND tx.status = 'completed' 
+              THEN tx.amount ELSE 0 END)`,
+        'totalIn',
+      )
+      .addSelect(
+        `SUM(CASE WHEN tx.direction = 'debit' 
+              AND tx.status = 'completed' 
+              THEN tx.amount ELSE 0 END)`,
+        'totalOut',
+      )
+      .addSelect(
+        `SUM(CASE WHEN tx.type = 'campaign_donation' 
+              AND tx.status = 'completed' 
+              THEN tx.amount ELSE 0 END)`,
+        'totalDonations',
+      )
+      .addSelect(
+        `SUM(CASE WHEN tx.type = 'split_bill_payment' 
+              AND tx.status = 'completed' 
+              THEN tx.amount ELSE 0 END)`,
+        'totalBillPayments',
+      )
+      .addSelect(`COUNT(*)`, 'transactionCount')
       .where('tx.wallet_id = :walletId', { walletId: wallet.id })
       .andWhere('tx.created_at BETWEEN :start AND :end', {
         start: periodStart,
