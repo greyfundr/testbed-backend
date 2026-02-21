@@ -100,7 +100,7 @@ export class AuthController {
     await this.authService.forgotPassword(body);
     return {
       success: true,
-      message: 'Password reset OTP has been sent to your email.',
+      message: 'Password reset OTP has been sent to your phone number.',
     };
   }
 
