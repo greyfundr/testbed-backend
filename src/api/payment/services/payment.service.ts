@@ -219,7 +219,7 @@ export class PaymentService {
               },
             ],
           },
-          callback_url: `${this.config.get('APP_URL')}/wallet/fund/callback`,
+          callback_url: `https://greyfundr.com/paystack/success`,
         },
       );
     return data;
