@@ -207,7 +207,7 @@ export class PaymentWebhookService {
 
         const newTx = await qr.manager.save(Transaction, {
           walletId,
-          amount,
+          amount: Number(amount) / 100,
           currency: 'NGN',
           type: TransactionType.WALLET_FUNDING,
           direction: TransactionDirection.CREDIT,
@@ -233,7 +233,7 @@ export class PaymentWebhookService {
 
       await this.walletService.creditWallet({
         walletId,
-        amount: amountKobo,
+        amount: Number(amountKobo) / 100,
         transactionId,
         sourceAccountType: LedgerAccountType.PAYMENT_GATEWAY,
         description: `Top-up via ${this.channelLabel(channel)} — ${reference}`,
