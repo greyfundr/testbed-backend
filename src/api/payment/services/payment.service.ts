@@ -184,13 +184,12 @@ export class PaymentService {
    */
   async initiateTransactions(body: {
     amount: number;
-    userId: string;
     email: string;
-    walletId: string;
     reference: string;
     reason?: string;
+    metadata?: Record<any, any>;
   }): Promise<PaystackInitializeTransactionResponse> {
-    const { email, reference, walletId, userId, amount } = body;
+    const { email, reference, metadata, amount } = body;
     const { data } =
       await this.client.post<PaystackInitializeTransactionResponse>(
         '/transaction/initialize',
@@ -207,18 +206,7 @@ export class PaymentService {
             'mobile_money',
             'bank_transfer',
           ],
-          metadata: {
-            wallet_id: walletId,
-            user_id: userId,
-            purpose: 'wallet_funding',
-            custom_fields: [
-              {
-                display_name: 'Purpose',
-                variable_name: 'purpose',
-                value: 'Wallet Top-up',
-              },
-            ],
-          },
+          metadata,
           callback_url: `https://greyfundr.com/paystack/success`,
         },
       );
@@ -340,6 +328,8 @@ export class PaymentService {
     amount: number;
     currency: string;
     reference: string;
+    paid_at: Date;
+    channel: string;
     customer: { customer_code: string; email: string };
   }> {
     const { data } = await this.client.get(`/transaction/verify/${reference}`);

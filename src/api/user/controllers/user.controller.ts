@@ -27,4 +27,11 @@ export class UserController {
   ) {
     return this.userService.updateProfile(user, updateProfileDto);
   }
+
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  @Get('')
+  geAllUsers(@CurrentUser() user: User) {
+    return this.userService.getUsers();
+  }
 }

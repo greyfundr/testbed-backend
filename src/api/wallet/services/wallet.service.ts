@@ -364,11 +364,22 @@ export class WalletService {
 
     // Initialize Paystack transaction
     const data = await this.paymentService.initiateTransactions({
-      userId: user.id,
       email: user.email,
-      walletId: wallet.id,
       reference,
       amount: amountKobo,
+      metadata: {
+        wallet_id: wallet.id,
+        user_id: userId,
+        type: 'wallet_funding',
+        purpose: 'wallet_funding',
+        custom_fields: [
+          {
+            display_name: 'Purpose',
+            variable_name: 'p3urpose',
+            value: 'Wallet Top-up',
+          },
+        ],
+      },
     });
 
     if (!data.status) {

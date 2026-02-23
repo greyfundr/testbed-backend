@@ -1,6 +1,5 @@
 import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-
 import { AbstractEntity } from '../../../common/entities';
 import { User } from '../../user/entities';
 import { Transaction } from '../../transaction/entities';

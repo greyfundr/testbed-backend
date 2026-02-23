@@ -25,6 +25,12 @@ export class UserService {
     });
   }
 
+  async getUsers() {
+    return this.userRepository.findAll({
+      relations: ['profile', 'kyc'],
+    });
+  }
+
   update(id: number, updateUserDto: UpdateUserDto) {
     return this.userRepository.update(id, updateUserDto);
   }

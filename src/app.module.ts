@@ -16,6 +16,7 @@ import { NotificationModule } from './api/notification/notification.module';
 import { TransactionModule } from './api/transaction/transaction.module';
 import { WalletModule } from './api/wallet/wallet.module';
 import { PaymentModule } from './api/payment/payment.module';
+import { SplitBillModule } from './api/split-bill/split-bill.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { PaymentModule } from './api/payment/payment.module';
     TransactionModule,
     WalletModule,
     PaymentModule,
+    SplitBillModule,
   ],
   controllers: [AppController],
   providers: [AppService],
