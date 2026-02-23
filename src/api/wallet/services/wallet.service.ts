@@ -3,7 +3,6 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
-  ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
 import { DataSource, QueryRunner, Repository } from 'typeorm';

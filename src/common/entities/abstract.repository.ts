@@ -34,17 +34,10 @@ export abstract class AbstractRepository<T extends AbstractEntity> {
     return await this.repository.findOne(options);
   }
 
-  async findOneById(id: number, em?: EntityManager): Promise<T | null> {
-    const options: FindOneOptions<T> = {
-      where: { id } as any,
-    };
-    if (em) {
-      return await em.findOne(this.repository.target, options);
-    }
-    return await this.repository.findOne(options);
-  }
-
-  async findOneByid(id: string, em?: EntityManager): Promise<T | null> {
+  async findOneById(
+    id: string | number,
+    em?: EntityManager,
+  ): Promise<T | null> {
     const options: FindOneOptions<T> = {
       where: { id } as any,
     };
@@ -77,10 +70,8 @@ export abstract class AbstractRepository<T extends AbstractEntity> {
 
     let updatedEntity: T | null = null;
 
-    if (typeof criteria === 'number') {
+    if (typeof criteria === 'number' || typeof criteria === 'string') {
       updatedEntity = await this.findOneById(criteria, em);
-    } else if (typeof criteria === 'string') {
-      updatedEntity = await this.findOneByid(criteria, em);
     } else {
       updatedEntity = await this.findOne({ where: criteria }, em);
     }

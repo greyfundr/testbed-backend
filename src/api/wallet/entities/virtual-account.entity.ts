@@ -16,19 +16,19 @@ export class VirtualAccount extends AbstractEntity {
 
   @Index({ unique: true })
   @Column({ name: 'account_number' })
-  accountNumber: string; 
+  accountNumber: string;
 
   @Column({ name: 'account_name' })
-  accountName: string; 
+  accountName: string;
 
   @Column({ name: 'bank_name' })
-  bankName: string; 
+  bankName: string;
 
   @Column({ name: 'bank_code' })
   bankCode: string;
 
   @Column({ name: 'paystack_customer_id' })
-  paystackCustomerId: string; 
+  paystackCustomerId: string;
 
   @Column({ name: 'paystack_customer_code' })
   paystackCustomerCode: string;

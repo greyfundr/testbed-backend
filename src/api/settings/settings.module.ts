@@ -6,9 +6,9 @@ import { Settings } from './entities';
 import { SettingsRepository } from './repository';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([Settings])],
-    controllers: [SettingsController],
-    providers: [SettingsService, SettingsRepository],
-    exports: [SettingsService, SettingsRepository],
+  imports: [TypeOrmModule.forFeature([Settings])],
+  controllers: [SettingsController],
+  providers: [SettingsService, SettingsRepository],
+  exports: [SettingsService, SettingsRepository],
 })
-export class SettingsModule { }
+export class SettingsModule {}

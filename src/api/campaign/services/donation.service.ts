@@ -1,0 +1,173 @@
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
+import { DataSource } from 'typeorm';
+import { v4 as uuidv4 } from 'uuid';
+import { DonationRepository } from '../repository/donation.repository';
+import { CampaignRepository } from '../repository/campaign.repository';
+import { DonateDto } from '../dto/campaign.dto';
+import { User } from '../../user/entities/user.entity';
+import { WalletService } from '../../wallet/services/wallet.service';
+import { Transaction } from '../../transaction/entities';
+import { TransactionRepository } from '../../transaction/repository';
+import {
+  TransactionType,
+  TransactionDirection,
+  TransactionStatus,
+} from '../../transaction/enums/transaction.enum';
+import { CampaignStatus, DonationOnBehalfOf } from '../enums/campaign.enum';
+import { Donation, Campaign } from '../entities';
+
+@Injectable()
+export class DonationService {
+  private readonly logger = new Logger(DonationService.name);
+
+  constructor(
+    private readonly donationRepository: DonationRepository,
+    private readonly campaignRepository: CampaignRepository,
+    private readonly transactionRepository: TransactionRepository,
+    private readonly walletService: WalletService,
+    private readonly dataSource: DataSource,
+  ) { }
+
+  async donate(
+    campaignId: string,
+    donateDto: DonateDto,
+    user: User,
+  ): Promise<Donation> {
+    const campaign = await this.campaignRepository.findOne({
+      where: { id: campaignId },
+    });
+
+    if (!campaign) {
+      throw new NotFoundException('Campaign not found');
+    }
+
+    if (campaign.status !== CampaignStatus.ACTIVE) {
+      throw new BadRequestException('Campaign is not active for donations');
+    }
+
+    const {
+      amount,
+      isAnonymous,
+      username: customUsername,
+      onBehalfOf,
+      onBehalfOfUserId,
+      onBehalfOfExternal,
+      comment,
+    } = donateDto;
+
+    // A user can either be anonymous or pass a username. It can't be both
+    if (isAnonymous && customUsername) {
+      throw new BadRequestException(
+        'A donation cannot be both anonymous and have a custom username',
+      );
+    }
+
+    // Validate onBehalfOfUserId if onBehalfOf is USER
+    if (onBehalfOf === DonationOnBehalfOf.USER && !onBehalfOfUserId) {
+      throw new BadRequestException(
+        'onBehalfOfUserId is required when onBehalfOf is USER',
+      );
+    }
+
+    // Validate onBehalfOfExternal if onBehalfOf is EXTERNAL
+    if (onBehalfOf === DonationOnBehalfOf.EXTERNAL && !onBehalfOfExternal) {
+      throw new BadRequestException(
+        'onBehalfOfExternal is required when onBehalfOf is EXTERNAL',
+      );
+    }
+
+    const wallet = await this.walletService.getWalletByUserId(user.id);
+
+    if (wallet.availableBalance < amount) {
+      throw new BadRequestException('Insufficient wallet balance');
+    }
+
+    const qr = this.dataSource.createQueryRunner();
+    await qr.connect();
+    await qr.startTransaction();
+
+    try {
+      const reference = `DON-${uuidv4().replace(/-/g, '').substring(0, 15).toUpperCase()}`;
+
+      const transaction = await qr.manager.save(
+        qr.manager.create(Transaction, {
+          walletId: wallet.id,
+          amount: amount, // Stored in kobo
+          currency: 'NGN',
+          type: TransactionType.CAMPAIGN_DONATION,
+          direction: TransactionDirection.DEBIT,
+          status: TransactionStatus.COMPLETED,
+          reference,
+          description: `Donation to campaign: ${campaign.title}`,
+          metadata: { campaignId, donorId: user.id },
+        }),
+      );
+
+      // Lock funds into campaign escrow
+      await this.walletService.lockIntoEscrow({
+        walletId: wallet.id,
+        amount,
+        transactionId: transaction.id,
+        entityType: 'campaign',
+        entityId: campaign.id,
+        description: `Escrow for donation to campaign: ${campaign.title}`,
+        qr,
+      });
+
+      const donation = qr.manager.create(Donation, {
+        amount: amount / 100, // Converter will multiply by 100 to store as kobo
+        donorId: user.id,
+        campaignId: campaign.id,
+        transactionId: transaction.id,
+        isAnonymous: isAnonymous ?? false,
+        customUsername,
+        onBehalfOf: onBehalfOf ?? DonationOnBehalfOf.SELF,
+        onBehalfOfUserId:
+          onBehalfOf === DonationOnBehalfOf.USER ? onBehalfOfUserId : undefined,
+        onBehalfOfFullName:
+          onBehalfOf === DonationOnBehalfOf.EXTERNAL
+            ? onBehalfOfExternal?.fullName
+            : undefined,
+        onBehalfOfPhone:
+          onBehalfOf === DonationOnBehalfOf.EXTERNAL
+            ? onBehalfOfExternal?.phoneNumber
+            : undefined,
+        comment,
+      });
+
+      const savedDonation = await qr.manager.save(donation);
+
+      // Update campaign current amount
+      // Raw SQL update - bypasses transformer 'to', so we use kobo directly
+      await qr.manager.update(Campaign, campaign.id, {
+        currentAmount: () => `current_amount + ${amount}`,
+      });
+
+      await qr.commitTransaction();
+
+      this.logger.log(
+        `Donation of ${amount} kobo completed by user ${user.id} for campaign ${campaign.id}`,
+      );
+
+      return savedDonation;
+    } catch (err) {
+      await qr.rollbackTransaction();
+      this.logger.error(
+        `Donation failed for user ${user.id} to campaign ${campaign.id}`,
+        err,
+      );
+      throw err;
+    } finally {
+      await qr.release();
+    }
+  }
+
+  async getCampaignDonations(campaignId: string): Promise<Donation[]> {
+    return this.donationRepository.findByCampaign(campaignId);
+  }
+}

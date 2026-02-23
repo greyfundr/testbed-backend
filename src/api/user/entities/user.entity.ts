@@ -3,6 +3,8 @@ import { AbstractEntity } from '../../../common/entities';
 import { AccountType } from '../enums/user.enum';
 import { Settings } from '../../settings';
 import { Notification } from '../../notification/entities/notification.entity';
+import { Profile } from './profile.entity';
+import { Kyc } from './kyc.entity';
 
 @Entity('users')
 export class User extends AbstractEntity {
@@ -68,4 +70,10 @@ export class User extends AbstractEntity {
 
   @OneToMany(() => Notification, (notification) => notification.user)
   notifications: Notification[];
+
+  @OneToOne(() => Profile, (profile) => profile.user, { cascade: true })
+  profile: Profile;
+
+  @OneToOne(() => Kyc, (kyc) => kyc.user, { cascade: true })
+  kyc: Kyc;
 }

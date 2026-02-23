@@ -30,3 +30,17 @@ export enum TwoFactorMethod {
   SMS = 'sms',
   EMAIL = 'email',
 }
+
+export enum KycVerificationType {
+  BVN = 'bvn',
+  NIN = 'nin',
+  PASSPORT = 'passport',
+  DRIVERS_LICENSE = 'drivers_license',
+  VOTERS_CARD = 'voters_card',
+}
+
+export enum KycStatus {
+  PENDING = 'pending',
+  VERIFIED = 'verified',
+  REJECTED = 'rejected',
+}

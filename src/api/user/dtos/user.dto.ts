@@ -1,10 +1,14 @@
 import {
+  IsArray,
   IsEmail,
+  IsEnum,
   IsNotEmpty,
   IsOptional,
   IsString,
   MinLength,
 } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+import { KycVerificationType } from '../enums/user.enum';
 
 export class CreateUserDto {
   @IsEmail()
@@ -28,11 +32,71 @@ export class CreateUserDto {
 export class UpdateUserDto extends CreateUserDto {}
 
 export class UpdateProfileDto {
+  @ApiProperty({ required: false })
   @IsString()
   @IsOptional()
   firstName?: string;
 
+  @ApiProperty({ required: false })
   @IsString()
   @IsOptional()
   lastName?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  username?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  bio?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  country?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  state?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  city?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  address?: string;
+
+  @ApiProperty({ required: false, type: [String] })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  interests?: string[];
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  image?: string;
+}
+
+export class SubmitKycDto {
+  @ApiProperty({ enum: KycVerificationType })
+  @IsEnum(KycVerificationType)
+  @IsNotEmpty()
+  verificationType: KycVerificationType;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  idNumber: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  documentImage?: string;
 }

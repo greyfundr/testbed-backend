@@ -9,17 +9,17 @@ import { SettingsModule } from '../settings/settings.module';
 import { CommonModule } from '../../common/common.module';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([Notification]),
-        SettingsModule,
-        CommonModule,
-    ],
-    providers: [
-        NotificationService,
-        MailtrapService,
-        FirebaseService,
-        NotificationListener,
-    ],
-    exports: [NotificationService],
+  imports: [
+    TypeOrmModule.forFeature([Notification]),
+    SettingsModule,
+    CommonModule,
+  ],
+  providers: [
+    NotificationService,
+    MailtrapService,
+    FirebaseService,
+    NotificationListener,
+  ],
+  exports: [NotificationService],
 })
-export class NotificationModule { }
+export class NotificationModule {}

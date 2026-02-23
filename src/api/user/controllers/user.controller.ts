@@ -14,7 +14,7 @@ export class UserController {
   @UseGuards(JwtAuthGuard)
   @Get('profile')
   getProfile(@CurrentUser() user: User) {
-    return user;
+    return this.userService.getUserProfile(user.id);
   }
 
   @ApiBearerAuth('JWT-auth')

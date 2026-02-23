@@ -17,7 +17,7 @@ export class SettingsService {
     private configService: ConfigService,
   ) {}
 
-  async findOneByid(id: string) {
+  async findOneById(id: string) {
     return this.settingsRepository.findOne({
       where: { id },
     });
