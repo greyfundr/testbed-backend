@@ -9,6 +9,12 @@ import { CreateCampaignDto, UpdateCampaignDto } from '../dto/campaign.dto';
 import { Campaign } from '../entities/campaign.entity';
 import { CampaignStatus } from '../enums/campaign.enum';
 import { User } from '../../user/entities/user.entity';
+import {
+  PaginationDto,
+  PaginatedResponse,
+  PaginationHelper,
+} from '../../../common/helpers/pagination.helper';
+import { CampaignResponseDto, CampaignCreatorDto } from '../dto/campaign-response.dto';
 
 @Injectable()
 export class CampaignService {
@@ -34,17 +40,30 @@ export class CampaignService {
     return this.campaignRepository.save(campaign);
   }
 
-  async findAll(): Promise<Campaign[]> {
-    return this.campaignRepository.find({
+  async findAll(paginationDto: PaginationDto): Promise<PaginatedResponse<CampaignResponseDto>> {
+    const { page, limit } = paginationDto;
+    const skip = paginationDto.getSkip();
+
+    const [data, total] = await this.campaignRepository.findAndCount({
       where: { status: CampaignStatus.ACTIVE },
+      relations: ['creator', 'creator.profile'],
       order: { createdAt: 'DESC' },
+      skip,
+      take: limit,
     });
+
+    return PaginationHelper.createResponse(
+      data.map((campaign) => this.mapToResponse(campaign)),
+      total,
+      page ?? 1,
+      limit ?? 10,
+    );
   }
 
   async findOne(id: string): Promise<Campaign> {
     const campaign = await this.campaignRepository.findOne({
       where: { id },
-      relations: ['creator'],
+      relations: ['creator', 'creator.profile'],
     });
 
     if (!campaign) {
@@ -78,7 +97,37 @@ export class CampaignService {
     return this.campaignRepository.save(campaign);
   }
 
-  async findMyCampaigns(user: User): Promise<Campaign[]> {
-    return this.campaignRepository.findByCreator(user.id);
+  async findMyCampaigns(user: User): Promise<CampaignResponseDto[]> {
+    const campaigns = await this.campaignRepository.find({
+      where: { creatorId: user.id },
+      relations: ['creator', 'creator.profile'],
+      order: { createdAt: 'DESC' },
+    });
+    return campaigns.map((campaign) => this.mapToResponse(campaign));
+  }
+
+  public mapToResponse(campaign: Campaign): CampaignResponseDto {
+    const creator: CampaignCreatorDto = {
+      id: campaign.creator?.id || campaign.creatorId,
+      firstName: campaign.creator?.firstName ?? undefined,
+      lastName: campaign.creator?.lastName ?? undefined,
+      username: campaign.creator?.username ?? undefined,
+      profileImage: campaign.creator?.profile?.image ?? undefined,
+    };
+
+    return {
+      id: campaign.id,
+      title: campaign.title,
+      description: campaign.description,
+      category: campaign.category,
+      target: campaign.target,
+      currentAmount: campaign.currentAmount,
+      startDate: campaign.startDate,
+      endDate: campaign.endDate,
+      images: campaign.images,
+      status: campaign.status,
+      creator,
+      createdAt: campaign.createdAt,
+    };
   }
 }

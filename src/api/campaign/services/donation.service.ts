@@ -20,6 +20,12 @@ import {
 } from '../../transaction/enums/transaction.enum';
 import { CampaignStatus, DonationOnBehalfOf } from '../enums/campaign.enum';
 import { Donation, Campaign } from '../entities';
+import {
+  PaginationDto,
+  PaginatedResponse,
+  PaginationHelper,
+} from '../../../common/helpers/pagination.helper';
+import { DonationResponseDto, DonorDto } from '../dto/donation-response.dto';
 
 @Injectable()
 export class DonationService {
@@ -167,7 +173,64 @@ export class DonationService {
     }
   }
 
-  async getCampaignDonations(campaignId: string): Promise<Donation[]> {
-    return this.donationRepository.findByCampaign(campaignId);
+  async getCampaignDonations(
+    campaignId: string,
+    paginationDto: PaginationDto,
+  ): Promise<PaginatedResponse<DonationResponseDto>> {
+    const { page, limit } = paginationDto;
+    const skip = paginationDto.getSkip();
+
+    const [data, total] = await this.donationRepository.findAndCount({
+      where: { campaignId },
+      relations: ['donor', 'donor.profile', 'onBehalfOfUser', 'onBehalfOfUser.profile'],
+      order: { createdAt: 'DESC' },
+      skip,
+      take: limit,
+    });
+
+    return PaginationHelper.createResponse(
+      data.map((donation) => this.mapToResponse(donation)),
+      total,
+      page ?? 1,
+      limit ?? 10,
+    );
+  }
+
+  public mapToResponse(donation: Donation): DonationResponseDto {
+    const { donor, onBehalfOfUser, isAnonymous } = donation;
+
+    const mappedDonor: DonorDto | undefined =
+      isAnonymous || !donor
+        ? undefined
+        : {
+          id: donor.id,
+          firstName: donor.firstName ?? undefined,
+          lastName: donor.lastName ?? undefined,
+          username: donor.username ?? undefined,
+          profileImage: donor.profile?.image ?? undefined,
+        };
+
+    const mappedOnBehalfOfUser: DonorDto | undefined = onBehalfOfUser
+      ? {
+        id: onBehalfOfUser.id,
+        firstName: onBehalfOfUser.firstName ?? undefined,
+        lastName: onBehalfOfUser.lastName ?? undefined,
+        username: onBehalfOfUser.username ?? undefined,
+        profileImage: onBehalfOfUser.profile?.image ?? undefined,
+      }
+      : undefined;
+
+    return {
+      id: donation.id,
+      amount: donation.amount,
+      isAnonymous: Boolean(donation.isAnonymous),
+      customUsername: donation.customUsername ?? undefined,
+      onBehalfOf: donation.onBehalfOf,
+      comment: donation.comment ?? undefined,
+      donor: mappedDonor,
+      onBehalfOfUser: mappedOnBehalfOfUser,
+      onBehalfOfFullName: donation.onBehalfOfFullName ?? undefined,
+      createdAt: donation.createdAt,
+    };
   }
 }

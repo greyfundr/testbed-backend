@@ -6,6 +6,7 @@ import {
   Param,
   UseGuards,
   Patch,
+  Query,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -16,12 +17,17 @@ import {
 import { CampaignService, DonationService } from '../services';
 import { Campaign, Donation } from '../entities';
 
-
 import {
   CreateCampaignDto,
   UpdateCampaignDto,
   DonateDto,
 } from '../dto/campaign.dto';
+import { CampaignResponseDto } from '../dto/campaign-response.dto';
+import { DonationResponseDto } from '../dto/donation-response.dto';
+import {
+  PaginationDto,
+  PaginatedResponse,
+} from '../../../common/helpers/pagination.helper';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { User } from '../../user/entities';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
@@ -29,7 +35,6 @@ import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 @ApiTags('Campaigns')
 @Controller('campaigns')
 export class CampaignController {
-
   constructor(
     private readonly campaignService: CampaignService,
     private readonly donationService: DonationService,
@@ -41,7 +46,6 @@ export class CampaignController {
     description: 'The campaign has been successfully created.',
     type: Campaign,
   })
-
   @ApiBearerAuth('JWT-auth')
   @Post()
   @UseGuards(JwtAuthGuard)
@@ -52,47 +56,43 @@ export class CampaignController {
     return this.campaignService.create(createCampaignDto, user);
   }
 
-
   @ApiOperation({ summary: 'Get all campaigns' })
   @ApiResponse({
     status: 200,
     description: 'Return all campaigns.',
-    type: [Campaign],
+    type: CampaignResponseDto,
   })
-
   @Get()
-  async findAll() {
-    return this.campaignService.findAll();
+  async findAll(
+    @Query() paginationDto: PaginationDto,
+  ): Promise<PaginatedResponse<CampaignResponseDto>> {
+    return this.campaignService.findAll(paginationDto);
   }
-
 
   @ApiOperation({ summary: 'Get campaigns created by the current user' })
   @ApiResponse({
     status: 200,
     description: 'Return user campaigns.',
-    type: [Campaign],
+    type: [CampaignResponseDto],
   })
-
   @ApiBearerAuth('JWT-auth')
   @Get('my-campaigns')
   @UseGuards(JwtAuthGuard)
-  async findMyCampaigns(@CurrentUser() user: User) {
+  async findMyCampaigns(@CurrentUser() user: User): Promise<CampaignResponseDto[]> {
     return this.campaignService.findMyCampaigns(user);
   }
-
 
   @ApiOperation({ summary: 'Get a campaign by ID' })
   @ApiResponse({
     status: 200,
     description: 'Return the campaign.',
-    type: Campaign,
+    type: CampaignResponseDto,
   })
-
   @Get(':id')
-  async findOne(@Param('id') id: string) {
-    return this.campaignService.findOne(id);
+  async findOne(@Param('id') id: string): Promise<CampaignResponseDto> {
+    const campaign = await this.campaignService.findOne(id);
+    return this.campaignService.mapToResponse(campaign);
   }
-
 
   @ApiOperation({ summary: 'Update a campaign' })
   @ApiResponse({
@@ -100,7 +100,6 @@ export class CampaignController {
     description: 'The campaign has been updated.',
     type: Campaign,
   })
-
   @ApiBearerAuth('JWT-auth')
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
@@ -112,14 +111,12 @@ export class CampaignController {
     return this.campaignService.update(id, updateCampaignDto, user);
   }
 
-
   @ApiOperation({ summary: 'Donate to a campaign' })
   @ApiResponse({
     status: 201,
     description: 'The donation was successful.',
     type: Donation,
   })
-
   @ApiBearerAuth('JWT-auth')
   @Post(':id/donate')
   @UseGuards(JwtAuthGuard)
@@ -131,17 +128,17 @@ export class CampaignController {
     return this.donationService.donate(id, donateDto, user);
   }
 
-
   @ApiOperation({ summary: 'Get all donations for a campaign' })
   @ApiResponse({
     status: 200,
     description: 'Return campaign donations.',
-    type: [Donation],
+    type: DonationResponseDto,
   })
-
   @Get(':id/donations')
-  async getDonations(@Param('id') id: string) {
-    return this.donationService.getCampaignDonations(id);
+  async getDonations(
+    @Param('id') id: string,
+    @Query() paginationDto: PaginationDto,
+  ): Promise<PaginatedResponse<DonationResponseDto>> {
+    return this.donationService.getCampaignDonations(id, paginationDto);
   }
-
 }

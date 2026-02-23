@@ -14,7 +14,6 @@ import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { CampaignCategory, DonationOnBehalfOf } from '../enums/campaign.enum';
 
-
 class CampaignOfferDto {
   @IsEnum(['auto', 'manual'])
   type: 'auto' | 'manual';
@@ -132,7 +131,6 @@ class ExternalPersonDto {
   phoneNumber: string;
 }
 
-
 export class DonateDto {
   @ApiProperty({
     description: 'Amount to donate in kobo',
@@ -196,4 +194,3 @@ export class DonateDto {
   @IsOptional()
   comment?: string;
 }
-

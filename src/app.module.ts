@@ -22,7 +22,7 @@ import { PaymentModule } from './api/payment/payment.module';
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+
       validationSchema: environmentValidationSchema,
     }),
     ThrottlerModule.forRoot({
