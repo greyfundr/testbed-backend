@@ -50,7 +50,7 @@ export class Campaign extends AbstractEntity {
   category: CampaignCategory;
 
   @Column({ type: 'json', default: [] })
-  offers: CampaignOffer[];
+  offers: CampaignOffer[] = [];
 
   @ApiProperty({ description: 'Fundraising target in Naira', example: 1000000 })
   @Column({
@@ -87,7 +87,7 @@ export class Campaign extends AbstractEntity {
   endDate: Date;
 
   @Column({ type: 'json', default: [] })
-  images: CampaignImage[];
+  images: CampaignImage[] = [];
 
   @Column({
     type: 'bigint',
