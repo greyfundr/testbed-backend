@@ -1,9 +1,10 @@
-import { EntityRepository, Repository } from 'typeorm';
 import { Campaign } from '../entities/campaign.entity';
+import { AbstractRepository } from '../../../common/entities';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 
-@EntityRepository(Campaign)
-export class CampaignRepository extends Repository<Campaign> {
-  async findByCreator(creatorId: string): Promise<Campaign[]> {
-    return this.find({ where: { creatorId } });
+export class CampaignRepository extends AbstractRepository<Campaign> {
+  constructor(@InjectRepository(Campaign) repo: Repository<Campaign>) {
+    super(repo);
   }
 }

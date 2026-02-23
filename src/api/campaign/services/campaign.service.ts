@@ -9,38 +9,56 @@ import { CreateCampaignDto, UpdateCampaignDto } from '../dto/campaign.dto';
 import { Campaign } from '../entities/campaign.entity';
 import { CampaignStatus } from '../enums/campaign.enum';
 import { User } from '../../user/entities/user.entity';
+import { UserRepository } from '../../user/repository/user.repository';
 import {
   PaginationDto,
   PaginatedResponse,
   PaginationHelper,
 } from '../../../common/helpers/pagination.helper';
-import { CampaignResponseDto, CampaignCreatorDto } from '../dto/campaign-response.dto';
+import {
+  CampaignResponseDto,
+  CampaignCreatorDto,
+} from '../dto/campaign-response.dto';
 
 @Injectable()
 export class CampaignService {
   private readonly logger = new Logger(CampaignService.name);
 
-  constructor(private readonly campaignRepository: CampaignRepository) { }
+  constructor(
+    private readonly campaignRepository: CampaignRepository,
+    private readonly userRepository: UserRepository,
+  ) { }
 
   async create(
     createCampaignDto: CreateCampaignDto,
     user: User,
   ): Promise<Campaign> {
-    const { participants, ...campaignData } = createCampaignDto;
+    const { participants: participantIds, ...campaignData } = createCampaignDto;
 
-    const campaign = this.campaignRepository.create({
+    const participants = participantIds?.length
+      ? await this.userRepository.findAll({
+        where: participantIds.map((id) => ({ id })),
+      })
+      : [];
+
+    const campaign = await this.campaignRepository.create({
       ...campaignData,
+      offers: createCampaignDto.offers ?? [],
+      images: createCampaignDto.images ?? [],
       target: createCampaignDto.target / 100,
       fee: (createCampaignDto.fee ?? 0) / 100,
       creatorId: user.id,
       currentAmount: 0,
       status: CampaignStatus.ACTIVE,
+      participants,
     });
 
-    return this.campaignRepository.save(campaign);
+    return campaign;
   }
 
-  async findAll(paginationDto: PaginationDto): Promise<PaginatedResponse<CampaignResponseDto>> {
+  async findAll(
+    paginationDto: PaginationDto,
+  ): Promise<PaginatedResponse<CampaignResponseDto>> {
     const { page, limit } = paginationDto;
     const skip = paginationDto.getSkip();
 
@@ -86,7 +104,13 @@ export class CampaignService {
       );
     }
 
-    const { participants, ...updateData } = updateCampaignDto;
+    const { participants: participantIds, ...updateData } = updateCampaignDto;
+
+    if (participantIds) {
+      campaign.participants = await this.userRepository.findAll({
+        where: participantIds.map((id) => ({ id })),
+      });
+    }
 
     if (updateData.target) {
       updateData.target = updateData.target / 100;
@@ -98,7 +122,7 @@ export class CampaignService {
   }
 
   async findMyCampaigns(user: User): Promise<CampaignResponseDto[]> {
-    const campaigns = await this.campaignRepository.find({
+    const campaigns = await this.campaignRepository.findAll({
       where: { creatorId: user.id },
       relations: ['creator', 'creator.profile'],
       order: { createdAt: 'DESC' },

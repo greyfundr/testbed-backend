@@ -9,7 +9,7 @@ import {
 import { AbstractEntity } from './index';
 
 export abstract class AbstractRepository<T extends AbstractEntity> {
-  protected constructor(protected readonly repository: Repository<T>) {}
+  protected constructor(protected readonly repository: Repository<T>) { }
 
   getManager(em?: EntityManager): EntityManager {
     return em || this.repository.manager;
@@ -55,6 +55,16 @@ export abstract class AbstractRepository<T extends AbstractEntity> {
       return await em.find(this.repository.target, options);
     }
     return await this.repository.find(options);
+  }
+
+  async findAndCount(
+    options?: FindManyOptions<T>,
+    em?: EntityManager,
+  ): Promise<[T[], number]> {
+    if (em) {
+      return await em.findAndCount(this.repository.target, options);
+    }
+    return await this.repository.findAndCount(options);
   }
 
   async update(
