@@ -73,8 +73,6 @@ export class SplitBillService {
       throw new BadRequestException('Amount must be greater than zero');
     }
 
-    // Validate and normalise participants — creator inclusion is caller-driven:
-    // if the creator's userId appears in the array they participate, otherwise not.
     const validated = await this.validateParticipants(
       dto.participants,
       dto.splitMethod,
@@ -120,8 +118,8 @@ export class SplitBillService {
         isFinalized: false,
       });
 
-        const bill = await qr.manager.save(newBill);
-        
+      const bill = await qr.manager.save(newBill);
+
       const participantRows = validated.map((p) =>
         qr.manager.create(SplitBillParticipant, {
           splitBillId: bill.id,
@@ -192,7 +190,6 @@ export class SplitBillService {
       throw new NotFoundException('Bill not found');
     }
 
-    // Access control — creator or participant only
     if (requestingUserId) {
       const hasAccess =
         bill.creatorId === requestingUserId ||
@@ -1864,6 +1861,7 @@ export class SplitBillService {
       transactionId: data.transactionId ?? null,
       metadata: data.metadata ?? null,
       createdAt: new Date(),
+      updatedAt: new Date(),
     });
   }
 

@@ -20,12 +20,56 @@ import {
 import { Type } from 'class-transformer';
 import { SplitMethod, SplitBillStatus } from '../enums/split-bill.enum';
 
-export class UserParticipantDto {
-  @IsIn(['USER'])
-  type: 'USER';
+// export class UserParticipantDto {
+//   @IsIn(['USER'])
+//   type: 'USER';
 
-  @IsUUID()
-  userId: string;
+//   @IsUUID()
+//   userId: string;
+
+//   @IsOptional()
+//   @IsInt()
+//   @Min(1)
+//   amount?: number;
+
+//   @IsOptional()
+//   @IsInt()
+//   @Min(1)
+//   @Max(100)
+//   percentage?: number;
+// }
+
+// export class GuestParticipantDto {
+//   @IsIn(['GUEST'])
+//   type: 'GUEST';
+
+//   @IsString()
+//   @MinLength(2)
+//   @MaxLength(100)
+//   name: string;
+
+//   @Matches(/^\+?[0-9]{10,15}$/, { message: 'Invalid phone number format' })
+//   phone: string;
+
+//   @IsOptional()
+//   @IsEmail()
+//   email?: string;
+
+//   @IsOptional()
+//   @IsInt()
+//   @Min(1)
+//   amount?: number;
+
+//   @IsOptional()
+//   @IsInt()
+//   @Min(1)
+//   @Max(100)
+//   percentage?: number;
+// }
+
+export abstract class BaseParticipantDto {
+  @IsIn(['USER', 'GUEST'])
+  type: 'USER' | 'GUEST';
 
   @IsOptional()
   @IsInt()
@@ -39,32 +83,23 @@ export class UserParticipantDto {
   percentage?: number;
 }
 
-export class GuestParticipantDto {
-  @IsIn(['GUEST'])
-  type: 'GUEST';
+export class UserParticipantDto extends BaseParticipantDto {
+  @IsUUID()
+  userId: string;
+}
 
+export class GuestParticipantDto extends BaseParticipantDto {
   @IsString()
   @MinLength(2)
   @MaxLength(100)
   name: string;
 
-  @Matches(/^\+?[0-9]{10,15}$/, { message: 'Invalid phone number format' })
+  @Matches(/^\+?[0-9]{10,15}$/)
   phone: string;
 
   @IsOptional()
   @IsEmail()
   email?: string;
-
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  amount?: number;
-
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  percentage?: number;
 }
 
 export class RedistributionItemDto {
@@ -99,10 +134,23 @@ export class CreateSplitBillDto {
   @IsEnum(SplitMethod)
   splitMethod: SplitMethod;
 
-  @IsArray()
-  @ArrayMinSize(1)
+  //   @IsArray()
+  //   @ArrayMinSize(1)
+  //   @ValidateNested({ each: true })
+  //   @Type(() => Object)
+  //   participants: Array<UserParticipantDto | GuestParticipantDto>;
+
   @ValidateNested({ each: true })
-  @Type(() => Object)
+  @Type(() => UserParticipantDto, {
+    discriminator: {
+      property: 'type',
+      subTypes: [
+        { value: UserParticipantDto, name: 'USER' },
+        { value: GuestParticipantDto, name: 'GUEST' },
+      ],
+    },
+    keepDiscriminatorProperty: true,
+  })
   participants: Array<UserParticipantDto | GuestParticipantDto>;
 
   @IsOptional()
