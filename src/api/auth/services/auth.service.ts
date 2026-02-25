@@ -162,8 +162,8 @@ export class AuthService {
       return {
         data: {
           id: user.id,
-          firstName: user.firstName,
-          lastName: user.lastName,
+          firstName: user.firstName || '',
+          lastName: user.lastName || '',
           email: user.email,
           phoneNumber: user.phoneNumber,
           accountType: user.accountType,
