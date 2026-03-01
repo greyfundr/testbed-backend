@@ -42,7 +42,7 @@ export class AuthService {
     private readonly eventEmitter: EventEmitter2,
     private readonly walletService: WalletService,
     @Inject(OtpAuthService) private readonly otpAuthService: OtpAuthService,
-  ) { }
+  ) {}
 
   async signup(params: SignupDto) {
     const queryRunner = this.userRepository
@@ -162,8 +162,8 @@ export class AuthService {
       return {
         data: {
           id: user.id,
-          firstName: user.firstName,
-          lastName: user.lastName,
+          firstName: user.firstName || '',
+          lastName: user.lastName || '',
           email: user.email,
           phoneNumber: user.phoneNumber,
           accountType: user.accountType,
@@ -179,8 +179,8 @@ export class AuthService {
     return {
       data: {
         id: user.id,
-        firstName: user.firstName,
-        lastName: user.lastName,
+        firstName: user.firstName || '',
+        lastName: user.lastName || '',
         email: user.email,
         phoneNumber: user.phoneNumber,
         accountType: user.accountType,
@@ -310,6 +310,7 @@ export class AuthService {
     user.firstName = params.firstName;
     user.lastName = params.lastName;
     user.agreeToTerms = params.agreeToTerms;
+    user.username = params.username;
     user.hasSubmittedBasicInfo = true;
 
     await this.userRepository.save(user);

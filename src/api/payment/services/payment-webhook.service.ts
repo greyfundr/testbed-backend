@@ -29,6 +29,8 @@ import {
   WithdrawalRequestRepository,
 } from '../../wallet/repository';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { SplitBillParticipant, SplitBill } from '../../split-bill/entities';
+import { ParticipantStatus, SplitBillStatus } from '../../split-bill/enums';
 
 @Injectable()
 export class PaymentWebhookService {
@@ -108,7 +110,290 @@ export class PaymentWebhookService {
     }
   }
 
+  // private async handleChargeSuccess(
+  //   data: PaystackChargeSuccessData,
+  // ): Promise<void> {
+  //   const { reference, amount, customer, channel } = data;
+
+  //   await this.paymentService.verifyTransaction(reference);
+
+  //   const qr = this.dataSource.createQueryRunner();
+  //   await qr.connect();
+  //   await qr.startTransaction();
+
+  //   try {
+  //     const existingTx = await qr.manager.findOne(Transaction, {
+  //       where: [
+  //         { gatewayReference: reference, status: TransactionStatus.PENDING },
+  //         { reference: reference, status: TransactionStatus.PENDING },
+  //       ],
+  //     });
+
+  //     let walletId: string | null;
+  //     let transactionId: string;
+  //     let amountKobo: number = amount;
+
+  //     if (existingTx) {
+  //       if (Number(existingTx.amount) !== Number(amount)) {
+  //         this.logger.error(
+  //           `Amount mismatch on ${reference}: recorded ${existingTx.amount} kobo, Paystack sent ${amount} kobo`,
+  //         );
+  //         await qr.rollbackTransaction();
+  //         await this.webhookLogRepo.update(
+  //           { gatewayReference: reference },
+  //           {
+  //             processingError: `Amount mismatch: expected ${existingTx.amount}, got ${amount}`,
+  //           },
+  //         );
+  //         return;
+  //       }
+
+  //       const claimed = await qr.manager
+  //         .createQueryBuilder()
+  //         .update(Transaction)
+  //         .set({
+  //           status: TransactionStatus.PROCESSING,
+  //           gatewayReference: reference,
+  //           // paymentGateway: 'paystack',
+  //           gatewayResponse: data,
+  //           confirmedAt: new Date(data.paid_at),
+  //           metadata: () =>
+  //             `JSON_MERGE_PATCH(COALESCE(metadata, '{}'), '${JSON.stringify({
+  //               channel,
+  //               senderName: data.authorization?.sender_name ?? null,
+  //               senderBank: data.authorization?.sender_bank ?? null,
+  //               senderAccount:
+  //                 data.authorization?.sender_bank_account_number ?? null,
+  //             })}')`,
+  //         })
+  //         .where('id = :id AND status = :status', {
+  //           id: existingTx.id,
+  //           status: TransactionStatus.PENDING,
+  //         })
+  //         .execute();
+
+  //       if (claimed.affected === 0) {
+  //         this.logger.warn(
+  //           `Webhook arrived after manual verify for ${reference} — skipping`,
+  //         );
+  //         await qr.rollbackTransaction();
+  //         return;
+  //       }
+
+  //       walletId = existingTx.walletId;
+  //       transactionId = existingTx.id;
+  //       amountKobo = existingTx.amount;
+  //     } else {
+  //       const virtualAccount = await qr.manager.findOne(VirtualAccount, {
+  //         where: { paystackCustomerCode: customer.customer_code },
+  //         relations: ['wallet'],
+  //       });
+
+  //       if (!virtualAccount) {
+  //         this.logger.error(
+  //           `charge.success — no virtual account for customer ${customer.customer_code} (ref: ${reference})`,
+  //         );
+  //         await qr.rollbackTransaction();
+  //         return;
+  //       }
+
+  //       if (!virtualAccount.wallet) {
+  //         this.logger.error(
+  //           `charge.success — virtual account ${virtualAccount.id} has no wallet`,
+  //         );
+  //         await qr.rollbackTransaction();
+  //         return;
+  //       }
+
+  //       walletId = virtualAccount.walletId;
+
+  //       const newTx = await qr.manager.save(Transaction, {
+  //         walletId,
+  //         amount: Number(amount) / 100,
+  //         currency: 'NGN',
+  //         type: TransactionType.WALLET_FUNDING,
+  //         direction: TransactionDirection.CREDIT,
+  //         status: TransactionStatus.PROCESSING,
+  //         reference: `WF-${uuidv4().replace(/-/g, '').substring(0, 16).toUpperCase()}`,
+  //         gatewayReference: reference,
+  //         // paymentGateway: 'paystack',
+  //         description: `Wallet top-up via ${this.channelLabel(channel)}`,
+  //         gatewayResponse: data,
+  //         confirmedAt: new Date(data.paid_at),
+  //         metadata: {
+  //           channel,
+  //           senderName: data.authorization?.sender_name ?? null,
+  //           senderBank: data.authorization?.sender_bank ?? null,
+  //           senderAccount:
+  //             data.authorization?.sender_bank_account_number ?? null,
+  //         },
+  //       });
+
+  //       transactionId = newTx.id;
+  //       amountKobo = amount;
+  //     }
+
+  //     await this.walletService.creditWallet({
+  //       walletId: walletId as string,
+  //       amount: Number(amountKobo) / 100,
+  //       transactionId,
+  //       sourceAccountType: LedgerAccountType.PAYMENT_GATEWAY,
+  //       description: `Top-up via ${this.channelLabel(channel)} — ${reference}`,
+  //       qr,
+  //     });
+
+  //     await qr.manager.update(Transaction, transactionId, {
+  //       status: TransactionStatus.COMPLETED,
+  //     });
+
+  //     await qr.commitTransaction();
+
+  //     this.logger.log(
+  //       `Wallet credited: ${amountKobo} kobo → wallet ${walletId} (ref: ${reference}, path: ${existingTx ? 'card' : 'dva'})`,
+  //     );
+  //   } catch (err) {
+  //     await qr.rollbackTransaction();
+  //     throw err;
+  //   } finally {
+  //     await qr.release();
+  //   }
+  // }
+
   private async handleChargeSuccess(
+    data: PaystackChargeSuccessData,
+  ): Promise<void> {
+    const { reference } = data;
+
+    await this.paymentService.verifyTransaction(reference);
+
+    const paymentType = data.metadata?.type || data.metadata?.purpose;
+
+    switch (paymentType) {
+      case 'GUEST_BILL_PAYMENT':
+        this.logger.log(`Routing webhook to guest bill payment: ${reference}`);
+        await this.processGuestBillPaymentWebhook(data);
+        break;
+
+      case 'wallet_funding':
+      default:
+        this.logger.log(`Routing webhook to wallet funding: ${reference}`);
+        await this.processWalletFundingWebhook(data);
+        break;
+    }
+  }
+
+  private async processGuestBillPaymentWebhook(
+    data: PaystackChargeSuccessData,
+  ): Promise<void> {
+    const { reference, amount: amountKobo, metadata, channel } = data;
+    const billId = metadata.split_bill_id;
+    const participantId = metadata.participant_id;
+
+    if (!billId || !participantId) {
+      this.logger.error(
+        `Missing metadata for guest payment webhook: ${reference}`,
+      );
+      return;
+    }
+
+    const qr = this.dataSource.createQueryRunner();
+    await qr.connect();
+    await qr.startTransaction();
+
+    try {
+      const existingTx = await qr.manager.findOne(Transaction, {
+        where: { gatewayReference: reference },
+      });
+
+      if (existingTx) {
+        this.logger.warn(
+          `Webhook ignored: Payment ${reference} already processed.`,
+        );
+        await qr.rollbackTransaction();
+        return;
+      }
+
+      const participant = await qr.manager.findOne(SplitBillParticipant, {
+        where: { id: participantId, splitBillId: billId },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      const bill = await qr.manager.findOne(SplitBill, {
+        where: { id: billId },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!participant || !bill) {
+        throw new Error('Participant or Bill not found for webhook processing');
+      }
+
+      const tx = await qr.manager.save(Transaction, {
+        walletId: null,
+        amount: amountKobo,
+        currency: bill.currency,
+        type: TransactionType.SPLIT_BILL_PAYMENT,
+        direction: TransactionDirection.CREDIT,
+        status: TransactionStatus.COMPLETED,
+        reference: reference,
+        gatewayReference: reference,
+        paymentGateway: 'paystack',
+        description: `Guest payment (Webhook) — ${bill.title}`,
+        sourceRef: { entity: 'split_bill', id: billId },
+        confirmedAt: new Date(data.paid_at),
+        metadata: {
+          participantId: participant.id,
+          guestName: participant.guestName,
+          channel: channel,
+        },
+      });
+
+      const effectiveOwed =
+        participant.amountOwed + participant.balanceAdjustment;
+      const newAmountPaid = participant.amountPaid + amountKobo;
+      const newAmountRemaining = Math.max(0, effectiveOwed - newAmountPaid);
+      const participantFullyPaid = newAmountRemaining === 0;
+
+      await qr.manager.update(SplitBillParticipant, participantId, {
+        amountPaid: newAmountPaid,
+        amountRemaining: newAmountRemaining,
+        status: participantFullyPaid
+          ? ParticipantStatus.PAID
+          : ParticipantStatus.PARTIAL,
+        paymentMethod: channel === 'card' ? 'card' : 'bank_transfer',
+        firstPaidAt: participant.firstPaidAt ?? new Date(),
+        fullyPaidAt: participantFullyPaid ? new Date() : null,
+      });
+
+      const newTotalCollected = bill.totalCollected + amountKobo;
+      const billFullyFunded = newTotalCollected >= bill.totalAmount;
+
+      await qr.manager.update(SplitBill, billId, {
+        totalCollected: newTotalCollected,
+        ...(participantFullyPaid && {
+          totalPaidParticipants: () => 'total_paid_participants + 1',
+        }),
+        status: billFullyFunded
+          ? SplitBillStatus.FUNDED
+          : SplitBillStatus.PARTIALLY_PAID,
+      });
+
+      await qr.commitTransaction();
+      this.logger.log(
+        `Guest payment webhook processed successfully for ref: ${reference}`,
+      );
+    } catch (err) {
+      await qr.rollbackTransaction();
+      this.logger.error(
+        `Failed to process guest payment webhook: ${err.message}`,
+        err.stack,
+      );
+      throw err;
+    } finally {
+      await qr.release();
+    }
+  }
+
+  private async processWalletFundingWebhook(
     data: PaystackChargeSuccessData,
   ): Promise<void> {
     const { reference, amount, customer, channel } = data;
@@ -122,12 +407,15 @@ export class PaymentWebhookService {
     try {
       const existingTx = await qr.manager.findOne(Transaction, {
         where: [
-          { gatewayReference: reference, status: TransactionStatus.PENDING },
+          {
+            gatewayReference: reference,
+            status: TransactionStatus.PENDING,
+          },
           { reference: reference, status: TransactionStatus.PENDING },
         ],
       });
 
-      let walletId: string;
+      let walletId: string | null;
       let transactionId: string;
       let amountKobo: number = amount;
 
@@ -232,7 +520,7 @@ export class PaymentWebhookService {
       }
 
       await this.walletService.creditWallet({
-        walletId,
+        walletId: walletId as string,
         amount: Number(amountKobo) / 100,
         transactionId,
         sourceAccountType: LedgerAccountType.PAYMENT_GATEWAY,

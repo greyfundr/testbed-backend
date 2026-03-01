@@ -21,12 +21,12 @@ import {
 @Index(['gatewayReference'])
 @Index(['type', 'status'])
 export class Transaction extends AbstractEntity {
-  @Column({ name: 'wallet_id' })
-  walletId: string;
+  @Column({ name: 'wallet_id', nullable: true })
+  walletId: string | null;
 
-  @ManyToOne(() => Wallet, (wallet) => wallet.transactions)
+  @ManyToOne(() => Wallet, (wallet) => wallet.transactions, { nullable: true })
   @JoinColumn({ name: 'wallet_id' })
-  wallet: Wallet;
+  wallet: Wallet | null;
 
   @Column({ type: 'bigint' })
   amount: number;

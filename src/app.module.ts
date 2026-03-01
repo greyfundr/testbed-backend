@@ -17,6 +17,7 @@ import { TransactionModule } from './api/transaction/transaction.module';
 import { WalletModule } from './api/wallet/wallet.module';
 import { PaymentModule } from './api/payment/payment.module';
 import { AdminModule } from './api/admin/admin.module';
+import { SplitBillModule } from './api/split-bill/split-bill.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { AdminModule } from './api/admin/admin.module';
     WalletModule,
     PaymentModule,
     AdminModule,
+    SplitBillModule,
   ],
   controllers: [AppController],
   providers: [AppService],
