@@ -22,6 +22,6 @@ import { UserModule } from '../user/user.module';
     CampaignRepository,
     DonationRepository,
   ],
-  exports: [CampaignService, DonationService],
+  exports: [CampaignService, DonationService, CampaignRepository, DonationRepository],
 })
 export class CampaignModule {}

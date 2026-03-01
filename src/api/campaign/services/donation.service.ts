@@ -4,6 +4,7 @@ import {
   BadRequestException,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DataSource } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { DonationRepository } from '../repository/donation.repository';
@@ -32,12 +33,13 @@ export class DonationService {
   private readonly logger = new Logger(DonationService.name);
 
   constructor(
-    private readonly donationRepository: DonationRepository,
+    private readonly dataSource: DataSource,
     private readonly campaignRepository: CampaignRepository,
+    private readonly donationRepository: DonationRepository,
     private readonly transactionRepository: TransactionRepository,
     private readonly walletService: WalletService,
-    private readonly dataSource: DataSource,
-  ) { }
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   async donate(
     campaignId: string,
@@ -160,6 +162,50 @@ export class DonationService {
         `Donation of ${amount} kobo completed by user ${user.id} for campaign ${campaign.id}`,
       );
 
+      // --- Notifications ---
+      const trueDonationAmount = amount / 100;
+
+      // 1. Send receipt to donor
+      this.eventEmitter.emit('donation.receipt', {
+        donorId: user.id,
+        email: user.email,
+        campaignName: campaign.title,
+        amount: trueDonationAmount,
+      });
+
+      // 2. Alert the campaign creator
+      this.eventEmitter.emit('donation.received', {
+        creatorId: campaign.creatorId,
+        campaignName: campaign.title,
+        amount: trueDonationAmount,
+        donorName: isAnonymous ? 'Anonymous' : customUsername || user.firstName,
+      });
+
+      // 3. Milestone Checks
+      const newCurrentAmount =
+        Number(campaign.currentAmount) + trueDonationAmount;
+      const targetAmount = Number(campaign.target);
+
+      if (targetAmount > 0) {
+        // Did it just hit exactly 50% or 100% boundary?
+        const previousAmount = Number(campaign.currentAmount);
+
+        const hit50 =
+          previousAmount < targetAmount / 2 &&
+          newCurrentAmount >= targetAmount / 2 &&
+          newCurrentAmount < targetAmount;
+        const hit100 =
+          previousAmount < targetAmount && newCurrentAmount >= targetAmount;
+
+        if (hit50 || hit100) {
+          this.eventEmitter.emit('campaign.milestone', {
+            creatorId: campaign.creatorId,
+            campaignName: campaign.title,
+            percentage: hit100 ? 100 : 50,
+          });
+        }
+      }
+
       return savedDonation;
     } catch (err) {
       await qr.rollbackTransaction();
@@ -182,7 +228,12 @@ export class DonationService {
 
     const [data, total] = await this.donationRepository.findAndCount({
       where: { campaignId },
-      relations: ['donor', 'donor.profile', 'onBehalfOfUser', 'onBehalfOfUser.profile'],
+      relations: [
+        'donor',
+        'donor.profile',
+        'onBehalfOfUser',
+        'onBehalfOfUser.profile',
+      ],
       order: { createdAt: 'DESC' },
       skip,
       take: limit,
@@ -203,21 +254,21 @@ export class DonationService {
       isAnonymous || !donor
         ? undefined
         : {
-          id: donor.id,
-          firstName: donor.firstName ?? undefined,
-          lastName: donor.lastName ?? undefined,
-          username: donor.username ?? undefined,
-          profileImage: donor.profile?.image ?? undefined,
-        };
+            id: donor.id,
+            firstName: donor.firstName ?? undefined,
+            lastName: donor.lastName ?? undefined,
+            username: donor.username ?? undefined,
+            profileImage: donor.profile?.image ?? undefined,
+          };
 
     const mappedOnBehalfOfUser: DonorDto | undefined = onBehalfOfUser
       ? {
-        id: onBehalfOfUser.id,
-        firstName: onBehalfOfUser.firstName ?? undefined,
-        lastName: onBehalfOfUser.lastName ?? undefined,
-        username: onBehalfOfUser.username ?? undefined,
-        profileImage: onBehalfOfUser.profile?.image ?? undefined,
-      }
+          id: onBehalfOfUser.id,
+          firstName: onBehalfOfUser.firstName ?? undefined,
+          lastName: onBehalfOfUser.lastName ?? undefined,
+          username: onBehalfOfUser.username ?? undefined,
+          profileImage: onBehalfOfUser.profile?.image ?? undefined,
+        }
       : undefined;
 
     return {

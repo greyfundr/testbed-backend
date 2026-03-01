@@ -16,9 +16,9 @@ import { TransactionService } from '../../transaction/services';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { AddBankAccountDto, InitiateFundingDto, WithdrawDto } from '../dto';
-import { User } from 'src/api/user/entities';
+import { User } from '../../user/entities';
 import { ApiBearerAuth } from '@nestjs/swagger';
-import { KycGuard } from 'src/api/auth/guards/kyc.guard';
+import { KycGuard } from '../../auth/guards/kyc.guard';
 
 @Controller('wallet')
 @UseGuards(JwtAuthGuard)
@@ -26,7 +26,7 @@ export class WalletController {
   constructor(
     private readonly walletService: WalletService,
     private readonly transactionService: TransactionService,
-  ) {}
+  ) { }
 
   @ApiBearerAuth('JWT-auth')
   @Get()
@@ -42,11 +42,11 @@ export class WalletController {
       balance,
       virtualAccount: wallet.virtualAccount
         ? {
-            accountNumber: wallet.virtualAccount.accountNumber,
-            accountName: wallet.virtualAccount.accountName,
-            bankName: wallet.virtualAccount.bankName,
-            isAssigned: wallet.virtualAccount.isAssigned,
-          }
+          accountNumber: wallet.virtualAccount.accountNumber,
+          accountName: wallet.virtualAccount.accountName,
+          bankName: wallet.virtualAccount.bankName,
+          isAssigned: wallet.virtualAccount.isAssigned,
+        }
         : null,
     };
   }

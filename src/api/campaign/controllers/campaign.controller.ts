@@ -38,7 +38,7 @@ export class CampaignController {
   constructor(
     private readonly campaignService: CampaignService,
     private readonly donationService: DonationService,
-  ) { }
+  ) {}
 
   @ApiOperation({ summary: 'Create a new campaign' })
   @ApiResponse({
@@ -78,7 +78,9 @@ export class CampaignController {
   @ApiBearerAuth('JWT-auth')
   @Get('my-campaigns')
   @UseGuards(JwtAuthGuard)
-  async findMyCampaigns(@CurrentUser() user: User): Promise<CampaignResponseDto[]> {
+  async findMyCampaigns(
+    @CurrentUser() user: User,
+  ): Promise<CampaignResponseDto[]> {
     return this.campaignService.findMyCampaigns(user);
   }
 

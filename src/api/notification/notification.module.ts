@@ -7,12 +7,14 @@ import { FirebaseService } from './services/firebase.service';
 import { NotificationListener } from './listeners/notification.listener';
 import { SettingsModule } from '../settings/settings.module';
 import { CommonModule } from '../../common/common.module';
+import { AdminModule } from '../admin/admin.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Notification]),
     SettingsModule,
     CommonModule,
+    AdminModule,
   ],
   providers: [
     NotificationService,

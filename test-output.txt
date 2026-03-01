@@ -1,0 +1,138 @@
+[Nest] 7796  - 03/01/2026, 6:34:04 PM   ERROR [SettingsService] Error fetching user settings
+[Nest] 7796  - 03/01/2026, 6:34:04 PM   ERROR [SettingsService] NotFoundException: Settings not found
+    at SettingsService.getSettings (C:\Users\olare\Desktop\Dev\greyfundr\src\api\settings\services\settings.service.ts:51:15)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at NotificationService.notify (C:\Users\olare\Desktop\Dev\greyfundr\src\api\notification\services\notification.service.ts:34:22)
+    at async Promise.allSettled (index 0)
+    at NotificationListener.handleAdminCampaignCreatedEvent (C:\Users\olare\Desktop\Dev\greyfundr\src\api\notification\listeners\notification.listener.ts:166:5)
+    at EventSubscribersLoader.wrapFunctionInTryCatchBlocks (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\@nestjs\event-emitter\lib\event-subscribers.loader.ts:190:14) {
+  response: {
+    message: 'Settings not found',
+    error: 'Not Found',
+    statusCode: 404
+  },
+  status: 404,
+  options: {}
+}
+[Nest] 7796  - 03/01/2026, 6:34:05 PM   ERROR [SettingsService] Error fetching user settings
+[Nest] 7796  - 03/01/2026, 6:34:05 PM   ERROR [SettingsService] NotFoundException: Settings not found
+    at SettingsService.getSettings (C:\Users\olare\Desktop\Dev\greyfundr\src\api\settings\services\settings.service.ts:51:15)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at NotificationService.notify (C:\Users\olare\Desktop\Dev\greyfundr\src\api\notification\services\notification.service.ts:34:22)
+    at async Promise.allSettled (index 1)
+    at NotificationListener.handleAdminCampaignCreatedEvent (C:\Users\olare\Desktop\Dev\greyfundr\src\api\notification\listeners\notification.listener.ts:166:5)
+    at EventSubscribersLoader.wrapFunctionInTryCatchBlocks (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\@nestjs\event-emitter\lib\event-subscribers.loader.ts:190:14) {
+  response: {
+    message: 'Settings not found',
+    error: 'Not Found',
+    statusCode: 404
+  },
+  status: 404,
+  options: {}
+}
+[Nest] 7796  - 03/01/2026, 6:34:15 PM   ERROR [ExceptionsHandler] TypeError: Cannot read properties of undefined (reading 'findAndCount')
+    at DonationRepository.findAndCount (C:\Users\olare\Desktop\Dev\greyfundr\src\repository\Repository.ts:593:29)
+    at DonationService.getCampaignDonations (C:\Users\olare\Desktop\Dev\greyfundr\src\api\campaign\services\donation.service.ts:229:57)
+    at CampaignController.getDonations (C:\Users\olare\Desktop\Dev\greyfundr\src\api\campaign\controllers\campaign.controller.ts:144:33)
+    at C:\Users\olare\Desktop\Dev\greyfundr\node_modules\@nestjs\core\router\router-execution-context.js:38:29
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at C:\Users\olare\Desktop\Dev\greyfundr\node_modules\@nestjs\core\router\router-execution-context.js:46:28
+    at C:\Users\olare\Desktop\Dev\greyfundr\node_modules\@nestjs\core\router\router-proxy.js:9:17
+[Nest] 7796  - 03/01/2026, 6:34:16 PM   ERROR [SettingsService] Error fetching user settings
+[Nest] 7796  - 03/01/2026, 6:34:16 PM   ERROR [SettingsService] NotFoundException: Settings not found
+    at SettingsService.getSettings (C:\Users\olare\Desktop\Dev\greyfundr\src\api\settings\services\settings.service.ts:51:15)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at NotificationService.notify (C:\Users\olare\Desktop\Dev\greyfundr\src\api\notification\services\notification.service.ts:34:22)
+    at NotificationListener.handleDonationReceivedEvent (C:\Users\olare\Desktop\Dev\greyfundr\src\api\notification\listeners\notification.listener.ts:99:5)
+    at EventSubscribersLoader.wrapFunctionInTryCatchBlocks (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\@nestjs\event-emitter\lib\event-subscribers.loader.ts:190:14) {
+  response: {
+    message: 'Settings not found',
+    error: 'Not Found',
+    statusCode: 404
+  },
+  status: 404,
+  options: {}
+}
+[Nest] 7796  - 03/01/2026, 6:34:16 PM   ERROR [Event] Settings not found
+NotFoundException: Settings not found
+    at SettingsService.getSettings (C:\Users\olare\Desktop\Dev\greyfundr\src\api\settings\services\settings.service.ts:51:15)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at NotificationService.notify (C:\Users\olare\Desktop\Dev\greyfundr\src\api\notification\services\notification.service.ts:34:22)
+    at NotificationListener.handleDonationReceivedEvent (C:\Users\olare\Desktop\Dev\greyfundr\src\api\notification\listeners\notification.listener.ts:99:5)
+    at EventSubscribersLoader.wrapFunctionInTryCatchBlocks (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\@nestjs\event-emitter\lib\event-subscribers.loader.ts:190:14)
+[Nest] 7796  - 03/01/2026, 6:34:16 PM   ERROR [SettingsService] Error fetching user settings
+[Nest] 7796  - 03/01/2026, 6:34:16 PM   ERROR [SettingsService] NotFoundException: Settings not found
+    at SettingsService.getSettings (C:\Users\olare\Desktop\Dev\greyfundr\src\api\settings\services\settings.service.ts:51:15)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at NotificationService.notify (C:\Users\olare\Desktop\Dev\greyfundr\src\api\notification\services\notification.service.ts:34:22)
+    at NotificationListener.handleDonationReceiptEvent (C:\Users\olare\Desktop\Dev\greyfundr\src\api\notification\listeners\notification.listener.ts:75:5)
+    at EventSubscribersLoader.wrapFunctionInTryCatchBlocks (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\@nestjs\event-emitter\lib\event-subscribers.loader.ts:190:14) {
+  response: {
+    message: 'Settings not found',
+    error: 'Not Found',
+    statusCode: 404
+  },
+  status: 404,
+  options: {}
+}
+[Nest] 7796  - 03/01/2026, 6:34:16 PM   ERROR [Event] Settings not found
+NotFoundException: Settings not found
+    at SettingsService.getSettings (C:\Users\olare\Desktop\Dev\greyfundr\src\api\settings\services\settings.service.ts:51:15)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at NotificationService.notify (C:\Users\olare\Desktop\Dev\greyfundr\src\api\notification\services\notification.service.ts:34:22)
+    at NotificationListener.handleDonationReceiptEvent (C:\Users\olare\Desktop\Dev\greyfundr\src\api\notification\listeners\notification.listener.ts:75:5)
+    at EventSubscribersLoader.wrapFunctionInTryCatchBlocks (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\@nestjs\event-emitter\lib\event-subscribers.loader.ts:190:14)
+FAIL test/campaign.e2e-spec.ts (28.271 s)
+  Campaign Module APIs (e2e)
+    ΓêÜ /campaigns (POST) - Create a campaign (1799 ms)
+    ├ù /admin/campaigns/:id/approve (PATCH) - Approve campaign (2204 ms)
+    ΓêÜ /campaigns (GET) - Get all campaigns (698 ms)
+    ΓêÜ /campaigns/my-campaigns (GET) - Get my campaigns (653 ms)
+    ΓêÜ /campaigns/:id (PATCH) - Update campaign (2611 ms)
+    ΓêÜ /campaigns/:id (GET) - Get one campaign (641 ms)
+    ΓêÜ /campaigns/:id/donate (POST) - Donate to campaign (5684 ms)
+    ├ù /campaigns/:id/donations (GET) - Get donations (25 ms)
+
+  ΓùÅ Campaign Module APIs (e2e) ΓÇ║ /admin/campaigns/:id/approve (PATCH) - Approve campaign
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 409
+
+      125 |             .set('Authorization', `Bearer ${adminToken}`);
+      126 |
+    > 127 |         expect(res.status).toBe(200);
+          |                            ^
+      128 |         expect(res.body.success).toBe(true);
+      129 |         expect(res.body.data.status).toBe('active');
+      130 |     });
+
+      at Object.<anonymous> (campaign.e2e-spec.ts:127:28)
+
+  ΓùÅ Campaign Module APIs (e2e) ΓÇ║ /campaigns/:id/donations (GET) - Get donations
+
+    expected 200 "OK", got 500 "Internal Server Error"
+
+      187 |         const res = await request(app.getHttpServer())
+      188 |             .get(`/campaigns/${testCampaignId}/donations`)
+    > 189 |             .expect(200);
+          |              ^
+      190 |
+      191 |         expect(Array.isArray(res.body.data)).toBe(true);
+      192 |         expect(res.body.data.length).toBeGreaterThanOrEqual(1);
+
+      at Object.<anonymous> (campaign.e2e-spec.ts:189:14)
+      ----
+      at Test._assertStatus (../node_modules/supertest/lib/test.js:309:14)
+      at ../node_modules/supertest/lib/test.js:365:13
+      at Test._assertFunction (../node_modules/supertest/lib/test.js:342:13)
+      at Test.assert (../node_modules/supertest/lib/test.js:195:23)
+      at localAssert (../node_modules/supertest/lib/test.js:138:14)
+      at Server.<anonymous> (../node_modules/supertest/lib/test.js:152:11)
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 6 passed, 8 total
+Snapshots:   0 total
+Time:        29.115 s
+Ran all test suites matching /test\\campaign.e2e-spec.ts/i.

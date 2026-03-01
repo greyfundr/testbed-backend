@@ -29,7 +29,7 @@ import { SettingsService } from '../../settings/services';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { OtpAuthService } from './otp-auth.service';
 import { WalletService } from '../../wallet/services';
-import { AccountType } from 'src/api/user/enums/user.enum';
+import { AccountType } from '../../user/enums/user.enum';
 
 @Injectable()
 export class AuthService {
@@ -42,7 +42,7 @@ export class AuthService {
     private readonly eventEmitter: EventEmitter2,
     private readonly walletService: WalletService,
     @Inject(OtpAuthService) private readonly otpAuthService: OtpAuthService,
-  ) {}
+  ) { }
 
   async signup(params: SignupDto) {
     const queryRunner = this.userRepository

@@ -27,11 +27,11 @@ import { ApiBearerAuth, ApiBody, ApiOperation } from '@nestjs/swagger';
 import { CurrentUser } from '../decorators/current-user.decorator';
 import { User } from '../../user/entities/user.entity';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
-import { VerifyTwoFactorDto } from 'src/api/settings';
+import { VerifyTwoFactorDto } from '../../settings';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(private authService: AuthService) { }
 
   @ApiOperation({ summary: 'Register a new user' })
   @ApiBody({ type: SignupDto })

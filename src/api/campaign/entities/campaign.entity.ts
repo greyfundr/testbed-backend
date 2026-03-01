@@ -49,7 +49,7 @@ export class Campaign extends AbstractEntity {
   })
   category: CampaignCategory;
 
-  @Column({ type: 'json', default: [] })
+  @Column({ type: 'json' })
   offers: CampaignOffer[] = [];
 
   @ApiProperty({ description: 'Fundraising target in Naira', example: 1000000 })
@@ -86,15 +86,17 @@ export class Campaign extends AbstractEntity {
   @Column({ type: 'timestamp', name: 'end_date' })
   endDate: Date;
 
-  @Column({ type: 'json', default: [] })
+  @Column({ type: 'json' })
   images: CampaignImage[] = [];
 
   @Column({
-    type: 'bigint',
+    type: 'decimal',
+    precision: 5,
+    scale: 2,
     default: 0,
-    transformer: new BigIntAmountTransformer(),
+    name: 'fee_percentage',
   })
-  fee: number;
+  feePercentage: number;
 
   @ApiProperty({ description: 'Campaign status', enum: CampaignStatus })
   @Column({

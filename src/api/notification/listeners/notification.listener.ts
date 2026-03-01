@@ -1,12 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { NotificationService } from '../services/notification.service';
+import { AdminRepository } from '../../admin/repository/admin.repository';
 
 @Injectable()
 export class NotificationListener {
   private readonly logger = new Logger(NotificationListener.name);
 
-  constructor(private readonly notificationService: NotificationService) {}
+  constructor(
+    private readonly notificationService: NotificationService,
+    private readonly adminRepository: AdminRepository,
+  ) {}
 
   @OnEvent('user.created')
   async handleUserCreatedEvent(payload: {
@@ -58,5 +62,107 @@ export class NotificationListener {
         email: payload.email,
       },
     });
+  }
+
+  @OnEvent('donation.receipt')
+  async handleDonationReceiptEvent(payload: {
+    donorId: string;
+    email: string;
+    campaignName: string;
+    amount: number;
+  }) {
+    this.logger.log(`Handling donation.receipt event for ${payload.donorId}`);
+    await this.notificationService.notify(
+      payload.donorId,
+      'paymentConfirmations',
+      {
+        title: 'Donation Successful',
+        message: `Thank you for your generous donation of ₦${payload.amount} to "${payload.campaignName}".`,
+        type: 'transaction',
+        metadata: {
+          email: payload.email,
+        },
+      },
+    );
+  }
+
+  @OnEvent('donation.received')
+  async handleDonationReceivedEvent(payload: {
+    creatorId: string;
+    campaignName: string;
+    amount: number;
+    donorName: string;
+  }) {
+    this.logger.log(
+      `Handling donation.received event for creator ${payload.creatorId}`,
+    );
+    await this.notificationService.notify(
+      payload.creatorId,
+      'campaignUpdates',
+      {
+        title: 'New Donation Received!',
+        message: `"${payload.campaignName}" just received a donation of ₦${payload.amount} from ${payload.donorName}.`,
+        type: 'campaign',
+      },
+    );
+  }
+
+  @OnEvent('campaign.milestone')
+  async handleCampaignMilestoneEvent(payload: {
+    creatorId: string;
+    campaignName: string;
+    percentage: number;
+  }) {
+    this.logger.log(
+      `Handling campaign.milestone event for creator ${payload.creatorId}`,
+    );
+    const message =
+      payload.percentage === 100
+        ? `Congratulations! Your campaign "${payload.campaignName}" has hit 100% of its target.`
+        : `Great news! Your campaign "${payload.campaignName}" is halfway there (50%).`;
+
+    await this.notificationService.notify(
+      payload.creatorId,
+      'campaignUpdates',
+      {
+        title: `Campaign Milestone: ${payload.percentage}%`,
+        message,
+        type: 'campaign',
+      },
+    );
+  }
+
+  @OnEvent('admin.campaign_created')
+  async handleAdminCampaignCreatedEvent(payload: {
+    campaignId: string;
+    campaignTitle: string;
+    creatorId: string;
+  }) {
+    this.logger.log(
+      `Handling admin.campaign_created event for campaign ${payload.campaignId}`,
+    );
+
+    // Fetch all admins
+    const admins = await this.adminRepository.findAll();
+    if (admins.length === 0) {
+      this.logger.warn(
+        'No admins found in the system to notify for new campaign.',
+      );
+      return;
+    }
+
+    // Notify each admin
+    const notifications = admins.map((admin) =>
+      this.notificationService.notify(admin.id, 'securityAlerts', {
+        title: 'New Campaign Created',
+        message: `Review required for new campaign: "${payload.campaignTitle}" by creator ${payload.creatorId}`,
+        type: 'campaign',
+        metadata: {
+          campaignId: payload.campaignId,
+        },
+      }),
+    );
+
+    await Promise.allSettled(notifications);
   }
 }

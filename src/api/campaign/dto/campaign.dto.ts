@@ -69,10 +69,6 @@ export class CreateCampaignDto {
   @IsOptional()
   @IsString({ each: true })
   participants?: string[]; // Array of user IDs or usernames? Let's assume user IDs for now.
-
-  @IsNumber()
-  @IsOptional()
-  fee?: number;
 }
 
 export class UpdateCampaignDto {

@@ -32,7 +32,7 @@ import {
 } from '../../transaction/enums/transaction.enum';
 import { User } from '../../user/entities';
 import { AddBankAccountDto, WithdrawDto } from '../dto';
-import { UserRepository } from 'src/api/user/repository';
+import { UserRepository } from '../../user/repository';
 import {
   VirtualAccountRepository,
   WalletRepository,
@@ -42,8 +42,8 @@ import {
 import {
   LedgerEntryRepository,
   TransactionRepository,
-} from 'src/api/transaction/repository';
-import { PaymentService } from 'src/api/payment/services';
+} from '../../transaction/repository';
+import { PaymentService } from '../../payment/services';
 import axios from 'axios';
 import { FundingAccountResponse, InitiateFundingResponse } from '../interfaces';
 
@@ -94,7 +94,7 @@ export class WalletService {
     private readonly bankAccountRepository: BankAccountRepository,
     private readonly paymentService: PaymentService,
     private readonly dataSource: DataSource,
-  ) {}
+  ) { }
 
   // ─── Wallet Creation ─────────────────────────────────────────────────────────
 

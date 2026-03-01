@@ -22,12 +22,12 @@ import {
   TransactionQueryDto,
 } from '../dto';
 import { ApiBearerAuth } from '@nestjs/swagger';
-import { User } from 'src/api/user/entities';
+import { User } from '../../user/entities';
 
 @Controller('transactions')
 @UseGuards(JwtAuthGuard, KycGuard)
 export class TransactionController {
-  constructor(private readonly transactionService: TransactionService) {}
+  constructor(private readonly transactionService: TransactionService) { }
 
   @ApiBearerAuth('JWT-auth')
   @Post('donate')

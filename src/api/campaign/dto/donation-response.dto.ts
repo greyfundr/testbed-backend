@@ -2,50 +2,50 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { DonationOnBehalfOf } from '../enums/campaign.enum';
 
 export class DonorDto {
-    @ApiProperty()
-    id: string;
+  @ApiProperty()
+  id: string;
 
-    @ApiPropertyOptional()
-    firstName?: string;
+  @ApiPropertyOptional()
+  firstName?: string;
 
-    @ApiPropertyOptional()
-    lastName?: string;
+  @ApiPropertyOptional()
+  lastName?: string;
 
-    @ApiPropertyOptional()
-    username?: string;
+  @ApiPropertyOptional()
+  username?: string;
 
-    @ApiPropertyOptional()
-    profileImage?: string;
+  @ApiPropertyOptional()
+  profileImage?: string;
 }
 
 export class DonationResponseDto {
-    @ApiProperty()
-    id: string;
+  @ApiProperty()
+  id: string;
 
-    @ApiProperty()
-    amount: number;
+  @ApiProperty()
+  amount: number;
 
-    @ApiProperty()
-    isAnonymous: boolean;
+  @ApiProperty()
+  isAnonymous: boolean;
 
-    @ApiPropertyOptional()
-    customUsername?: string;
+  @ApiPropertyOptional()
+  customUsername?: string;
 
-    @ApiProperty({ enum: DonationOnBehalfOf })
-    onBehalfOf: DonationOnBehalfOf;
+  @ApiProperty({ enum: DonationOnBehalfOf })
+  onBehalfOf: DonationOnBehalfOf;
 
-    @ApiPropertyOptional()
-    comment?: string;
+  @ApiPropertyOptional()
+  comment?: string;
 
-    @ApiPropertyOptional({ type: DonorDto })
-    donor?: DonorDto;
+  @ApiPropertyOptional({ type: DonorDto })
+  donor?: DonorDto;
 
-    @ApiPropertyOptional({ type: DonorDto })
-    onBehalfOfUser?: DonorDto;
+  @ApiPropertyOptional({ type: DonorDto })
+  onBehalfOfUser?: DonorDto;
 
-    @ApiPropertyOptional()
-    onBehalfOfFullName?: string;
+  @ApiPropertyOptional()
+  onBehalfOfFullName?: string;
 
-    @ApiProperty()
-    createdAt: Date;
+  @ApiProperty()
+  createdAt: Date;
 }

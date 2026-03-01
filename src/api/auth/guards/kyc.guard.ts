@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { SetMetadata } from '@nestjs/common';
-import { UserRepository } from 'src/api/user/repository';
+import { UserRepository } from '../../user/repository';
 
 // Decorator to skip KYC check on specific routes even when guard is applied globally
 export const SKIP_KYC_KEY = 'skipKyc';
@@ -17,7 +17,7 @@ export class KycGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly userRepo: UserRepository,
-  ) {}
+  ) { }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     // Allow routes decorated with @SkipKyc() to bypass this guard

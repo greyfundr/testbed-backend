@@ -4,6 +4,8 @@ import {
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CampaignRepository } from '../repository/campaign.repository';
 import { CreateCampaignDto, UpdateCampaignDto } from '../dto/campaign.dto';
 import { Campaign } from '../entities/campaign.entity';
@@ -27,7 +29,9 @@ export class CampaignService {
   constructor(
     private readonly campaignRepository: CampaignRepository,
     private readonly userRepository: UserRepository,
-  ) { }
+    private readonly configService: ConfigService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   async create(
     createCampaignDto: CreateCampaignDto,
@@ -37,20 +41,32 @@ export class CampaignService {
 
     const participants = participantIds?.length
       ? await this.userRepository.findAll({
-        where: participantIds.map((id) => ({ id })),
-      })
+          where: participantIds.map((id) => ({ id })),
+        })
       : [];
+
+    const feePercentage = this.configService.get<number>(
+      'CAMPAIGN_FEE_PERCENTAGE',
+      5,
+    );
+    const targetAmount = createCampaignDto.target;
 
     const campaign = await this.campaignRepository.create({
       ...campaignData,
       offers: createCampaignDto.offers ?? [],
       images: createCampaignDto.images ?? [],
-      target: createCampaignDto.target / 100,
-      fee: (createCampaignDto.fee ?? 0) / 100,
+      target: targetAmount,
+      feePercentage,
       creatorId: user.id,
       currentAmount: 0,
       status: CampaignStatus.ACTIVE,
       participants,
+    });
+
+    this.eventEmitter.emit('admin.campaign_created', {
+      campaignId: campaign.id,
+      campaignTitle: campaign.title,
+      creatorId: user.id,
     });
 
     return campaign;
@@ -113,7 +129,7 @@ export class CampaignService {
     }
 
     if (updateData.target) {
-      updateData.target = updateData.target / 100;
+      updateData.target = updateData.target;
     }
 
     Object.assign(campaign, updateData);

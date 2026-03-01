@@ -23,11 +23,11 @@ import {
 import {
   TransactionRepository,
   WebhookLogRepository,
-} from 'src/api/transaction/repository';
+} from '../../transaction/repository';
 import {
   VirtualAccountRepository,
   WithdrawalRequestRepository,
-} from 'src/api/wallet/repository';
+} from '../../wallet/repository';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Injectable()
@@ -45,7 +45,7 @@ export class PaymentWebhookService {
     private readonly paymentService: PaymentService,
     private readonly dataSource: DataSource,
     private readonly eventEmitter: EventEmitter2,
-  ) {}
+  ) { }
 
   async dispatch(event: string, data: Record<string, any>): Promise<void> {
     const reference = this.extractReference(event, data);
