@@ -44,6 +44,7 @@
     "cache-manager": "^7.2.8",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.3",
+    "firebase-admin": "^13.7.0",
     "helmet": "^8.1.0",
     "joi": "^18.0.2",
     "mysql2": "^3.16.1",

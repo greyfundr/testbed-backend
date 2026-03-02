@@ -7,7 +7,10 @@ import {
   IsPhoneNumber,
   IsString,
   IsStrongPassword,
+  Length,
   Matches,
+  MaxLength,
+  MinLength,
   Validate,
   ValidationArguments,
   ValidatorConstraint,
@@ -87,11 +90,22 @@ export class ForgotPasswordDto {
   emailOrPhone: string;
 }
 
-export class CreatePasswordDto {
-  @ApiProperty({ description: 'Password' })
-  @IsNotEmpty({ message: 'Password is required' })
-  @IsStrongPassword()
-  password: string;
+export class ChangePasswordDto {
+  @IsString()
+  @MinLength(1)
+  currentPassword: string;
+
+  @IsString()
+  @MinLength(8)
+  @MaxLength(72)
+  // @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, {
+  //   message:
+  //     'Password must contain at least one uppercase letter, one lowercase letter, and one number',
+  // })
+  newPassword: string;
+
+  @IsString()
+  confirmNewPassword: string;
 }
 
 export class LoginDto {
@@ -155,12 +169,24 @@ export class RefreshTokenDto {
 
 export class SetPinDto {
   @ApiProperty({ description: '6-digit PIN', example: '123456' })
+  @Length(6, 6, { message: 'PIN must be exactly 6 digits' })
   @IsNotEmpty({ message: 'PIN is required' })
   @IsString()
   @Matches(/^\d{6}$/, { message: 'PIN must be 6 numeric digits' })
   pin: string;
 }
 
+export class ChangePinDto {
+  @IsString()
+  @Length(6, 6)
+  @Matches(/^\d{6}$/)
+  currentPin: string;
+
+  @IsString()
+  @Length(6, 6)
+  @Matches(/^\d{6}$/)
+  newPin: string;
+}
 export class LoginPinDto {
   @IsNotEmpty({ message: 'emailOrPhone is required' })
   @IsString({ message: 'emailOrPhone must be a string' })

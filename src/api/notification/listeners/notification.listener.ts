@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { NotificationService } from '../services/notification.service';
 import { AdminRepository } from '../../admin/repository/admin.repository';
+import { FirebaseService } from '../services/firebase.service';
 
 @Injectable()
 export class NotificationListener {
@@ -10,6 +11,7 @@ export class NotificationListener {
   constructor(
     private readonly notificationService: NotificationService,
     private readonly adminRepository: AdminRepository,
+    private readonly firebaseService: FirebaseService,
   ) {}
 
   @OnEvent('user.created')
@@ -164,5 +166,33 @@ export class NotificationListener {
     );
 
     await Promise.allSettled(notifications);
+  }
+
+  @OnEvent('security.password_changed')
+  async handlePasswordChangedEvent(payload: {
+    userId: string;
+    email: string;
+    phoneNumber?: string;
+    changedAt: Date;
+  }) {
+    this.logger.log(
+      `Handling security.password_changed event for ${payload.userId}`,
+    );
+
+    const formattedTime = payload.changedAt.toLocaleString('en-NG', {
+      timeZone: 'Africa/Lagos',
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+
+    await this.notificationService.notify(payload.userId, 'securityAlerts', {
+      title: 'Password Changed',
+      message: `Your password was successfully changed on ${formattedTime}. If you did not make this change, please contact support immediately.`,
+      type: 'security',
+      metadata: {
+        email: payload.email,
+        phoneNumber: payload.phoneNumber,
+      },
+    });
   }
 }

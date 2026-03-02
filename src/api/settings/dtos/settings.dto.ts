@@ -47,6 +47,17 @@ export class UpdateNotificationPreferencesDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsObject()
+  securityAlerts?: {
+    push: boolean;
+    email: boolean;
+    inApp: boolean;
+    sms: boolean;
+    frequency: NotificationFrequency;
+  };
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsObject()
   paymentConfirmations?: {
     push: boolean;
     email: boolean;
@@ -121,6 +132,20 @@ export class UpdateSettingsDto {
   @ApiPropertyOptional({
     example: {
       campaignUpdates: {
+        push: true,
+        email: true,
+        inApp: true,
+        sms: false,
+        frequency: 'realtime',
+      },
+      billRemiders: {
+        push: true,
+        email: true,
+        inApp: true,
+        sms: false,
+        frequency: 'realtime',
+      },
+      securityAlerts: {
         push: true,
         email: true,
         inApp: true,

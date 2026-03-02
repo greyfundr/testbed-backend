@@ -193,7 +193,7 @@ export class CreateSplitBillDto {
 
 // ─── Update Bill ──────────────────────────────────────────────────────────────
 
-export class UpdateSplitBillDto {
+export class    UpdateSplitBillDto {
   @IsOptional()
   @IsString()
   @MinLength(2)

@@ -351,7 +351,7 @@ export class WalletService {
     await this.transactionRepository.save(
       await this.transactionRepository.create({
         walletId: wallet.id,
-        amount: amountKobo / 100,
+        amount: amountKobo,
         currency: 'NGN',
         type: TransactionType.WALLET_FUNDING,
         direction: TransactionDirection.CREDIT,

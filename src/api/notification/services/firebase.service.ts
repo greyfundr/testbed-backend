@@ -1,41 +1,65 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-// NOTE: We would normally use 'firebase-admin' here.
-// For now, I'll implement the shell and the user can add the credentials later.
-// import * as admin from 'firebase-admin';
+import * as admin from 'firebase-admin';
 
 @Injectable()
 export class FirebaseService {
   private readonly logger = new Logger(FirebaseService.name);
 
   constructor(private readonly configService: ConfigService) {
-    // Initialize Firebase Admin SDK if needed
-    // admin.initializeApp({
-    //   credential: admin.credential.cert(this.configService.get('FIREBASE_SERVICE_ACCOUNT')),
-    // });
+    if (!admin.apps.length) {
+      const projectId = this.configService.get<string>('FIREBASE_PROJECT_ID');
+      const clientEmail = this.configService.get<string>(
+        'FIREBASE_CLIENT_EMAIL',
+      );
+
+      const privateKey = this.configService
+        .get<string>('FIREBASE_PRIVATE_KEY')
+        ?.replace(/\\n/g, '\n');
+
+      if (!projectId || !clientEmail || !privateKey) {
+        this.logger.warn(
+          'Firebase credentials missing in environment variables. Initialization skipped.',
+        );
+        return;
+      }
+
+      admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId,
+          clientEmail,
+          privateKey,
+        }),
+      });
+
+      this.logger.log('Firebase Admin initialized successfully');
+    }
   }
 
   async sendPushNotification(
     token: string,
     title: string,
     body: string,
-    data?: any,
-  ): Promise<any> {
+    data?: Record<string, string>,
+  ): Promise<{ success: boolean; messageId: string }> {
     try {
       this.logger.log(`Sending push notification to ${token}: ${title}`);
-      // const message = {
-      //   notification: { title, body },
-      //   data: data || {},
-      //   token: token,
-      // };
-      // return await admin.messaging().send(message);
 
-      this.logger.warn(
-        'Firebase Messaging implementation is a placeholder. Please provide Firebase Credentials.',
-      );
-      return { success: true, messageId: 'placeholder-id' };
+      const message: admin.messaging.Message = {
+        notification: { title, body },
+        data: data || {},
+        token: token,
+      };
+
+      const messageId = await admin.messaging().send(message);
+
+      this.logger.log(`Successfully sent message with ID: ${messageId}`);
+      return { success: true, messageId };
     } catch (error) {
-      this.logger.error(`Error sending push notification to ${token}`, error);
+      this.logger.error(
+        `Failed to send push notification to ${token}: ${error.message}`,
+        error.stack,
+      );
       throw error;
     }
   }

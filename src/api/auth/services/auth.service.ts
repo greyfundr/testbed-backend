@@ -8,11 +8,11 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
   CompleteKycDto,
-  CreatePasswordDto,
   ForgotPasswordDto,
   LoginDto,
   SignupDto,
@@ -20,6 +20,8 @@ import {
   VerifyOtpDto,
   LoginPinDto,
   ResendOtpDto,
+  ChangePasswordDto,
+  ChangePinDto,
 } from '../auth.dto';
 import { UserRepository } from '../../user/repository';
 import { generateNumericToken } from '../../../common/helpers/token-generator';
@@ -283,21 +285,62 @@ export class AuthService {
     }
   }
 
-  async createNewPassword(params: CreatePasswordDto, userId: string) {
-    try {
-      const existingUser = await this.userRepository.findOne({
-        where: {
-          id: userId,
-        },
-      });
-      if (!existingUser) throw new NotFoundException('Account not found');
-      const hashedPassword = await bcrypt.hash(existingUser.password, 10);
-      existingUser.password = hashedPassword;
-      await this.userRepository.save(existingUser);
-    } catch (error) {
-      this.logger.error('Unable to create new password', error);
-      throw error;
+  async changePassword(
+    params: ChangePasswordDto,
+    userId: string,
+  ): Promise<void> {
+    if (params.newPassword !== params.confirmNewPassword) {
+      throw new BadRequestException(
+        'New password and confirmation do not match',
+      );
     }
+
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      select: ['id', 'password', 'email', 'phoneNumber'],
+    });
+
+    if (!user) throw new NotFoundException('Account not found');
+
+    if (!user.password) {
+      throw new BadRequestException(
+        'Your account has no password set. Use the create-password endpoint instead.',
+      );
+    }
+
+    const currentPasswordValid = await bcrypt.compare(
+      params.currentPassword,
+      user.password,
+    );
+    if (!currentPasswordValid) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    const isSamePassword = await bcrypt.compare(
+      params.newPassword,
+      user.password,
+    );
+    if (isSamePassword) {
+      throw new BadRequestException(
+        'New password must be different from your current password',
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash(params.newPassword, 12);
+
+    await this.userRepository.update(
+      { id: userId },
+      { password: hashedPassword },
+    );
+
+    this.logger.log(`Password changed for user ${userId}`);
+
+    this.eventEmitter.emit('security.password_changed', {
+      userId: user.id,
+      email: user.email,
+      phoneNumber: user.phoneNumber ?? undefined,
+      changedAt: new Date(),
+    });
   }
 
   async submitBasicInfo(params: SubmitBasicInfoDto, userId: string) {
@@ -409,9 +452,63 @@ export class AuthService {
     };
   }
 
-  async setPin(userId: string, pin: string) {
-    const hashedPin = await bcrypt.hash(pin, 10);
+  async setPin(userId: string, pin: string): Promise<void> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      select: ['id', 'pin'],
+    });
+
+    if (!user) {
+      throw new NotFoundException('Account not found');
+    }
+
+    if (user.pin) {
+      throw new ConflictException(
+        'A PIN is already set on this account. Use the change-pin endpoint to update it.',
+      );
+    }
+
+    const hashedPin = await bcrypt.hash(pin, 12);
+
     await this.userRepository.update({ id: userId }, { pin: hashedPin });
+
+    this.logger.log(`PIN set for user ${userId}`);
+  }
+
+  async changePin(userId: string, params: ChangePinDto): Promise<void> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      select: ['id', 'pin'],
+    });
+
+    if (!user) {
+      throw new NotFoundException('Account not found');
+    }
+
+    if (!user.pin) {
+      throw new BadRequestException(
+        'No PIN is set on this account. Use the set-pin endpoint first.',
+      );
+    }
+
+    const currentPinValid = await bcrypt.compare(params.currentPin, user.pin);
+
+    if (!currentPinValid) {
+      throw new UnauthorizedException('Current PIN is incorrect');
+    }
+
+    const isSamePin = await bcrypt.compare(params.newPin, user.pin);
+    if (isSamePin) {
+      throw new BadRequestException(
+        'New PIN must be different from your current PIN',
+      );
+    }
+
+    const hashedPin = await bcrypt.hash(params.newPin, 12);
+
+    await this.userRepository.update({ id: userId }, { pin: hashedPin });
+
+    this.logger.log(`PIN changed for user ${userId}`);
   }
 
   async loginWithPin(params: LoginPinDto) {

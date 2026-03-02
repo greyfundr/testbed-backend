@@ -10,7 +10,6 @@ import {
 } from '@nestjs/common';
 import { AuthService } from '../services/auth.service';
 import {
-  CreatePasswordDto,
   ForgotPasswordDto,
   LoginDto,
   LoginResponseDto,
@@ -22,6 +21,8 @@ import {
   LoginPinDto,
   SetPinDto,
   ResendOtpDto,
+  ChangePasswordDto,
+  ChangePinDto,
 } from '../auth.dto';
 import { ApiBearerAuth, ApiBody, ApiOperation } from '@nestjs/swagger';
 import { CurrentUser } from '../decorators/current-user.decorator';
@@ -31,7 +32,7 @@ import { VerifyTwoFactorDto } from '../../settings';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) { }
+  constructor(private authService: AuthService) {}
 
   @ApiOperation({ summary: 'Register a new user' })
   @ApiBody({ type: SignupDto })
@@ -104,18 +105,19 @@ export class AuthController {
     };
   }
 
-  @ApiOperation({ summary: 'Create password' })
-  @ApiBody({ type: CreatePasswordDto })
-  @Post('create-password')
+  @ApiOperation({ summary: 'Change password — requires current password' })
+  @ApiBody({ type: ChangePasswordDto })
+  @Post('change-password')
+  @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
-  async createPassword(
-    @Body() body: CreatePasswordDto,
+  async changePassword(
+    @Body() body: ChangePasswordDto,
     @CurrentUser() user: User,
   ) {
-    await this.authService.createNewPassword(body, user.id);
+    await this.authService.changePassword(body, user.id);
     return {
       success: true,
-      message: 'Password updated successfully!',
+      message: 'Password changed successfully',
     };
   }
 
@@ -160,15 +162,29 @@ export class AuthController {
     };
   }
 
-  @ApiOperation({ summary: 'Set 6-digit PIN' })
-  @HttpCode(200)
-  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Set PIN (6-digit) for the first time' })
+  @ApiBody({ type: SetPinDto })
   @Post('set-pin')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
   async setPin(@Body() body: SetPinDto, @CurrentUser() user: User) {
     await this.authService.setPin(user.id, body.pin);
     return {
       success: true,
-      message: 'PIN set successfully!',
+      message: 'PIN set successfully',
+    };
+  }
+
+  @ApiOperation({ summary: 'Change existing PIN — requires current PIN' })
+  @ApiBody({ type: ChangePinDto })
+  @Post('change-pin')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  async changePin(@Body() body: ChangePinDto, @CurrentUser() user: User) {
+    await this.authService.changePin(user.id, body);
+    return {
+      success: true,
+      message: 'PIN changed successfully',
     };
   }
 
