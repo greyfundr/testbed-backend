@@ -76,4 +76,19 @@ export class User extends AbstractEntity {
 
   @OneToOne(() => Kyc, (kyc) => kyc.user, { cascade: true })
   kyc: Kyc;
+
+  @Column({
+    type: 'varchar',
+    length: 64,
+    nullable: true,
+    name: 'password_reset_token',
+  })
+  passwordResetToken: string | null;
+
+  @Column({
+    type: 'timestamp',
+    nullable: true,
+    name: 'password_reset_token_expiry',
+  })
+  passwordResetTokenExpiry: Date | null;
 }

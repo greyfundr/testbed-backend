@@ -210,3 +210,32 @@ export class LoginResponseDto extends BaseResponseDto {
   accessToken: string | null;
   refreshToken: string | null;
 }
+
+export class VerifyResetOtpDto {
+  @IsString()
+  @MinLength(1)
+  emailOrPhone: string;
+
+  @IsString()
+  @Length(6, 6)
+  @Matches(/^\d{6}$/, { message: 'OTP must be 6 digits' })
+  otp: string;
+}
+
+export class ResetPasswordDto {
+  @IsString()
+  @MinLength(1)
+  resetToken: string;
+
+  @IsString()
+  @MinLength(8)
+  @MaxLength(72)
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, {
+    message:
+      'Password must contain at least one uppercase letter, one lowercase letter, and one number',
+  })
+  newPassword: string;
+
+  @IsString()
+  confirmNewPassword: string;
+}

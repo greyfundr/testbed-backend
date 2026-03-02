@@ -22,6 +22,8 @@ import {
   ResendOtpDto,
   ChangePasswordDto,
   ChangePinDto,
+  ResetPasswordDto,
+  VerifyResetOtpDto,
 } from '../auth.dto';
 import { UserRepository } from '../../user/repository';
 import { generateNumericToken } from '../../../common/helpers/token-generator';
@@ -32,6 +34,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { OtpAuthService } from './otp-auth.service';
 import { WalletService } from '../../wallet/services';
 import { AccountType } from '../../user/enums/user.enum';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -283,6 +286,128 @@ export class AuthService {
       this.logger.error('Unable to send OTP', error);
       throw error;
     }
+  }
+
+  async verifyResetOtp(params: VerifyResetOtpDto): Promise<string> {
+    const user = await this.userRepository.findOne({
+      where: [
+        { email: params.emailOrPhone },
+        { phoneNumber: params.emailOrPhone },
+      ],
+      select: ['id', 'phoneOtp', 'emailOtp', 'otpExpiration'],
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid or expired OTP');
+    }
+
+    const isExpired = !user.otpExpiration || user.otpExpiration < new Date();
+    if (isExpired) {
+      throw new UnauthorizedException(
+        'OTP has expired. Please request a new one.',
+      );
+    }
+
+    const otpValid =
+      user.phoneOtp === params.otp || user.emailOtp === params.otp;
+
+    if (!otpValid) {
+      throw new UnauthorizedException('Invalid or expired OTP');
+    }
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const hashedToken = crypto
+      .createHash('sha256')
+      .update(resetToken)
+      .digest('hex');
+
+    const resetTokenExpiry = new Date(Date.now() + 15 * 60 * 1000);
+
+    await this.userRepository.update(
+      { id: user.id },
+      {
+        phoneOtp: '',
+        emailOtp: '',
+        otpExpiration: null,
+        passwordResetToken: hashedToken,
+        passwordResetTokenExpiry: resetTokenExpiry,
+      },
+    );
+
+    this.logger.log(`Reset OTP verified for user ${user.id}`);
+
+    return resetToken;
+  }
+
+  async resetPassword(params: ResetPasswordDto): Promise<void> {
+    if (params.newPassword !== params.confirmNewPassword) {
+      throw new BadRequestException('Passwords do not match');
+    }
+
+    const hashedToken = crypto
+      .createHash('sha256')
+      .update(params.resetToken)
+      .digest('hex');
+
+    const user = await this.userRepository.findOne({
+      where: { passwordResetToken: hashedToken },
+      select: [
+        'id',
+        'email',
+        'phoneNumber',
+        'password',
+        'passwordResetTokenExpiry',
+      ],
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid or expired reset token');
+    }
+
+    if (
+      !user.passwordResetTokenExpiry ||
+      user.passwordResetTokenExpiry < new Date()
+    ) {
+      await this.userRepository.update(
+        { id: user.id },
+        { passwordResetToken: null, passwordResetTokenExpiry: null },
+      );
+      throw new UnauthorizedException(
+        'Reset token has expired. Please restart the forgot-password flow.',
+      );
+    }
+
+    if (user.password) {
+      const isSamePassword = await bcrypt.compare(
+        params.newPassword,
+        user.password,
+      );
+      if (isSamePassword) {
+        throw new BadRequestException(
+          'New password must be different from your current password',
+        );
+      }
+    }
+
+    const hashedPassword = await bcrypt.hash(params.newPassword, 12);
+
+    await this.userRepository.update(
+      { id: user.id },
+      {
+        password: hashedPassword,
+        passwordResetToken: null,
+        passwordResetTokenExpiry: null,
+      },
+    );
+
+    this.logger.log(`Password reset successfully for user ${user.id}`);
+
+    this.eventEmitter.emit('security.password_changed', {
+      userId: user.id,
+      email: user.email,
+      phoneNumber: user.phoneNumber ?? undefined,
+      changedAt: new Date(),
+    });
   }
 
   async changePassword(

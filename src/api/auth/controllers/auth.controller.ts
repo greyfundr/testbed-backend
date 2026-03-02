@@ -23,6 +23,8 @@ import {
   ResendOtpDto,
   ChangePasswordDto,
   ChangePinDto,
+  ResetPasswordDto,
+  VerifyResetOtpDto,
 } from '../auth.dto';
 import { ApiBearerAuth, ApiBody, ApiOperation } from '@nestjs/swagger';
 import { CurrentUser } from '../decorators/current-user.decorator';
@@ -102,6 +104,36 @@ export class AuthController {
     return {
       success: true,
       message: 'Password reset OTP has been sent to your phone number.',
+    };
+  }
+
+  @ApiOperation({
+    summary: 'Verify forgot-password OTP — returns a reset token',
+  })
+  @ApiBody({ type: VerifyResetOtpDto })
+  @Post('verify-reset-otp')
+  @HttpCode(HttpStatus.OK)
+  async verifyResetOtp(@Body() body: VerifyResetOtpDto) {
+    const resetToken = await this.authService.verifyResetOtp(body);
+    return {
+      success: true,
+      message: 'OTP verified. Use the reset token to set your new password.',
+      data: { resetToken },
+    };
+  }
+
+  @ApiOperation({
+    summary: 'Reset password using token issued after OTP verification',
+  })
+  @ApiBody({ type: ResetPasswordDto })
+  @Patch('reset-password')
+  @HttpCode(HttpStatus.OK)
+  async resetPassword(@Body() body: ResetPasswordDto) {
+    await this.authService.resetPassword(body);
+    return {
+      success: true,
+      message:
+        'Password reset successfully. You can now log in with your new password.',
     };
   }
 
