@@ -93,7 +93,7 @@ async function bootstrap() {
     // Graceful shutdown
     app.enableShutdownHooks();
 
-    await app.listen(port);
+    await app.listen(Number(port), '0.0.0.0');
 
     logger.log(`🚀 Application is running on: http://localhost:${port}/api`);
     logger.log(`📝 Environment: ${nodeEnv || 'development'}`);
