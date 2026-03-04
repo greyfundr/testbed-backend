@@ -21,6 +21,7 @@ import {
   CampaignResponseDto,
   CampaignCreatorDto,
 } from '../dto/campaign-response.dto';
+import { CampaignCategoryRepository } from '../repository/campaign-category.repository';
 
 @Injectable()
 export class CampaignService {
@@ -28,6 +29,7 @@ export class CampaignService {
 
   constructor(
     private readonly campaignRepository: CampaignRepository,
+    private readonly campaignCategoryRepository: CampaignCategoryRepository,
     private readonly userRepository: UserRepository,
     private readonly configService: ConfigService,
     private readonly eventEmitter: EventEmitter2,
@@ -51,8 +53,19 @@ export class CampaignService {
     );
     const targetAmount = createCampaignDto.target;
 
+    const existingCategory = await this.campaignCategoryRepository.findOne({
+      where: { id: campaignData.category },
+    });
+
+    if (!existingCategory) {
+      throw new NotFoundException(
+        `Campaign category with ID ${campaignData.category} not found`,
+      );
+    }
+
     const campaign = await this.campaignRepository.create({
       ...campaignData,
+      category: existingCategory,
       offers: createCampaignDto.offers ?? [],
       images: createCampaignDto.images ?? [],
       target: targetAmount,
@@ -169,5 +182,16 @@ export class CampaignService {
       creator,
       createdAt: campaign.createdAt,
     };
+  }
+
+  async getCampaignCategories(): Promise<
+    { id: string; name: string; icon: string | null }[]
+  > {
+    const categories = await this.campaignCategoryRepository.findAll();
+    return categories.map((cat) => ({
+      id: cat.id,
+      name: cat.name,
+      icon: cat.icon,
+    }));
   }
 }

@@ -22,7 +22,10 @@ import {
   UpdateCampaignDto,
   DonateDto,
 } from '../dto/campaign.dto';
-import { CampaignResponseDto } from '../dto/campaign-response.dto';
+import {
+  CampaignCategoryResponseDto,
+  CampaignResponseDto,
+} from '../dto/campaign-response.dto';
 import { DonationResponseDto } from '../dto/donation-response.dto';
 import {
   PaginationDto,
@@ -39,6 +42,17 @@ export class CampaignController {
     private readonly campaignService: CampaignService,
     private readonly donationService: DonationService,
   ) {}
+
+  @ApiOperation({ summary: 'Get all campaign categories' })
+  @ApiResponse({
+    status: 200,
+    description: 'Return all campaign categories.',
+    type: CampaignCategoryResponseDto,
+  })
+  @Get('categories')
+  async getCategories(): Promise<any[]> {
+    return this.campaignService.getCampaignCategories();
+  }
 
   @ApiOperation({ summary: 'Create a new campaign' })
   @ApiResponse({

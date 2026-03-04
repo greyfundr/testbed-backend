@@ -40,8 +40,8 @@ export class CreateCampaignDto {
   @IsString()
   description: string;
 
-  @IsEnum(CampaignCategory)
-  category: CampaignCategory;
+  @IsString()
+  category: string;
 
   @IsArray()
   @IsOptional()

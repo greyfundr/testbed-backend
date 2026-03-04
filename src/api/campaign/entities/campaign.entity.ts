@@ -7,13 +7,12 @@ import {
   ManyToMany,
   JoinTable,
 } from 'typeorm';
-
 import { ApiProperty } from '@nestjs/swagger';
-
 import { AbstractEntity } from '../../../common/entities';
 import { User } from '../../user/entities';
-import { CampaignCategory, CampaignStatus } from '../enums/campaign.enum';
+import { CampaignStatus } from '../enums/campaign.enum';
 import { Donation } from './donation.entity';
+import { CampaignCategory } from './campaign-category.entity';
 import { BigIntAmountTransformer } from '../../../common/transformers/column-numeric.transformer';
 
 export interface CampaignOffer {
@@ -43,10 +42,11 @@ export class Campaign extends AbstractEntity {
   @Column({ type: 'text' })
   description: string;
 
-  @ApiProperty({ description: 'Campaign category', enum: CampaignCategory })
-  @Column({
-    type: 'varchar',
-  })
+  @Column({ name: 'category_id' })
+  categoryId: string;
+
+  @ManyToOne(() => CampaignCategory)
+  @JoinColumn({ name: 'category_id' })
   category: CampaignCategory;
 
   @Column({ type: 'json' })

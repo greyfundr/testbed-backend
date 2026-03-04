@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { CampaignCategory, CampaignStatus } from '../enums/campaign.enum';
+import { CampaignStatus } from '../enums/campaign.enum';
+import { CampaignCategory } from '../entities';
 
 export class CampaignCreatorDto {
   @ApiProperty()
@@ -28,7 +29,7 @@ export class CampaignResponseDto {
   @ApiProperty()
   description: string;
 
-  @ApiProperty({ enum: CampaignCategory })
+  @ApiProperty({ type: CampaignCategory })
   category: CampaignCategory;
 
   @ApiProperty()
@@ -54,4 +55,15 @@ export class CampaignResponseDto {
 
   @ApiProperty()
   createdAt: Date;
+}
+
+export class CampaignCategoryResponseDto {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  name: string;
+
+  @ApiProperty()
+  icon: string;
 }
