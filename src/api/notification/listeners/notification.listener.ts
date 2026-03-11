@@ -144,28 +144,37 @@ export class NotificationListener {
       `Handling admin.campaign_created event for campaign ${payload.campaignId}`,
     );
 
-    // Fetch all admins
     const admins = await this.adminRepository.findAll();
-    if (admins.length === 0) {
-      this.logger.warn(
-        'No admins found in the system to notify for new campaign.',
-      );
+    if (!admins.length) {
+      this.logger.warn('No admins found to notify for new campaign.');
       return;
     }
 
-    // Notify each admin
-    const notifications = admins.map((admin) =>
-      this.notificationService.notify(admin.id, 'securityAlerts', {
-        title: 'New Campaign Created',
-        message: `Review required for new campaign: "${payload.campaignTitle}" by creator ${payload.creatorId}`,
-        type: 'campaign',
-        metadata: {
-          campaignId: payload.campaignId,
-        },
-      }),
-    );
+    await this.notificationService.notifyAllAdmins(admins, {
+      title: 'New Campaign Created — Review Required',
+      message: `A new campaign "${payload.campaignTitle}" has been submitted by creator ${payload.creatorId} and is awaiting your review.`,
+      type: 'campaign',
+      metadata: { campaignId: payload.campaignId },
+    });
+  }
 
-    await Promise.allSettled(notifications);
+  @OnEvent('admin.withdrawal_requested')
+  async handleWithdrawalRequestedEvent(payload: {
+    campaignId: string;
+    creatorId: string;
+    amount: number;
+  }) {
+    const admins = await this.adminRepository.findAll();
+
+    await this.notificationService.notifyAllAdmins(admins, {
+      title: 'Withdrawal Request',
+      message: `A withdrawal of ₦${payload.amount.toLocaleString()} has been requested for campaign ${payload.campaignId}.`,
+      type: 'transaction',
+      metadata: {
+        campaignId: payload.campaignId,
+        creatorId: payload.creatorId,
+      },
+    });
   }
 
   @OnEvent('security.password_changed')

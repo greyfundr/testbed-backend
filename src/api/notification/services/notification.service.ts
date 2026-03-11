@@ -85,4 +85,52 @@ export class NotificationService {
       readAt: new Date(),
     });
   }
+
+  async notifyAdmin(
+    admin: { id: string; email: string; firstName?: string | null },
+    options: {
+      title: string;
+      message: string;
+      type?: string;
+      metadata?: any;
+    },
+  ): Promise<void> {
+    const { title, message, type, metadata } = options;
+
+    await this.notificationRepository.save({
+      user: { id: admin.id },
+      title,
+      message,
+      type,
+      metadata,
+    });
+
+    await this.mailtrapService.sendEmail(admin.email, title, message);
+  }
+
+  async notifyAllAdmins(
+    admins: Array<{ id: string; email: string; firstName?: string | null }>,
+    options: {
+      title: string;
+      message: string;
+      type?: string;
+      metadata?: any;
+    },
+  ): Promise<void> {
+    if (!admins.length) {
+      this.logger.warn('[notifyAllAdmins] No admins to notify.');
+      return;
+    }
+
+    const results = await Promise.allSettled(
+      admins.map((admin) => this.notifyAdmin(admin, options)),
+    );
+
+    const failed = results.filter((r) => r.status === 'rejected');
+    if (failed.length) {
+      this.logger.error(
+        `[notifyAllAdmins] ${failed.length}/${admins.length} admin notification(s) failed.`,
+      );
+    }
+  }
 }
