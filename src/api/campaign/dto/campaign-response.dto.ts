@@ -45,10 +45,22 @@ export class CampaignResponseDto {
   endDate: Date;
 
   @ApiProperty({ type: 'array', items: { type: 'object' } })
+  offers: any[];
+
+  @ApiProperty({ type: 'array', items: { type: 'object' } })
+  budget: any[];
+
+  @ApiProperty({ type: 'array', items: { type: 'object' } })
   images: any[];
 
   @ApiProperty({ enum: CampaignStatus })
   status: CampaignStatus;
+
+  @ApiPropertyOptional()
+  shareSlug?: string;
+
+  @ApiPropertyOptional()
+  shareUrl?: string;
 
   @ApiProperty({ type: CampaignCreatorDto })
   creator: CampaignCreatorDto;

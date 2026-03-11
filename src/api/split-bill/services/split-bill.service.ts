@@ -147,10 +147,8 @@ export class SplitBillService {
 
       await qr.manager.save(participantRows);
 
-      // ── 3. Compute and write shares ───────────────────────────────────────
       await this.computeAndSaveShares(bill.id, validated, dto.splitMethod, qr);
 
-      // ── 4. Activity log ───────────────────────────────────────────────────
       await this.logActivity(qr, {
         splitBillId: bill.id,
         actorId: creatorId,

@@ -22,6 +22,7 @@ import {
   CampaignCreatorDto,
 } from '../dto/campaign-response.dto';
 import { CampaignCategoryRepository } from '../repository/campaign-category.repository';
+import { nanoid } from 'nanoid';
 
 @Injectable()
 export class CampaignService {
@@ -67,6 +68,7 @@ export class CampaignService {
       ...campaignData,
       category: existingCategory,
       offers: createCampaignDto.offers ?? [],
+      budget: createCampaignDto.budget ?? [],
       images: createCampaignDto.images ?? [],
       target: targetAmount,
       feePercentage,
@@ -74,6 +76,7 @@ export class CampaignService {
       currentAmount: 0,
       status: CampaignStatus.ACTIVE,
       participants,
+      shareSlug: nanoid(12),
     });
 
     this.eventEmitter.emit('admin.campaign_created', {
@@ -177,8 +180,14 @@ export class CampaignService {
       currentAmount: campaign.currentAmount,
       startDate: campaign.startDate,
       endDate: campaign.endDate,
+      offers: campaign.offers,
+      budget: campaign.budget,
       images: campaign.images,
       status: campaign.status,
+      shareSlug: campaign.shareSlug,
+      shareUrl: `${this.configService.get<string>(
+        'API_BASE_URL',
+      )}/campaigns/${campaign.shareSlug}`,
       creator,
       createdAt: campaign.createdAt,
     };

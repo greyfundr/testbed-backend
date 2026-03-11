@@ -21,6 +21,12 @@ export interface CampaignOffer {
   reward: string;
 }
 
+export interface CampaignBudget {
+  item: string;
+  cost: number;
+  image: string;
+}
+
 export interface CampaignImage {
   imageUrl: string;
   providerId: string;
@@ -51,6 +57,12 @@ export class Campaign extends AbstractEntity {
 
   @Column({ type: 'json' })
   offers: CampaignOffer[] = [];
+
+  @Column({ type: 'json' })
+  budget: CampaignBudget[] = [];
+
+  @Column({ name: 'share_slug', unique: true, length: 21 })
+  shareSlug: string;
 
   @ApiProperty({ description: 'Fundraising target in Naira', example: 1000000 })
   @Column({

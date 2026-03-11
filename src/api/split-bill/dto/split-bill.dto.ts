@@ -134,12 +134,6 @@ export class CreateSplitBillDto {
   @IsEnum(SplitMethod)
   splitMethod: SplitMethod;
 
-  //   @IsArray()
-  //   @ArrayMinSize(1)
-  //   @ValidateNested({ each: true })
-  //   @Type(() => Object)
-  //   participants: Array<UserParticipantDto | GuestParticipantDto>;
-
   @ValidateNested({ each: true })
   @Type(() => UserParticipantDto, {
     discriminator: {

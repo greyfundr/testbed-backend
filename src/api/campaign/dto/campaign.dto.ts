@@ -9,6 +9,7 @@ import {
   ValidateNested,
   Min,
   IsUrl,
+  IsPositive,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -23,6 +24,18 @@ class CampaignOfferDto {
 
   @IsString()
   reward: string;
+}
+
+class CampaignBudgetDto {
+  @IsString()
+  item: string;
+
+  @IsPositive()
+  @IsNumber()
+  cost: number;
+
+  @IsString()
+  image: string;
 }
 
 class CampaignImageDto {
@@ -49,6 +62,12 @@ export class CreateCampaignDto {
   @Type(() => CampaignOfferDto)
   offers?: CampaignOfferDto[];
 
+  @IsArray()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => CampaignBudgetDto)
+  budget?: CampaignBudgetDto[];
+
   @IsNumber()
   @Min(100)
   target: number;
@@ -68,7 +87,7 @@ export class CreateCampaignDto {
   @IsArray()
   @IsOptional()
   @IsString({ each: true })
-  participants?: string[]; // Array of user IDs or usernames? Let's assume user IDs for now.
+  participants?: string[];
 }
 
 export class UpdateCampaignDto {
