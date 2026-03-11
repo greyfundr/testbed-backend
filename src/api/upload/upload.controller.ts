@@ -33,9 +33,9 @@ const multerOptions = {
 export class UploadController {
   constructor(private readonly uploadService: UploadService) {}
 
-  @Post('campaign-image')
+  @Post('image')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Upload a single campaign image' })
+  @ApiOperation({ summary: 'Upload a single image' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
