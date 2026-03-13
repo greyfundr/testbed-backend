@@ -21,15 +21,16 @@ import {
   InternalTransferDto,
   TransactionQueryDto,
 } from '../dto';
-import { ApiBearerAuth } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { User } from '../../user/entities';
 
 @Controller('transactions')
 @UseGuards(JwtAuthGuard, KycGuard)
 export class TransactionController {
-  constructor(private readonly transactionService: TransactionService) { }
+  constructor(private readonly transactionService: TransactionService) {}
 
   @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Donate to a campaign' })
   @Post('donate')
   @HttpCode(HttpStatus.CREATED)
   async donateToCampaign(
@@ -39,6 +40,7 @@ export class TransactionController {
     return this.transactionService.donateToCampaign(user.id, dto);
   }
 
+  @ApiOperation({ summary: 'Make split bill payment' })
   @ApiBearerAuth('JWT-auth')
   @Post('pay-bill')
   @HttpCode(HttpStatus.CREATED)
@@ -46,6 +48,7 @@ export class TransactionController {
     return this.transactionService.paySplitBill(user.id, dto);
   }
 
+  @ApiOperation({ summary: 'Make invoice payment' })
   @ApiBearerAuth('JWT-auth')
   @Post('pay-invoice')
   @HttpCode(HttpStatus.CREATED)
@@ -53,6 +56,7 @@ export class TransactionController {
     return this.transactionService.payInvoice(user.id, dto);
   }
 
+  @ApiOperation({ summary: 'Transfer fund to another user' })
   @ApiBearerAuth('JWT-auth')
   @Post('transfer')
   @HttpCode(HttpStatus.CREATED)
@@ -63,6 +67,7 @@ export class TransactionController {
     return this.transactionService.internalTransfer(user.id, dto);
   }
 
+  @ApiOperation({ summary: 'Get a single transaction by ID' })
   @ApiBearerAuth('JWT-auth')
   @Get(':id')
   async getTransaction(
@@ -72,6 +77,7 @@ export class TransactionController {
     return this.transactionService.getTransactionById(user.id, transactionId);
   }
 
+  @ApiOperation({ summary: 'Get user transaction history' })
   @Get('')
   async getTransactions(
     @CurrentUser() user: User,
@@ -80,11 +86,13 @@ export class TransactionController {
     return this.transactionService.getTransactionHistory(user.id, query);
   }
 
+  @ApiOperation({ summary: 'Get user transaction summary' })
   @Get('summary/user')
   async getTransactionSummary(@CurrentUser() user: User) {
     return this.transactionService.getTransactionSummary(user.id);
   }
 
+  @ApiOperation({ summary: 'Get user transaction ;edger' })
   @Get(':id/ledger')
   async getTransactionLedger(
     @CurrentUser() user: User,

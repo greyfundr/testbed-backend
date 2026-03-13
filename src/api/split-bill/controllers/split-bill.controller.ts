@@ -27,12 +27,14 @@ import {
 } from '../dto';
 import { ShareAdjustment } from '../interfaces';
 import { User } from 'src/api/user/entities';
+import { ApiOperation } from '@nestjs/swagger';
 
 @Controller('split-bills')
 @UseGuards(JwtAuthGuard, KycGuard)
 export class SplitBillController {
   constructor(private readonly splitBillService: SplitBillService) {}
 
+  @ApiOperation({ summary: 'Create a split bill' })
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async createBill(@CurrentUser() user: User, @Body() dto: CreateSplitBillDto) {
@@ -44,6 +46,7 @@ export class SplitBillController {
     };
   }
 
+  @ApiOperation({ summary: 'Get bills for the current user' })
   @Get()
   async getUserBills(
     @CurrentUser() user: User,
@@ -62,6 +65,7 @@ export class SplitBillController {
     };
   }
 
+  @ApiOperation({ summary: 'Get a specific split bill by ID' })
   @Get(':id')
   async getBill(
     @Param('id', ParseUUIDPipe) billId: string,
@@ -75,6 +79,7 @@ export class SplitBillController {
     };
   }
 
+  @ApiOperation({ summary: 'Update a split bill' })
   @Patch(':id')
   async updateBill(
     @Param('id', ParseUUIDPipe) billId: string,
@@ -89,6 +94,7 @@ export class SplitBillController {
     };
   }
 
+  @ApiOperation({ summary: 'Finalize a split bill' })
   @Post(':id/finalize')
   async finalizeBill(
     @Param('id', ParseUUIDPipe) billId: string,
@@ -102,6 +108,7 @@ export class SplitBillController {
     };
   }
 
+  @ApiOperation({ summary: 'Cancel a split bill' })
   @Post(':id/cancel')
   async cancelBill(
     @Param('id', ParseUUIDPipe) billId: string,
@@ -116,6 +123,7 @@ export class SplitBillController {
     };
   }
 
+  @ApiOperation({ summary: 'Send payment reminders to participants' })
   @Post(':id/reminders')
   async sendReminders(
     @Param('id', ParseUUIDPipe) billId: string,
@@ -129,6 +137,7 @@ export class SplitBillController {
     };
   }
 
+  @ApiOperation({ summary: 'Get activity log for a split bill' })
   @Get(':id/activity')
   async getBillActivity(
     @Param('id', ParseUUIDPipe) billId: string,
@@ -154,6 +163,7 @@ export class SplitBillController {
     };
   }
 
+  @ApiOperation({ summary: 'Add a participant to a split bill' })
   @Post(':id/participants')
   @HttpCode(HttpStatus.CREATED)
   async addParticipant(
@@ -183,6 +193,7 @@ export class SplitBillController {
     };
   }
 
+  @ApiOperation({ summary: 'Remove a participant from a split bill' })
   @Delete(':id/participants/:participantId')
   async removeParticipant(
     @Param('id', ParseUUIDPipe) billId: string,
@@ -210,6 +221,7 @@ export class SplitBillController {
     };
   }
 
+  @ApiOperation({ summary: 'Get the status of a participant in a split bill' })
   @Get('participants/:participantId')
   async getParticipantStatus(
     @Param('participantId', ParseUUIDPipe) participantId: string,
@@ -226,6 +238,7 @@ export class SplitBillController {
     };
   }
 
+  @ApiOperation({ summary: 'Accept an invite to join a split bill' })
   @Post('invites/:inviteCode/accept')
   async acceptInvite(
     @Param('inviteCode') inviteCode: string,
@@ -242,6 +255,7 @@ export class SplitBillController {
     };
   }
 
+  @ApiOperation({ summary: 'Decline an invite to join a split bill' })
   @Post('invites/:inviteCode/decline')
   @HttpCode(HttpStatus.OK)
   async declineInvite(
@@ -252,6 +266,7 @@ export class SplitBillController {
     return { success: true, message: 'Invite declined' };
   }
 
+  @ApiOperation({ summary: "Pay a participant's share of a split bill" })
   @Post(':id/participants/:participantId/pay')
   async payBillShare(
     @Param('id', ParseUUIDPipe) billId: string,
@@ -276,6 +291,7 @@ export class SplitBillController {
     };
   }
 
+  @ApiOperation({ summary: 'Generate a payment link for a guest participant' })
   @Post(':id/participants/:participantId/payment-link')
   @SkipKyc()
   async getGuestPaymentLink(
@@ -294,6 +310,7 @@ export class SplitBillController {
     };
   }
 
+  @ApiOperation({ summary: "Pay a guest participant's share of a split bill" })
   @Post(':id/participants/:participantId/pay-guest')
   @SkipKyc()
   async guestPayBillShare(

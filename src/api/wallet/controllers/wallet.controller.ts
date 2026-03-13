@@ -17,7 +17,7 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { AddBankAccountDto, InitiateFundingDto, WithdrawDto } from '../dto';
 import { User } from '../../user/entities';
-import { ApiBearerAuth } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { KycGuard } from '../../auth/guards/kyc.guard';
 
 @Controller('wallet')
@@ -26,8 +26,9 @@ export class WalletController {
   constructor(
     private readonly walletService: WalletService,
     private readonly transactionService: TransactionService,
-  ) { }
+  ) {}
 
+  @ApiOperation({ summary: 'Get user wallet' })
   @ApiBearerAuth('JWT-auth')
   @Get()
   async getWallet(@CurrentUser() user: User) {
@@ -42,21 +43,23 @@ export class WalletController {
       balance,
       virtualAccount: wallet.virtualAccount
         ? {
-          accountNumber: wallet.virtualAccount.accountNumber,
-          accountName: wallet.virtualAccount.accountName,
-          bankName: wallet.virtualAccount.bankName,
-          isAssigned: wallet.virtualAccount.isAssigned,
-        }
+            accountNumber: wallet.virtualAccount.accountNumber,
+            accountName: wallet.virtualAccount.accountName,
+            bankName: wallet.virtualAccount.bankName,
+            isAssigned: wallet.virtualAccount.isAssigned,
+          }
         : null,
     };
   }
 
+  @ApiOperation({ summary: 'Get user wallet balance' })
   @ApiBearerAuth('JWT-auth')
   @Get('balance')
   async getBalance(@CurrentUser() user: User) {
     return this.walletService.getWalletBalance(user.id);
   }
 
+  @ApiOperation({ summary: 'Provision a virtual account for the user' })
   @ApiBearerAuth('JWT-auth')
   @Post('provision-virtual-account')
   @UseGuards(JwtAuthGuard, KycGuard)
@@ -71,6 +74,7 @@ export class WalletController {
     };
   }
 
+  @ApiOperation({ summary: 'Get user funding account details' })
   @ApiBearerAuth('JWT-auth')
   @UseGuards(JwtAuthGuard, KycGuard)
   @Get('funding-account')
@@ -111,6 +115,7 @@ export class WalletController {
     };
   }
 
+  @ApiOperation({ summary: 'Initiate wallet funding via card, transfer' })
   @ApiBearerAuth('JWT-auth')
   @UseGuards(JwtAuthGuard, KycGuard)
   @Post('fund/initiate')
@@ -130,6 +135,7 @@ export class WalletController {
     };
   }
 
+  @ApiOperation({ summary: 'Verify funding transaction and credit wallet' })
   @ApiBearerAuth('JWT-auth')
   @UseGuards(JwtAuthGuard, KycGuard)
   @Get('fund/verify/:reference')
@@ -159,12 +165,14 @@ export class WalletController {
     };
   }
 
+  @ApiOperation({ summary: 'Get user bank accounts linked to wallet' })
   @ApiBearerAuth('JWT-auth')
   @Get('bank-accounts')
   async getBankAccounts(@CurrentUser() user: User) {
     return this.walletService.getUserBankAccounts(user.id);
   }
 
+  @ApiOperation({ summary: 'Add a bank account to the user wallet' })
   @ApiBearerAuth('JWT-auth')
   @Post('bank-accounts')
   @UseGuards(JwtAuthGuard)
@@ -176,6 +184,7 @@ export class WalletController {
     return this.walletService.addBankAccount(user.id, dto);
   }
 
+  @ApiOperation({ summary: 'Remove a bank account from the user wallet' })
   @ApiBearerAuth('JWT-auth')
   @Delete('bank-accounts/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -186,6 +195,7 @@ export class WalletController {
     await this.walletService.removeBankAccount(user.id, bankAccountId);
   }
 
+  @ApiOperation({summary: "Request for withdrawal from user wallet"})
   @ApiBearerAuth('JWT-auth')
   @Post('withdraw')
   @UseGuards(JwtAuthGuard)
