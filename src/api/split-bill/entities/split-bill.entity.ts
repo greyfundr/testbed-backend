@@ -11,6 +11,7 @@ import { User } from '../../user/entities';
 import { SplitBillParticipant } from './split-bill-participant.entity';
 import { SplitBillActivity } from './split-bill-activity.entity';
 import { SplitMethod, SplitBillStatus } from '../enums/split-bill.enum';
+import { BigIntAmountTransformer } from 'src/common/transformers/column-numeric.transformer';
 
 @Entity('split_bills')
 @Index(['creatorId', 'status'])
@@ -34,19 +35,19 @@ export class SplitBill extends AbstractEntity {
   })
   billReceipt: string | null;
 
-  /**
-   * The total bill amount in kobo.
-   * Source of truth — SUM(participants.amountOwed) must equal this.
-   */
-  @Column({ type: 'bigint', name: 'total_amount' })
+  @Column({
+    type: 'bigint',
+    name: 'total_amount',
+    transformer: new BigIntAmountTransformer(),
+  })
   totalAmount: number;
 
-  /**
-   * Running total collected into escrow.
-   * Denormalized for query performance. Kept in sync atomically on each payment.
-   * Invariant: totalCollected === SUM(participants.amountPaid)
-   */
-  @Column({ type: 'bigint', default: 0, name: 'total_collected' })
+  @Column({
+    type: 'bigint',
+    default: 0,
+    name: 'total_collected',
+    transformer: new BigIntAmountTransformer(),
+  })
   totalCollected: number;
 
   @Column({ type: 'varchar', length: 3, default: 'NGN' })
@@ -64,11 +65,12 @@ export class SplitBill extends AbstractEntity {
   @Column({ default: true, name: 'allow_partial_payment' })
   allowPartialPayment: boolean;
 
-  /**
-   * Minimum payment amount per transaction in kobo.
-   * Guards against spam micro-payments when allowPartialPayment is true.
-   */
-  @Column({ type: 'bigint', nullable: true, name: 'min_payment_amount' })
+  @Column({
+    type: 'bigint',
+    nullable: true,
+    name: 'min_payment_amount',
+    transformer: new BigIntAmountTransformer(),
+  })
   minPaymentAmount: number | null;
 
   @Column({ type: 'int', default: 0, name: 'total_participants' })

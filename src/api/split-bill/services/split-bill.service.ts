@@ -1608,7 +1608,7 @@ export class SplitBillService {
     const bill = await qr.manager.findOne(SplitBill, { where: { id: billId } });
     if (!bill) throw new NotFoundException('Bill not found');
 
-    const totalAmount = overrideTotalAmount ?? Number(bill.totalAmount);
+    const totalAmount = Number(overrideTotalAmount ?? Number(bill.totalAmount));
     const count = participants.length;
 
     // Load current DB participant rows in deterministic order
@@ -1697,10 +1697,11 @@ export class SplitBillService {
 
     for (let i = 0; i < dbRows.length; i++) {
       const row = dbRows[i];
-      const oldOwed = row.amountOwed;
+      const oldOwed = Number(row.amountOwed);
       const newOwed = owedAmounts[i];
-      const paid = row.amountPaid;
-      const effectiveOwed = newOwed + row.balanceAdjustment;
+      const paid = Number(row.amountPaid);
+      const balanceAdj = Number(row.balanceAdjustment);
+      const effectiveOwed = newOwed + balanceAdj;
       const newRemaining = Math.max(0, effectiveOwed - paid);
 
       let newStatus = row.status;

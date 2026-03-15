@@ -4,6 +4,7 @@ import { User } from '../../user/entities';
 import { Wallet } from '../../wallet/entities/wallet.entity';
 import { SplitBill } from './split-bill.entity';
 import { ParticipantStatus, ParticipantRole } from '../enums/split-bill.enum';
+import { BigIntAmountTransformer } from 'src/common/transformers/column-numeric.transformer';
 
 @Entity('split_bill_participants')
 @Index(['splitBillId', 'userId'], {
@@ -45,29 +46,39 @@ export class SplitBillParticipant extends AbstractEntity {
   @Column({ type: 'varchar', length: 255, nullable: true, name: 'guest_email' })
   guestEmail: string | null;
 
-
   @Column({ type: 'varchar', default: ParticipantRole.PARTICIPANT })
   role: ParticipantRole;
 
-  @Column({ type: 'bigint', default: 0, name: 'amount_owed' })
+  @Column({
+    type: 'bigint',
+    default: 0,
+    name: 'amount_owed',
+    transformer: new BigIntAmountTransformer(),
+  })
   amountOwed: number;
 
-  @Column({ type: 'bigint', default: 0, name: 'amount_paid' })
+  @Column({
+    type: 'bigint',
+    default: 0,
+    name: 'amount_paid',
+    transformer: new BigIntAmountTransformer(),
+  })
   amountPaid: number;
 
-  /**
-   * Stored (not computed) so it can be indexed.
-   * Invariant: amountRemaining = amountOwed + balanceAdjustment - amountPaid
-   * Updated atomically on every payment.
-   */
-  @Column({ type: 'bigint', default: 0, name: 'amount_remaining' })
+  @Column({
+    type: 'bigint',
+    default: 0,
+    name: 'amount_remaining',
+    transformer: new BigIntAmountTransformer(),
+  })
   amountRemaining: number;
 
-  /**
-   * Creator-applied adjustment in kobo.
-   * Negative = discount, positive = surcharge.
-   */
-  @Column({ type: 'bigint', default: 0, name: 'balance_adjustment' })
+  @Column({
+    type: 'bigint',
+    default: 0,
+    name: 'balance_adjustment',
+    transformer: new BigIntAmountTransformer(),
+  })
   balanceAdjustment: number;
 
   /**
