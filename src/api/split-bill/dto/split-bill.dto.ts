@@ -16,6 +16,7 @@ import {
   MaxLength,
   IsIn,
   ArrayMinSize,
+  IsNumber,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { SplitMethod, SplitBillStatus } from '../enums/split-bill.enum';
@@ -187,7 +188,33 @@ export class CreateSplitBillDto {
 
 // ─── Update Bill ──────────────────────────────────────────────────────────────
 
-export class    UpdateSplitBillDto {
+export class UpdateParticipantDto {
+  @IsOptional()
+  @IsUUID()
+  userId?: string;
+
+  @IsOptional()
+  @IsString()
+  guestName?: string;
+
+  @IsOptional()
+  @IsString()
+  guestPhone?: string;
+
+  // Required when splitMethod is MANUAL — the exact amount this participant owes
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  amountOwed?: number;
+
+  // Required when splitMethod is PERCENTAGE
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  percentage?: number;
+}
+
+export class UpdateSplitBillDto {
   @IsOptional()
   @IsString()
   @MinLength(2)
@@ -230,6 +257,12 @@ export class    UpdateSplitBillDto {
   @IsOptional()
   @IsUUID()
   recipientUserId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => UpdateParticipantDto)
+  participants?: UpdateParticipantDto[];
 }
 
 // ─── Add Participant ──────────────────────────────────────────────────────────

@@ -288,25 +288,65 @@ export class SplitBillService {
         );
       if (bill.isFinalized)
         throw new BadRequestException('Cannot update a finalized bill');
-
       if (
         [SplitBillStatus.SETTLED, SplitBillStatus.CANCELLED].includes(
           bill.status,
         )
-      ) {
+      )
         throw new BadRequestException(`Cannot update a ${bill.status} bill`);
-      }
 
-      const hasPayments = bill.participants.some((p) => p.amountPaid > 0);
+      const effectiveAmount = dto.amount ?? bill.totalAmount;
+      const effectiveMethod = dto.splitMethod ?? bill.splitMethod;
       const amountChanging =
         dto.amount !== undefined && dto.amount !== bill.totalAmount;
       const methodChanging =
         dto.splitMethod !== undefined && dto.splitMethod !== bill.splitMethod;
+      const participantsChanging = dto.participants !== undefined;
 
-      if (hasPayments && (amountChanging || methodChanging)) {
-        throw new BadRequestException(
-          'Cannot change amount or split method after payments have been made',
+      const paidParticipants = bill.participants.filter(
+        (p) => p.amountPaid > 0,
+      );
+      const paidUserIds = new Set(
+        paidParticipants.map((p) => p.userId).filter(Boolean),
+      );
+      const paidGuestPhones = new Set(
+        paidParticipants.map((p) => p.guestPhone).filter(Boolean),
+      );
+
+      if (participantsChanging) {
+        const incomingUserIds = new Set(
+          dto.participants!.map((p) => p.userId).filter(Boolean),
         );
+        const incomingPhones = new Set(
+          dto.participants!.map((p) => p.guestPhone).filter(Boolean),
+        );
+
+        for (const p of paidParticipants) {
+          const stillPresent = p.userId
+            ? incomingUserIds.has(p.userId)
+            : incomingPhones.has(p.guestPhone!);
+
+          if (!stillPresent) {
+            throw new BadRequestException(
+              `Cannot remove participant ${p.userId ?? p.guestPhone} — ` +
+                `they have already made a payment of ₦${p.amountPaid / 100}.`,
+            );
+          }
+        }
+      }
+
+      if (paidParticipants.length > 0 && (amountChanging || methodChanging)) {
+        const isManualReassignment =
+          effectiveMethod === SplitMethod.MANUAL &&
+          participantsChanging &&
+          dto.participants!.every((p) => p.amountOwed !== undefined);
+
+        if (!isManualReassignment) {
+          throw new BadRequestException(
+            'Cannot change amount or split method after payments have been made ' +
+              'unless you provide explicit manual amounts for all participants.',
+          );
+        }
       }
 
       const updateData: Partial<SplitBill> = {};
@@ -329,8 +369,103 @@ export class SplitBillService {
 
       await qr.manager.update(SplitBill, billId, updateData);
 
-      // Re-compute shares if amount or method changed
-      if (amountChanging || methodChanging) {
+      if (participantsChanging) {
+        const currentParticipants = await qr.manager.find(
+          SplitBillParticipant,
+          {
+            where: { splitBillId: billId },
+          },
+        );
+
+        const incomingKeys = new Set(
+          dto.participants!.map((p) =>
+            p.userId ? `user:${p.userId}` : `guest:${p.guestPhone}`,
+          ),
+        );
+
+        const toRemove = currentParticipants.filter((p) => {
+          const key = p.userId ? `user:${p.userId}` : `guest:${p.guestPhone}`;
+          return !incomingKeys.has(key);
+        });
+
+        if (toRemove.length) {
+          await qr.manager.remove(SplitBillParticipant, toRemove);
+        }
+
+        const mappedParticipants = dto.participants!.map((p) => ({
+          type: p.userId ? 'USER' : 'GUEST',
+          userId: p.userId,
+          name: p.guestName,
+          phone: p.guestPhone,
+          percentage: p.percentage,
+          amount: p.amountOwed,
+        }));
+
+        const validatedParticipants = await this.validateParticipants(
+          mappedParticipants,
+          effectiveMethod,
+        );
+
+        if (effectiveMethod === SplitMethod.MANUAL) {
+          const totalAssigned = dto.participants!.reduce(
+            (sum, p) => sum + (p.amountOwed ?? 0),
+            0,
+          );
+
+          if (totalAssigned !== effectiveAmount) {
+            throw new BadRequestException(
+              `Manual split amounts must sum to the total bill amount. ` +
+                `Got ₦${totalAssigned / 100}, expected ₦${effectiveAmount / 100}.`,
+            );
+          }
+
+          for (const p of dto.participants!) {
+            const key = p.userId ? `user:${p.userId}` : `guest:${p.guestPhone}`;
+            const existing = currentParticipants.find((cp) =>
+              p.userId
+                ? cp.userId === p.userId
+                : cp.guestPhone === p.guestPhone,
+            );
+
+            const amountOwed = p.amountOwed!;
+            const alreadyPaid = existing?.amountPaid ?? 0;
+            const amountDue = Math.max(0, amountOwed - alreadyPaid);
+
+            await qr.manager.upsert(
+              SplitBillParticipant,
+              {
+                ...(existing ?? {}),
+                splitBillId: billId,
+                userId: p.userId ?? null,
+                guestName: p.guestName ?? null,
+                guestPhone: p.guestPhone ?? null,
+                percentage: null,
+                amountOwed,
+                amountPaid: existing?.amountPaid ?? 0,
+                amountRemaining: amountDue,
+              },
+              p.userId
+                ? ['splitBillId', 'userId']
+                : ['splitBillId', 'guestPhone'],
+            );
+          }
+        } else {
+          await this.computeAndSaveShares(
+            billId,
+            validatedParticipants,
+            effectiveMethod,
+            qr,
+            effectiveAmount,
+          );
+        }
+      } else if (amountChanging || methodChanging) {
+        if (effectiveMethod === SplitMethod.MANUAL) {
+          throw new BadRequestException(
+            'Cannot auto-recalculate a MANUAL split when changing amount or method. ' +
+              'Provide an explicit participants list with amountOwed for each.',
+          );
+        }
+
         const currentParticipants = await qr.manager.find(
           SplitBillParticipant,
           {
@@ -347,19 +482,12 @@ export class SplitBillService {
             percentage: p.percentage ?? undefined,
           }));
 
-        const effectiveMethod = dto.splitMethod ?? bill.splitMethod;
-        if (effectiveMethod === SplitMethod.MANUAL) {
-          throw new BadRequestException(
-            'Cannot auto-recalculate MANUAL split shares. Update participant amounts individually.',
-          );
-        }
-
         await this.computeAndSaveShares(
           billId,
           participantInputs,
           effectiveMethod,
           qr,
-          dto.amount ?? bill.totalAmount,
+          effectiveAmount,
         );
       }
 
@@ -369,11 +497,15 @@ export class SplitBillService {
         actionType: ActivityActionType.UPDATED,
         description: 'Bill details updated',
         billStatusAtTime: bill.status,
-        metadata: { updatedFields: Object.keys(updateData) },
+        metadata: {
+          updatedFields: [
+            ...Object.keys(updateData),
+            ...(participantsChanging ? ['participants'] : []),
+          ],
+        },
       });
 
       await qr.commitTransaction();
-
       return this.getBillById(billId, actorId);
     } catch (err) {
       await qr.rollbackTransaction();
