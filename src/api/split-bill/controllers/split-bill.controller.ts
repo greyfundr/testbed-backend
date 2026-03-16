@@ -24,6 +24,7 @@ import {
   GuestPayBillShareDto,
   CancelBillDto,
   GetUserBillsDto,
+  GetMyBillsDto,
 } from '../dto';
 import { ShareAdjustment } from '../interfaces';
 import { User } from 'src/api/user/entities';
@@ -62,6 +63,18 @@ export class SplitBillController {
         total: result.total,
         totalPages: result.totalPages,
       },
+    };
+  }
+
+  @ApiOperation({ summary: 'Get bills user is appeared as participant' })
+  @Get('my-bills')
+  @UseGuards(JwtAuthGuard)
+  async getMyBills(@CurrentUser() user: User, @Query() dto: GetMyBillsDto) {
+    const result = await this.splitBillService.getMyBills(user.id, dto);
+    return {
+      success: true,
+      message: 'Bills retrieved successfully',
+      data: result,
     };
   }
 

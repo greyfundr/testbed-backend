@@ -21,6 +21,7 @@ import {
   ParticipantStatus,
   ParticipantRole,
   ActivityActionType,
+  MyBillsRole,
 } from '../enums';
 import {
   TransactionType,
@@ -42,6 +43,9 @@ import {
   GuestPayBillShareDto,
   GetUserBillsDto,
   CancelBillDto,
+  GetMyBillsDto,
+  MyBillItem,
+  MyParticipantSlice,
 } from '../dto/split-bill.dto';
 import { UserRepository } from '../../user/repository';
 import { TransactionRepository } from '../../transaction/repository';
@@ -1576,6 +1580,111 @@ export class SplitBillService {
     });
 
     return { activities, total, page, totalPages: Math.ceil(total / limit) };
+  }
+
+  async getMyBills(
+    userId: string,
+    dto: GetMyBillsDto,
+  ): Promise<{
+    bills: MyBillItem[];
+    total: number;
+    page: number;
+    totalPages: number;
+  }> {
+    const { status, role = MyBillsRole.ALL, page = 1, limit = 20 } = dto;
+    const offset = (page - 1) * limit;
+
+    const qb = this.billRepo
+      .createQueryBuilder('bill')
+      .leftJoinAndSelect(
+        'bill.participants',
+        'myPart',
+        'myPart.userId = :userId AND myPart.deletedAt IS NULL',
+        { userId },
+      )
+      .leftJoinAndSelect('bill.creator', 'creator')
+      .where(
+        `bill.creatorId = :userId OR EXISTS (
+      SELECT 1 FROM split_bill_participants sp
+      WHERE sp.split_bill_id = bill.id
+        AND sp.user_id = :userId
+        AND sp.deleted_at IS NULL
+    )`,
+        { userId },
+      )
+      .orderBy('bill.createdAt', 'DESC')
+      .skip(offset)
+      .take(limit);
+
+    if (status) {
+      qb.andWhere('bill.status = :status', { status });
+    }
+
+    if (role === MyBillsRole.CREATOR) {
+      qb.andWhere('bill.creatorId = :userId', { userId });
+    } else if (role === MyBillsRole.PARTICIPANT) {
+      qb.andWhere('bill.creatorId != :userId', { userId });
+    }
+
+    const [bills, total] = await qb.getManyAndCount();
+
+    const shaped: MyBillItem[] = bills.map((bill) => {
+      const myParticipant = bill.participants?.[0] ?? null;
+
+      const myShare: MyParticipantSlice = myParticipant
+        ? {
+            participantId: myParticipant.id,
+            role: myParticipant.role,
+            amountOwed: myParticipant.amountOwed,
+            amountPaid: myParticipant.amountPaid,
+            amountRemaining: myParticipant.amountRemaining,
+            status: myParticipant.status,
+            inviteCode: myParticipant.inviteCode,
+            paymentLink: myParticipant.paymentLink,
+          }
+        : {
+            participantId: '',
+            role: 'creator',
+            amountOwed: 0,
+            amountPaid: 0,
+            amountRemaining: 0,
+            status: 'n/a',
+            inviteCode: null,
+            paymentLink: null,
+          };
+
+      return {
+        id: bill.id,
+        title: bill.title,
+        description: bill.description,
+        imageUrl: bill.imageUrl,
+        billReceipt: bill.billReceipt,
+        totalAmount: bill.totalAmount,
+        totalCollected: bill.totalCollected,
+        currency: bill.currency,
+        splitMethod: bill.splitMethod,
+        status: bill.status,
+        dueDate: bill.dueDate,
+        totalParticipants: bill.totalParticipants,
+        totalPaidParticipants: bill.totalPaidParticipants,
+        isFinalized: bill.isFinalized,
+        creatorId: bill.creatorId,
+        creatorName: bill.creator
+          ? `${bill.creator.firstName ?? ''} ${bill.creator.lastName ?? ''}`.trim() ||
+            bill.creator.email
+          : null,
+        visibility: bill.visibility,
+        createdAt: bill.createdAt,
+        myShare,
+      };
+    });
+
+    return {
+      bills: shaped,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   // ─── Private: Compute and Save Shares ────────────────────────────────────────

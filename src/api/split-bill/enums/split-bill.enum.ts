@@ -61,6 +61,12 @@ export enum ActivityActionType {
   OVERDUE_MARKED = 'overdue_marked',
 }
 
+export enum MyBillsRole {
+  ALL = 'all',
+  CREATOR = 'creator',
+  PARTICIPANT = 'participant',
+}
+
 // export enum SplitMethod {
 //   EVEN = 'EVEN',
 //   MANUAL = 'MANUAL',

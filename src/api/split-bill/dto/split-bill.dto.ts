@@ -19,7 +19,11 @@ import {
   IsNumber,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { SplitMethod, SplitBillStatus } from '../enums/split-bill.enum';
+import {
+  SplitMethod,
+  SplitBillStatus,
+  MyBillsRole,
+} from '../enums/split-bill.enum';
 
 // export class UserParticipantDto {
 //   @IsIn(['USER'])
@@ -382,4 +386,60 @@ export class GetUserBillsDto {
   @Max(100)
   @Type(() => Number)
   limit?: number = 20;
+}
+
+export class GetMyBillsDto {
+  @IsOptional()
+  @IsEnum(SplitBillStatus)
+  status?: SplitBillStatus;
+
+  @IsOptional()
+  @IsEnum(MyBillsRole)
+  role?: MyBillsRole = MyBillsRole.ALL;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  limit?: number = 20;
+}
+
+export class MyParticipantSlice {
+  participantId: string;
+  role: string;
+  amountOwed: number;
+  amountPaid: number;
+  amountRemaining: number;
+  status: string;
+  inviteCode: string | null;
+  paymentLink: string | null;
+}
+
+export class MyBillItem {
+  // Bill fields
+  id: string;
+  title: string;
+  description: string | null;
+  imageUrl: string | null;
+  billReceipt: string | null;
+  totalAmount: number;
+  totalCollected: number;
+  currency: string;
+  splitMethod: string;
+  status: string;
+  dueDate: Date | null;
+  totalParticipants: number;
+  totalPaidParticipants: number;
+  isFinalized: boolean;
+  creatorId: string;
+  visibility: string;
+  createdAt: Date;
+  myShare: MyParticipantSlice;
 }
