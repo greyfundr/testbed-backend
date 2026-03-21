@@ -1,8 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { UpdateUserDto, UpdateProfileDto } from '../dtos';
-import { User, Profile } from '../entities';
+import { User, Profile, Kyc } from '../entities';
 import { UserRepository, ProfileRepository } from '../repository';
-import { DataSource } from 'typeorm';
+import { DataSource, MoreThan } from 'typeorm';
+import { Campaign, Donation } from 'src/api/campaign/entities';
+import { Settings } from 'src/api/settings';
+import { SplitBill, SplitBillParticipant, SplitBillActivity } from 'src/api/split-bill/entities';
+import { SplitBillStatus, ParticipantStatus } from 'src/api/split-bill/enums';
+import { Wallet } from 'src/api/wallet/entities';
 
 @Injectable()
 export class UserService {
@@ -94,5 +99,132 @@ export class UserService {
     } finally {
       await queryRunner.release();
     }
+  }
+
+  async deleteAccount(userId: string): Promise<void> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: ['settings', 'profile', 'kyc'],
+    });
+
+    if (!user) throw new NotFoundException('User not found');
+
+    // const activeWallet = await this.dataSource.getRepository(Wallet).findOne({
+    //   where: { userId },
+    // });
+    // if (activeWallet) {
+    //   throw new BadRequestException(
+    //     'Please withdraw your wallet balance before deleting your account.',
+    //   );
+    // }
+
+    const activeBills = await this.dataSource
+      .getRepository(SplitBill)
+      .createQueryBuilder('bill')
+      .where('bill.creatorId = :userId', { userId })
+      .andWhere('bill.status NOT IN (:...statuses)', {
+        statuses: [SplitBillStatus.SETTLED, SplitBillStatus.CANCELLED],
+      })
+      .getCount();
+
+    if (activeBills > 0) {
+      throw new BadRequestException(
+        `You have ${activeBills} active split bill(s). Please settle or cancel them before deleting your account.`,
+      );
+    }
+
+    const unpaidParticipation = await this.dataSource
+      .getRepository(SplitBillParticipant)
+      .createQueryBuilder('p')
+      .innerJoin('p.splitBill', 'bill')
+      .where('p.userId = :userId', { userId })
+      .andWhere('p.status NOT IN (:...statuses)', {
+        statuses: [ParticipantStatus.PAID],
+      })
+      .andWhere('bill.status NOT IN (:...statuses)', {
+        statuses: [SplitBillStatus.SETTLED, SplitBillStatus.CANCELLED],
+      })
+      .andWhere('p.amountOwed > 0')
+      .getCount();
+
+    if (unpaidParticipation > 0) {
+      throw new BadRequestException(
+        `You have ${unpaidParticipation} unpaid split bill(s). Please settle your dues before deleting your account.`,
+      );
+    }
+
+    // ── Delete in dependency order inside a transaction ─────────────────────
+    await this.dataSource.transaction(async (manager) => {
+      // 1. Notifications — no FK dependencies
+      // await manager.delete(Notification, { user: { id: userId } });
+
+      // 2. Split bill activity logs where actor is this user
+      await manager
+        .createQueryBuilder()
+        .delete()
+        .from(SplitBillActivity)
+        .where('actorId = :userId', { userId })
+        .execute();
+
+      // 3. Split bill participants — remove user from bills they joined
+      //    Soft-delete so the bill's financial record stays intact
+      await manager
+        .createQueryBuilder()
+        .softDelete()
+        .from(SplitBillParticipant)
+        .where('userId = :userId', { userId })
+        .execute();
+
+      // 4. Campaigns created by user — soft delete (financial history preserved)
+      await manager
+        .createQueryBuilder()
+        .softDelete()
+        .from(Campaign)
+        .where('creatorId = :userId', { userId })
+        .execute();
+
+      // 5. Donations made by user — soft delete
+      await manager
+        .createQueryBuilder()
+        .softDelete()
+        .from(Donation)
+        .where('donorId = :userId', { userId })
+        .execute();
+
+      // 6. Wallet — soft delete (transaction history stays via Transaction entity)
+      await manager
+        .createQueryBuilder()
+        .softDelete()
+        .from(Wallet)
+        .where('userId = :userId', { userId })
+        .execute();
+
+      // 7. Settings, Profile, Kyc — cascade: true handles these when user is deleted
+      //    but we explicitly delete to be safe with soft-delete
+      if (user.settings) {
+        await manager.softDelete(Settings, { user: { id: userId } });
+      }
+      if (user.profile) {
+        await manager.softDelete(Profile, { user: { id: userId } });
+      }
+      if (user.kyc) {
+        await manager.softDelete(Kyc, { user: { id: userId } });
+      }
+
+      // 8. Finally soft-delete the user — anonymize PII first
+      await manager.update(User, userId, {
+        email: `deleted_${userId}@deleted.greyfundr.com`,
+        phoneNumber: `deleted_${userId}`,
+        firstName: null,
+        lastName: null,
+        username: null,
+        password: '',
+        pin: null,
+        refreshToken: null,
+        passwordResetToken: null,
+      });
+
+      await manager.softDelete(User, { id: userId });
+    });
   }
 }

@@ -153,7 +153,7 @@ export class AuthService {
     if (!isPasswordValid) throw new BadRequestException('Invalid credentials');
 
     if (!user.hasVerifiedPhone) {
-      const phoneOtp = generateNumericToken(4);
+      const phoneOtp = generateNumericToken(6);
       const otpExpiration = new Date(Date.now() + 5 * 60 * 1000);
       user.phoneOtp = phoneOtp;
       user.otpExpiration = otpExpiration;
@@ -663,7 +663,7 @@ export class AuthService {
 
     // PIN login also requires phone verification if not already verified
     if (!user.hasVerifiedPhone) {
-      const phoneOtp = generateNumericToken(4);
+      const phoneOtp = generateNumericToken(6);
       const otpExpiration = new Date(Date.now() + 5 * 60 * 1000);
       user.phoneOtp = phoneOtp;
       user.otpExpiration = otpExpiration;

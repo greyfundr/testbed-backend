@@ -1,10 +1,12 @@
 import { Entity, Column, OneToOne, JoinColumn } from 'typeorm';
 import { AbstractEntity } from '../../../common/entities';
 import { User } from './user.entity';
-import { KycVerificationType, KycStatus } from '../enums/user.enum';
+import { KycVerificationType, KycStatus, KycLevels } from '../enums/user.enum';
 
 @Entity('kycs')
 export class Kyc extends AbstractEntity {
+
+
   @Column({
     type: 'varchar',
     name: 'verification_type',
