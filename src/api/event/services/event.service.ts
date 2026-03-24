@@ -161,10 +161,12 @@ export class EventService {
           throw new BadRequestException('Invalid contribution type');
       }
 
+      const amountInKobo = Math.round(amount * 100);
+
       const transaction = await qr.manager.save(
         qr.manager.create(Transaction, {
           walletId: wallet.id,
-          amount: amount,
+          amount: amountInKobo,
           currency: 'NGN',
           type: transactionType,
           direction: TransactionDirection.DEBIT,
@@ -178,7 +180,7 @@ export class EventService {
       // Lock funds into event escrow
       await this.walletService.lockIntoEscrow({
         walletId: wallet.id,
-        amount,
+        amount: amountInKobo,
         transactionId: transaction.id,
         entityType: 'event',
         entityId: event.id,
@@ -190,7 +192,7 @@ export class EventService {
         eventId: event.id,
         userId: user.id,
         type,
-        amount: amount / 100, // Store in Naira (transformer will multiply by 100 for DB)
+        amount: amount, // Store in Naira (transformer handles DB conversion)
         details,
         transactionId: transaction.id,
       });
@@ -199,7 +201,7 @@ export class EventService {
 
       // Update event amount raised
       await qr.manager.update(Event, event.id, {
-        amountRaised: () => `amount_raised + ${amount}`,
+        amountRaised: () => `amount_raised + ${amountInKobo}`,
       });
 
       await qr.commitTransaction();
@@ -208,7 +210,7 @@ export class EventService {
       this.eventEmitter.emit('event.contribution_created', {
         eventId: event.id,
         contribution: savedContribution,
-        newTotal: Number(event.amountRaised) + amount,
+        newTotal: Number(event.amountRaised * 100) + amountInKobo, // working with kobo for accuracy
       });
 
       return savedContribution;

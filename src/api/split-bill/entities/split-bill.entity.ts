@@ -11,7 +11,7 @@ import { User } from '../../user/entities';
 import { SplitBillParticipant } from './split-bill-participant.entity';
 import { SplitBillActivity } from './split-bill-activity.entity';
 import { SplitMethod, SplitBillStatus } from '../enums/split-bill.enum';
-import { BigIntAmountTransformer } from 'src/common/transformers/column-numeric.transformer';
+import { BigIntAmountTransformer } from '../../../common/transformers/column-numeric.transformer';
 
 @Entity('split_bills')
 @Index(['creatorId', 'status'])
