@@ -195,7 +195,7 @@ export class WalletController {
     await this.walletService.removeBankAccount(user.id, bankAccountId);
   }
 
-  @ApiOperation({summary: "Request for withdrawal from user wallet"})
+  @ApiOperation({ summary: 'Request for withdrawal from user wallet' })
   @ApiBearerAuth('JWT-auth')
   @Post('withdraw')
   @UseGuards(JwtAuthGuard)

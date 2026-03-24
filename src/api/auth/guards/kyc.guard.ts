@@ -17,7 +17,7 @@ export class KycGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly userRepo: UserRepository,
-  ) { }
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     // Allow routes decorated with @SkipKyc() to bypass this guard

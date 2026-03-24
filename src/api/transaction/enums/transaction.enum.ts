@@ -11,6 +11,9 @@ export enum TransactionType {
   TRANSFER_OUT = 'transfer_out',
   PLATFORM_FEE = 'platform_fee',
   REVERSAL = 'reversal',
+  EVENT_DONATION = 'event_donation',
+  EVENT_PURCHASE = 'event_purchase',
+  EVENT_GIFTING = 'event_gifting',
 }
 
 export enum TransactionStatus {
@@ -34,6 +37,7 @@ export enum LedgerAccountType {
   PLATFORM_REVENUE = 'platform_revenue',
   PAYMENT_GATEWAY = 'payment_gateway', // represents external inflows
   WITHDRAWAL_TRANSIT = 'withdrawal_transit', // funds in-flight to bank
+  EVENT_ESCROW = 'event_escrow',
 }
 
 export enum VirtualAccountStatus {

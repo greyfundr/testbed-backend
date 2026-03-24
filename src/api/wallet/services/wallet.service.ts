@@ -71,7 +71,7 @@ interface LockEscrowParams {
   walletId: string;
   amount: number;
   transactionId: string;
-  entityType: 'campaign' | 'split_bill' | 'invoice';
+  entityType: 'campaign' | 'split_bill' | 'invoice' | 'event';
   entityId: string;
   description: string;
   qr: QueryRunner;
@@ -94,7 +94,7 @@ export class WalletService {
     private readonly bankAccountRepository: BankAccountRepository,
     private readonly paymentService: PaymentService,
     private readonly dataSource: DataSource,
-  ) { }
+  ) {}
 
   // ─── Wallet Creation ─────────────────────────────────────────────────────────
 
@@ -710,7 +710,9 @@ export class WalletService {
         ? LedgerAccountType.CAMPAIGN_ESCROW
         : entityType === 'split_bill'
           ? LedgerAccountType.BILL_ESCROW
-          : LedgerAccountType.BILL_ESCROW; // invoices use bill escrow
+          : entityType === 'event'
+            ? LedgerAccountType.EVENT_ESCROW
+            : LedgerAccountType.BILL_ESCROW; // invoices use bill escrow
 
     // Atomically: decrement available, increment escrow
     const result = await qr.manager

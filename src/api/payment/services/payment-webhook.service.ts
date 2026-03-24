@@ -47,7 +47,7 @@ export class PaymentWebhookService {
     private readonly paymentService: PaymentService,
     private readonly dataSource: DataSource,
     private readonly eventEmitter: EventEmitter2,
-  ) { }
+  ) {}
 
   async dispatch(event: string, data: Record<string, any>): Promise<void> {
     const reference = this.extractReference(event, data);

@@ -5,8 +5,6 @@ import { KycVerificationType, KycStatus, KycLevels } from '../enums/user.enum';
 
 @Entity('kycs')
 export class Kyc extends AbstractEntity {
-
-
   @Column({
     type: 'varchar',
     name: 'verification_type',

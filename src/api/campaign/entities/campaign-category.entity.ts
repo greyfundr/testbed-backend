@@ -1,6 +1,6 @@
-import { AbstractEntity } from "src/common/entities";
-import { Entity, Column, OneToMany } from "typeorm";
-import { Campaign } from "./campaign.entity";
+import { AbstractEntity } from 'src/common/entities';
+import { Entity, Column, OneToMany } from 'typeorm';
+import { Campaign } from './campaign.entity';
 
 @Entity('campaign_categories')
 export class CampaignCategory extends AbstractEntity {
@@ -8,7 +8,7 @@ export class CampaignCategory extends AbstractEntity {
   name: string;
 
   @Column({ type: 'varchar', length: 100, unique: true })
-  slug: string; 
+  slug: string;
 
   @Column({ type: 'text', nullable: true })
   description: string | null;
