@@ -1,0 +1,224 @@
+
+> greyfundr@0.0.1 test:e2e
+> jest --config ./test/jest-e2e.json test/event.e2e-spec.ts
+
+[Nest] 18200  - 03/25/2026, 8:56:31 AM   ERROR [EventService] Failed to create event
+[Nest] 18200  - 03/25/2026, 8:56:31 AM   ERROR [EventService] QueryFailedError: Field 'venue_name' doesn't have a default value
+    at Query.onResult (C:\Users\olare\Desktop\Dev\greyfundr\src\driver\mysql\MysqlQueryRunner.ts:248:33)
+    at Query.execute (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\mysql2\lib\commands\command.js:36:14)
+    at PoolConnection.handlePacket (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\mysql2\lib\base\connection.js:508:34)
+    at PacketParser.onPacket (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\mysql2\lib\base\connection.js:93:12)
+    at PacketParser.executeStart (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\mysql2\lib\packet_parser.js:75:16)
+    at Socket.<anonymous> (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\mysql2\lib\base\connection.js:100:25)
+    at Socket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Socket.Readable.push (node:internal/streams/readable:392:5)
+    at TCP.onStreamRead (node:internal/stream_base_commons:189:23) {
+  query: 'INSERT INTO `events`(`id`, `created_at`, `updated_at`, `deleted_at`, `name`, `title`, `short_description`, `detailed_description`, `cover_images`, `category_id`, `location`, `hashtag`, `target_amount`, `amount_raised`, `accept_donations`, `start_date_time`, `end_date_time`, `start_time`, `qr_code_link`, `purchasable_items`, `activities`, `external_organizers`, `creator_id`, `status`) VALUES (?, DEFAULT, DEFAULT, DEFAULT, ?, DEFAULT, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, DEFAULT, ?, ?, ?, ?, ?)',
+  parameters: [
+    '8be3c2cf-17c6-4b1a-8170-cda1bd8605da',
+    'Super Fest',
+    'Best fest ever.',
+    '[{"text":"A fun paragraph.","media":["https://example.com/detail1.png"]}]',
+    '["https://example.com/img1.png"]',
+    'c0a70c1a-ecef-4e3c-b678-68eb4791c759',
+    '{"lat":6.5244,"lng":3.3792,"address":"123 Event Street, Lagos","venueName":"Convention Center","locationDescription":"Park in the back"}',
+    '#superfest2026',
+    1000000,
+    0,
+    1,
+    2026-03-26T07:56:27.970Z,
+    2026-03-28T07:56:27.971Z,
+    '10:00 AM',
+    '[{"name":"VIP Ticket","images":["https://example.com/merch.png"],"price":50,"quantity":100}]',
+    '[{"name":"Cake Cutting","image":"https://example.com/activity.png","description":"Delicious stuff","targetAmount":500,"time":"2026-03-26T08:56:27.971Z"}]',
+    '[{"name":"Jane","number":"+1234567890"}]',
+    '765f4afb-64a5-4d97-85ea-35daafeb5a9a',
+    'active'
+  ],
+  driverError: Error: Field 'venue_name' doesn't have a default value
+      at Packet.asError (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\mysql2\lib\packets\packet.js:740:17)
+      at Query.execute (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\mysql2\lib\commands\command.js:29:26)
+      at PoolConnection.handlePacket (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\mysql2\lib\base\connection.js:508:34)
+      at PacketParser.onPacket (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\mysql2\lib\base\connection.js:93:12)
+      at PacketParser.executeStart (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\mysql2\lib\packet_parser.js:75:16)
+      at Socket.<anonymous> (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\mysql2\lib\base\connection.js:100:25)
+      at Socket.emit (node:events:518:28)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Socket.Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:189:23) {
+    code: 'ER_NO_DEFAULT_FOR_FIELD',
+    errno: 1364,
+    sqlState: 'HY000',
+    sqlMessage: "Field 'venue_name' doesn't have a default value",
+    sql: 'INSERT INTO `events`(`id`, `created_at`, `updated_at`, `deleted_at`, `name`, `title`, `short_description`, `detailed_description`, `cover_images`, `category_id`, `location`, `hashtag`, `target_amount`, `amount_raised`, `accept_donations`, `start_date_time`, `end_date_time`, `start_time`, `qr_code_link`, `purchasable_items`, `activities`, `external_organizers`, `creator_id`, `status`) VALUES (\'8be3c2cf-17c6-4b1a-8170-cda1bd8605da\', DEFAULT, DEFAULT, DEFAULT, \'Super Fest\', DEFAULT, \'Best fest ever.\', \'[{\\"text\\":\\"A fun paragraph.\\",\\"media\\":[\\"https://example.com/detail1.png\\"]}]\', \'[\\"https://example.com/img1.png\\"]\', \'c0a70c1a-ecef-4e3c-b678-68eb4791c759\', \'{\\"lat\\":6.5244,\\"lng\\":3.3792,\\"address\\":\\"123 Event Street, Lagos\\",\\"venueName\\":\\"Convention Center\\",\\"locationDescription\\":\\"Park in the back\\"}\', \'#superfest2026\', 1000000, 0, 1, \'2026-03-26 07:56:27.970\', \'2026-03-28 07:56:27.971\', \'10:00 AM\', DEFAULT, \'[{\\"name\\":\\"VIP Ticket\\",\\"images\\":[\\"https://example.com/merch.png\\"],\\"price\\":50,\\"quantity\\":100}]\', \'[{\\"name\\":\\"Cake Cutting\\",\\"image\\":\\"https://example.com/activity.png\\",\\"description\\":\\"Delicious stuff\\",\\"targetAmount\\":500,\\"time\\":\\"2026-03-26T08:56:27.971Z\\"}]\', \'[{\\"name\\":\\"Jane\\",\\"number\\":\\"+1234567890\\"}]\', \'765f4afb-64a5-4d97-85ea-35daafeb5a9a\', \'active\')'
+  },
+  code: 'ER_NO_DEFAULT_FOR_FIELD',
+  errno: 1364,
+  sqlState: 'HY000',
+  sqlMessage: "Field 'venue_name' doesn't have a default value",
+  sql: 'INSERT INTO `events`(`id`, `created_at`, `updated_at`, `deleted_at`, `name`, `title`, `short_description`, `detailed_description`, `cover_images`, `category_id`, `location`, `hashtag`, `target_amount`, `amount_raised`, `accept_donations`, `start_date_time`, `end_date_time`, `start_time`, `qr_code_link`, `purchasable_items`, `activities`, `external_organizers`, `creator_id`, `status`) VALUES (\'8be3c2cf-17c6-4b1a-8170-cda1bd8605da\', DEFAULT, DEFAULT, DEFAULT, \'Super Fest\', DEFAULT, \'Best fest ever.\', \'[{\\"text\\":\\"A fun paragraph.\\",\\"media\\":[\\"https://example.com/detail1.png\\"]}]\', \'[\\"https://example.com/img1.png\\"]\', \'c0a70c1a-ecef-4e3c-b678-68eb4791c759\', \'{\\"lat\\":6.5244,\\"lng\\":3.3792,\\"address\\":\\"123 Event Street, Lagos\\",\\"venueName\\":\\"Convention Center\\",\\"locationDescription\\":\\"Park in the back\\"}\', \'#superfest2026\', 1000000, 0, 1, \'2026-03-26 07:56:27.970\', \'2026-03-28 07:56:27.971\', \'10:00 AM\', DEFAULT, \'[{\\"name\\":\\"VIP Ticket\\",\\"images\\":[\\"https://example.com/merch.png\\"],\\"price\\":50,\\"quantity\\":100}]\', \'[{\\"name\\":\\"Cake Cutting\\",\\"image\\":\\"https://example.com/activity.png\\",\\"description\\":\\"Delicious stuff\\",\\"targetAmount\\":500,\\"time\\":\\"2026-03-26T08:56:27.971Z\\"}]\', \'[{\\"name\\":\\"Jane\\",\\"number\\":\\"+1234567890\\"}]\', \'765f4afb-64a5-4d97-85ea-35daafeb5a9a\', \'active\')'
+}
+[Nest] 18200  - 03/25/2026, 8:56:31 AM   ERROR [ExceptionsHandler] QueryFailedError: Field 'venue_name' doesn't have a default value
+    at Query.onResult (C:\Users\olare\Desktop\Dev\greyfundr\src\driver\mysql\MysqlQueryRunner.ts:248:33)
+    at Query.execute (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\mysql2\lib\commands\command.js:36:14)
+    at PoolConnection.handlePacket (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\mysql2\lib\base\connection.js:508:34)
+    at PacketParser.onPacket (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\mysql2\lib\base\connection.js:93:12)
+    at PacketParser.executeStart (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\mysql2\lib\packet_parser.js:75:16)
+    at Socket.<anonymous> (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\mysql2\lib\base\connection.js:100:25)
+    at Socket.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Socket.Readable.push (node:internal/streams/readable:392:5)
+    at TCP.onStreamRead (node:internal/stream_base_commons:189:23) {
+  query: 'INSERT INTO `events`(`id`, `created_at`, `updated_at`, `deleted_at`, `name`, `title`, `short_description`, `detailed_description`, `cover_images`, `category_id`, `location`, `hashtag`, `target_amount`, `amount_raised`, `accept_donations`, `start_date_time`, `end_date_time`, `start_time`, `qr_code_link`, `purchasable_items`, `activities`, `external_organizers`, `creator_id`, `status`) VALUES (?, DEFAULT, DEFAULT, DEFAULT, ?, DEFAULT, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, DEFAULT, ?, ?, ?, ?, ?)',
+  parameters: [
+    '8be3c2cf-17c6-4b1a-8170-cda1bd8605da',
+    'Super Fest',
+    'Best fest ever.',
+    '[{"text":"A fun paragraph.","media":["https://example.com/detail1.png"]}]',
+    '["https://example.com/img1.png"]',
+    'c0a70c1a-ecef-4e3c-b678-68eb4791c759',
+    '{"lat":6.5244,"lng":3.3792,"address":"123 Event Street, Lagos","venueName":"Convention Center","locationDescription":"Park in the back"}',
+    '#superfest2026',
+    1000000,
+    0,
+    1,
+    2026-03-26T07:56:27.970Z,
+    2026-03-28T07:56:27.971Z,
+    '10:00 AM',
+    '[{"name":"VIP Ticket","images":["https://example.com/merch.png"],"price":50,"quantity":100}]',
+    '[{"name":"Cake Cutting","image":"https://example.com/activity.png","description":"Delicious stuff","targetAmount":500,"time":"2026-03-26T08:56:27.971Z"}]',
+    '[{"name":"Jane","number":"+1234567890"}]',
+    '765f4afb-64a5-4d97-85ea-35daafeb5a9a',
+    'active'
+  ],
+  driverError: Error: Field 'venue_name' doesn't have a default value
+      at Packet.asError (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\mysql2\lib\packets\packet.js:740:17)
+      at Query.execute (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\mysql2\lib\commands\command.js:29:26)
+      at PoolConnection.handlePacket (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\mysql2\lib\base\connection.js:508:34)
+      at PacketParser.onPacket (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\mysql2\lib\base\connection.js:93:12)
+      at PacketParser.executeStart (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\mysql2\lib\packet_parser.js:75:16)
+      at Socket.<anonymous> (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\mysql2\lib\base\connection.js:100:25)
+      at Socket.emit (node:events:518:28)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Socket.Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:189:23) {
+    code: 'ER_NO_DEFAULT_FOR_FIELD',
+    errno: 1364,
+    sqlState: 'HY000',
+    sqlMessage: "Field 'venue_name' doesn't have a default value",
+    sql: 'INSERT INTO `events`(`id`, `created_at`, `updated_at`, `deleted_at`, `name`, `title`, `short_description`, `detailed_description`, `cover_images`, `category_id`, `location`, `hashtag`, `target_amount`, `amount_raised`, `accept_donations`, `start_date_time`, `end_date_time`, `start_time`, `qr_code_link`, `purchasable_items`, `activities`, `external_organizers`, `creator_id`, `status`) VALUES (\'8be3c2cf-17c6-4b1a-8170-cda1bd8605da\', DEFAULT, DEFAULT, DEFAULT, \'Super Fest\', DEFAULT, \'Best fest ever.\', \'[{\\"text\\":\\"A fun paragraph.\\",\\"media\\":[\\"https://example.com/detail1.png\\"]}]\', \'[\\"https://example.com/img1.png\\"]\', \'c0a70c1a-ecef-4e3c-b678-68eb4791c759\', \'{\\"lat\\":6.5244,\\"lng\\":3.3792,\\"address\\":\\"123 Event Street, Lagos\\",\\"venueName\\":\\"Convention Center\\",\\"locationDescription\\":\\"Park in the back\\"}\', \'#superfest2026\', 1000000, 0, 1, \'2026-03-26 07:56:27.970\', \'2026-03-28 07:56:27.971\', \'10:00 AM\', DEFAULT, \'[{\\"name\\":\\"VIP Ticket\\",\\"images\\":[\\"https://example.com/merch.png\\"],\\"price\\":50,\\"quantity\\":100}]\', \'[{\\"name\\":\\"Cake Cutting\\",\\"image\\":\\"https://example.com/activity.png\\",\\"description\\":\\"Delicious stuff\\",\\"targetAmount\\":500,\\"time\\":\\"2026-03-26T08:56:27.971Z\\"}]\', \'[{\\"name\\":\\"Jane\\",\\"number\\":\\"+1234567890\\"}]\', \'765f4afb-64a5-4d97-85ea-35daafeb5a9a\', \'active\')'
+  },
+  code: 'ER_NO_DEFAULT_FOR_FIELD',
+  errno: 1364,
+  sqlState: 'HY000',
+  sqlMessage: "Field 'venue_name' doesn't have a default value",
+  sql: 'INSERT INTO `events`(`id`, `created_at`, `updated_at`, `deleted_at`, `name`, `title`, `short_description`, `detailed_description`, `cover_images`, `category_id`, `location`, `hashtag`, `target_amount`, `amount_raised`, `accept_donations`, `start_date_time`, `end_date_time`, `start_time`, `qr_code_link`, `purchasable_items`, `activities`, `external_organizers`, `creator_id`, `status`) VALUES (\'8be3c2cf-17c6-4b1a-8170-cda1bd8605da\', DEFAULT, DEFAULT, DEFAULT, \'Super Fest\', DEFAULT, \'Best fest ever.\', \'[{\\"text\\":\\"A fun paragraph.\\",\\"media\\":[\\"https://example.com/detail1.png\\"]}]\', \'[\\"https://example.com/img1.png\\"]\', \'c0a70c1a-ecef-4e3c-b678-68eb4791c759\', \'{\\"lat\\":6.5244,\\"lng\\":3.3792,\\"address\\":\\"123 Event Street, Lagos\\",\\"venueName\\":\\"Convention Center\\",\\"locationDescription\\":\\"Park in the back\\"}\', \'#superfest2026\', 1000000, 0, 1, \'2026-03-26 07:56:27.970\', \'2026-03-28 07:56:27.971\', \'10:00 AM\', DEFAULT, \'[{\\"name\\":\\"VIP Ticket\\",\\"images\\":[\\"https://example.com/merch.png\\"],\\"price\\":50,\\"quantity\\":100}]\', \'[{\\"name\\":\\"Cake Cutting\\",\\"image\\":\\"https://example.com/activity.png\\",\\"description\\":\\"Delicious stuff\\",\\"targetAmount\\":500,\\"time\\":\\"2026-03-26T08:56:27.971Z\\"}]\', \'[{\\"name\\":\\"Jane\\",\\"number\\":\\"+1234567890\\"}]\', \'765f4afb-64a5-4d97-85ea-35daafeb5a9a\', \'active\')'
+}
+FAIL test/event.e2e-spec.ts (28.436 s)
+  Event Module APIs (e2e)
+    ├ù /events (POST) - Create an event (3470 ms)
+    ΓêÜ /events (GET) - Get all events (397 ms)
+    ├ù /events/:id (GET) - Get event details (422 ms)
+    ├ù /events/:id/contribute (POST) - Donate to event (1083 ms)
+    ├ù /events/:id/contribute (POST) - Purchase item from event (1479 ms)
+    ├ù /events/:id/leaderboard (GET) - Get leaderboard (427 ms)
+
+  ΓùÅ Event Module APIs (e2e) ΓÇ║ /events (POST) - Create an event
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 500
+
+      165 |       });
+      166 |
+    > 167 |     expect(res.status).toBe(201);
+          |                        ^
+      168 |     testEventId = res.body.id;
+      169 |     expect(res.body.name).toBe('Super Fest');
+      170 |     expect(Number(res.body.targetAmount)).toBe(10000); 
+
+      at Object.<anonymous> (event.e2e-spec.ts:167:24)
+
+  ΓùÅ Event Module APIs (e2e) ΓÇ║ /events/:id (GET) - Get event details
+
+    expected 200 "OK", got 404 "Not Found"
+
+      183 |     const res = await request(app.getHttpServer())
+      184 |       .get(`/events/${testEventId}`)
+    > 185 |       .expect(200);
+          |        ^
+      186 |
+      187 |     expect(res.body.id).toBe(testEventId);
+      188 |     expect(res.body.title).toBe('Tech Conference 2026');
+
+      at Object.<anonymous> (event.e2e-spec.ts:185:8)
+      ----
+      at Test._assertStatus (../node_modules/supertest/lib/test.js:309:14)
+      at ../node_modules/supertest/lib/test.js:365:13
+      at Test._assertFunction (../node_modules/supertest/lib/test.js:342:13)
+      at Test.assert (../node_modules/supertest/lib/test.js:195:23)
+      at localAssert (../node_modules/supertest/lib/test.js:138:14)
+      at Server.<anonymous> (../node_modules/supertest/lib/test.js:152:11)
+
+  ΓùÅ Event Module APIs (e2e) ΓÇ║ /events/:id/contribute (POST) - Donate to event
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 404
+
+      199 |       });
+      200 |
+    > 201 |     expect(res.status).toBe(201);
+          |                        ^
+      202 |     expect(res.body.type).toBe(EventContributionType.DONATION);
+      203 |     expect(Number(res.body.amount)).toBe(500);
+      204 |   });
+
+      at Object.<anonymous> (event.e2e-spec.ts:201:24)
+
+  ΓùÅ Event Module APIs (e2e) ΓÇ║ /events/:id/contribute (POST) - Purchase item from event
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 404
+
+      214 |       });
+      215 |
+    > 216 |     expect(res.status).toBe(201);
+          |                        ^
+      217 |     expect(res.body.type).toBe(EventContributionType.PURCHASE);
+      218 |     expect(Number(res.body.amount)).toBe(200);
+      219 |   });
+
+      at Object.<anonymous> (event.e2e-spec.ts:216:24)
+
+  ΓùÅ Event Module APIs (e2e) ΓÇ║ /events/:id/leaderboard (GET) - Get leaderboard
+
+    expect(received).toBeGreaterThanOrEqual(expected)
+
+    Expected: >= 1
+    Received:    0
+
+      225 |
+      226 |     expect(Array.isArray(res.body)).toBe(true);
+    > 227 |     expect(res.body.length).toBeGreaterThanOrEqual(1);
+          |                             ^
+      228 |     expect(Number(res.body[0].totalAmount)).toBeGreaterThan(0);
+      229 |   });
+      230 | });
+
+      at Object.<anonymous> (event.e2e-spec.ts:227:29)
+
+Test Suites: 1 failed, 1 total
+Tests:       5 failed, 1 passed, 6 total
+Snapshots:   0 total
+Time:        28.922 s, estimated 62 s
+Ran all test suites matching /test\\event.e2e-spec.ts/i.

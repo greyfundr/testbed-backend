@@ -1,0 +1,18 @@
+
+> greyfundr@0.0.1 test:e2e
+> jest --config ./test/jest-e2e.json test/event.e2e-spec.ts
+
+PASS test/event.e2e-spec.ts (30.738 s)
+  Event Module APIs (e2e)
+    ΓêÜ /events (POST) - Create an event (2768 ms)
+    ΓêÜ /events (GET) - Get all events (486 ms)
+    ΓêÜ /events/:id (GET) - Get event details (802 ms)
+    ΓêÜ /events/:id/contribute (POST) - Donate to event (6160 ms)
+    ΓêÜ /events/:id/contribute (POST) - Purchase item from event (5933 ms)
+    ΓêÜ /events/:id/leaderboard (GET) - Get leaderboard (323 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       6 passed, 6 total
+Snapshots:   0 total
+Time:        31.19 s, estimated 33 s
+Ran all test suites matching /test\\event.e2e-spec.ts/i.

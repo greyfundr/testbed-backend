@@ -12,33 +12,56 @@ export interface EventLocation {
   lat: number;
   lng: number;
   address: string;
+  locationDescription?: string;
+  venueName?: string;
 }
 
-export interface DetailedDescription {
+export interface DetailedDescriptionSegment {
   text: string;
   media: string[];
 }
 
-export interface ItemToBuy {
-  image: string;
+export interface PurchasableItem {
+  image: string[];
   name: string;
   price: number;
   quantity: number;
 }
 
+export interface EventActivity {
+  name: string;
+  image: string;
+  description: string;
+  targetAmount: number;
+  time: string;
+}
+
+export interface ExternalOrganizer {
+  name: string;
+  number: string;
+}
+
 @Entity('events')
 export class Event extends AbstractEntity {
-  @ApiProperty({ description: 'Event title' })
+  @ApiProperty({ description: 'Event name' })
   @Column()
+  name: string;
+
+  @ApiProperty({ description: 'Event title', deprecated: true })
+  @Column({ name: 'title', nullable: true })
   title: string;
 
   @ApiProperty({ description: 'Short description of the event' })
   @Column({ name: 'short_description' })
   shortDescription: string;
 
-  @ApiProperty({ description: 'Detailed description with text and media' })
+  @ApiProperty({ description: 'Detailed description with text and media segments' })
   @Column({ type: 'json', name: 'detailed_description' })
-  detailedDescription: DetailedDescription;
+  detailedDescription: DetailedDescriptionSegment[];
+
+  @ApiProperty({ description: 'Cover images for the event' })
+  @Column({ type: 'json', name: 'cover_images', nullable: true })
+  coverImages: string[] = [];
 
   @Column({ name: 'category_id' })
   categoryId: string;
@@ -73,24 +96,44 @@ export class Event extends AbstractEntity {
   })
   amountRaised: number;
 
-  @ApiProperty({ description: 'Date and time of the event' })
-  @Column({ type: 'timestamp', name: 'event_time' })
-  eventTime: Date;
+  @ApiProperty({ description: 'Accept donations' })
+  @Column({ name: 'accept_donations', default: true })
+  acceptDonations: boolean;
+
+  @ApiProperty({ description: 'Start date and time of the event' })
+  @Column({ type: 'timestamp', name: 'start_date_time' })
+  startDateTime: Date;
+
+  @ApiProperty({ description: 'End date and time of the event' })
+  @Column({ type: 'timestamp', name: 'end_date_time', nullable: true })
+  endDateTime: Date | null;
+
+  @ApiProperty({ description: 'Start time string' })
+  @Column({ type: 'varchar', name: 'start_time', nullable: true })
+  startTime: string | null;
 
   @ApiProperty({ description: 'Link to event QR code' })
-  @Column({ name: 'qr_code_link', nullable: true })
-  qrCodeLink: string;
+  @Column({ type: 'varchar', name: 'qr_code_link', nullable: true })
+  qrCodeLink: string | null;
 
   @ApiProperty({ description: 'Items available for purchase' })
-  @Column({ type: 'json', name: 'items_to_buy', nullable: true })
-  itemsToBuy: ItemToBuy[] = [];
+  @Column({ type: 'json', name: 'purchasable_items', nullable: true })
+  purchasableItems: PurchasableItem[] | null = [];
+
+  @ApiProperty({ description: 'Planned activities for the event' })
+  @Column({ type: 'json', name: 'activities', nullable: true })
+  activities: EventActivity[] | null = [];
+
+  @ApiProperty({ description: 'External organizers not in the system' })
+  @Column({ type: 'json', name: 'external_organizers', nullable: true })
+  externalOrganizers: ExternalOrganizer[] | null = [];
 
   @ApiProperty({ description: 'Number of expected participants' })
-  @Column({ name: 'expected_participants', default: 0 })
+  @Column({ type: 'int', name: 'expected_participants', default: 0 })
   expectedParticipants: number;
 
   @ApiProperty({ description: 'Name of the venue' })
-  @Column({ name: 'venue_name' })
+  @Column({ type: 'varchar', name: 'venue_name' })
   venueName: string;
 
   @Column({ name: 'creator_id' })

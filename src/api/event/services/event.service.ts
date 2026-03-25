@@ -48,14 +48,37 @@ export class EventService {
   ) {}
 
   async create(createEventDto: CreateEventDto, user: User): Promise<Event> {
-    const { organizers, categoryId, ...eventData } = createEventDto;
+    const {
+      name,
+      hashtag,
+      shortDescription,
+      category: categoryName,
+      coverImages,
+      startDateTime,
+      startTime,
+      spanMultipleDays,
+      endDateTime,
+      organizers,
+      internalOrganizers,
+      detailedDescription,
+      location,
+      financing,
+    } = createEventDto;
 
-    const category = await this.eventCategoryRepository.findOne({
-      where: { id: categoryId },
+    // Resolve category
+    let category = await this.eventCategoryRepository.findOne({
+      where: { name: categoryName },
     });
 
     if (!category) {
-      throw new NotFoundException('Event category not found');
+      category = await this.eventCategoryRepository.create({
+        name: categoryName,
+        isActive: true,
+      });
+    }
+
+    if (!category) {
+      throw new NotFoundException(`Category ${categoryName} could not be resolved`);
     }
 
     const qr = this.dataSource.createQueryRunner();
@@ -64,9 +87,25 @@ export class EventService {
 
     try {
       const event = qr.manager.create(Event, {
-        ...eventData,
-        categoryId,
+        name,
+        hashtag,
+        shortDescription,
+        categoryId: category.id,
         category,
+        coverImages,
+        startDateTime: new Date(startDateTime),
+        startTime,
+        spanMultipleDays: spanMultipleDays || false,
+        endDateTime: endDateTime ? new Date(endDateTime) : null,
+        detailedDescription,
+        location,
+        venueName: location.venueName || '',
+        targetAmount: financing.targetAmount || 0,
+        expectedParticipants: financing.expectedParticipants || 0,
+        acceptDonations: financing.acceptDonations ?? true,
+        purchasableItems: financing.purchasableItems || [],
+        activities: financing.activities || [],
+        externalOrganizers: organizers || [],
         creatorId: user.id,
         status: EventStatus.ACTIVE,
         amountRaised: 0,
@@ -82,9 +121,9 @@ export class EventService {
       });
       await qr.manager.save(creatorOrganizer);
 
-      // Add other organizers
-      if (organizers && organizers.length > 0) {
-        const otherOrganizers = organizers
+      // Add other internal organizers
+      if (internalOrganizers && internalOrganizers.length > 0) {
+        const otherOrganizers = internalOrganizers
           .filter((o) => o.userId !== user.id)
           .map((o) =>
             qr.manager.create(EventOrganizer, {
@@ -172,7 +211,7 @@ export class EventService {
           direction: TransactionDirection.DEBIT,
           status: TransactionStatus.COMPLETED,
           reference,
-          description: `Contribution to event: ${event.title} (${type})`,
+          description: `Contribution to event: ${event.name} (${type})`,
           metadata: { eventId, type, userId: user.id },
         }),
       );
@@ -184,7 +223,7 @@ export class EventService {
         transactionId: transaction.id,
         entityType: 'event',
         entityId: event.id,
-        description: `Escrow for contribution to event: ${event.title}`,
+        description: `Escrow for contribution to event: ${event.name}`,
         qr,
       });
 

@@ -30,9 +30,19 @@ class EventLocationDto {
   @IsString()
   @IsNotEmpty()
   address: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  locationDescription?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  venueName?: string;
 }
 
-class DetailedDescriptionDto {
+class DetailedDescriptionSegmentDto {
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
@@ -44,7 +54,27 @@ class DetailedDescriptionDto {
   media: string[];
 }
 
-class ItemToBuyDto {
+class PurchasableItemDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @IsString({ each: true })
+  images: string[];
+
+  @ApiProperty()
+  @IsNumber()
+  price: number;
+
+  @ApiProperty()
+  @IsNumber()
+  quantity: number;
+}
+
+class EventActivityDto {
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
@@ -56,15 +86,62 @@ class ItemToBuyDto {
   image: string;
 
   @ApiProperty()
-  @IsNumber()
-  price: number;
+  @IsString()
+  @IsNotEmpty()
+  description: string;
 
   @ApiProperty()
   @IsNumber()
-  quantity: number;
+  targetAmount: number;
+
+  @ApiProperty()
+  @IsDateString()
+  time: string;
 }
 
-class OrganizerDto {
+class EventFinancingDto {
+  @ApiProperty()
+  @IsNumber()
+  @IsOptional()
+  targetAmount?: number;
+
+  @ApiProperty()
+  @IsNumber()
+  @IsOptional()
+  expectedParticipants?: number;
+
+  @ApiProperty()
+  @IsOptional()
+  acceptDonations?: boolean;
+
+  @ApiPropertyOptional({ type: [PurchasableItemDto] })
+  @IsArray()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => PurchasableItemDto)
+  purchasableItems?: PurchasableItemDto[];
+
+  @ApiPropertyOptional({ type: [EventActivityDto] })
+  @IsArray()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => EventActivityDto)
+  activities?: EventActivityDto[];
+}
+
+class ExternalOrganizerDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  number: string;
+}
+
+class InternalOrganizerDto {
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
@@ -79,7 +156,12 @@ export class CreateEventDto {
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
-  title: string;
+  name: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  hashtag: string;
 
   @ApiProperty()
   @IsString()
@@ -87,14 +169,52 @@ export class CreateEventDto {
   shortDescription: string;
 
   @ApiProperty()
-  @ValidateNested()
-  @Type(() => DetailedDescriptionDto)
-  detailedDescription: DetailedDescriptionDto;
+  @IsString()
+  @IsNotEmpty()
+  category: string; // Mobile sends category name
+
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @IsString({ each: true })
+  coverImages: string[];
+
+  @ApiProperty()
+  @IsDateString()
+  startDateTime: string;
 
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
-  categoryId: string;
+  startTime: string;
+
+  @ApiProperty()
+  @IsOptional()
+  spanMultipleDays?: boolean;
+
+  @ApiPropertyOptional()
+  @IsDateString()
+  @IsOptional()
+  endDateTime?: string;
+
+  @ApiProperty({ type: [ExternalOrganizerDto] })
+  @IsArray()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => ExternalOrganizerDto)
+  organizers?: ExternalOrganizerDto[];
+
+  @ApiProperty({ type: [InternalOrganizerDto] })
+  @IsArray()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => InternalOrganizerDto)
+  internalOrganizers?: InternalOrganizerDto[];
+
+  @ApiProperty({ type: [DetailedDescriptionSegmentDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DetailedDescriptionSegmentDto)
+  detailedDescription: DetailedDescriptionSegmentDto[];
 
   @ApiProperty()
   @ValidateNested()
@@ -102,41 +222,9 @@ export class CreateEventDto {
   location: EventLocationDto;
 
   @ApiProperty()
-  @IsString()
-  @MaxLength(30)
-  hashtag: string;
-
-  @ApiPropertyOptional()
-  @IsNumber()
-  @IsOptional()
-  targetAmount?: number;
-
-  @ApiProperty()
-  @IsDateString()
-  eventTime: string;
-
-  @ApiPropertyOptional({ type: [ItemToBuyDto] })
-  @IsArray()
-  @IsOptional()
-  @ValidateNested({ each: true })
-  @Type(() => ItemToBuyDto)
-  itemsToBuy?: ItemToBuyDto[];
-
-  @ApiPropertyOptional()
-  @IsNumber()
-  @IsOptional()
-  expectedParticipants?: number;
-
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
-  venueName: string;
-
-  @ApiProperty({ type: [OrganizerDto] })
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => OrganizerDto)
-  organizers: OrganizerDto[];
+  @ValidateNested()
+  @Type(() => EventFinancingDto)
+  financing: EventFinancingDto;
 }
 
 export class UpdateEventDto extends CreateEventDto {}

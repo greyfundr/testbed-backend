@@ -1,0 +1,52 @@
+
+> greyfundr@0.0.1 test:e2e
+> jest --config ./test/jest-e2e.json test/event.e2e-spec.ts
+
+FAIL test/event.e2e-spec.ts (32.887 s)
+  Event Module APIs (e2e)
+    ├ù /events (POST) - Create an event (2598 ms)
+    ΓêÜ /events (GET) - Get all events (333 ms)
+    ├ù /events/:id (GET) - Get event details (667 ms)
+    ΓêÜ /events/:id/contribute (POST) - Donate to event (5777 ms)
+    ΓêÜ /events/:id/contribute (POST) - Purchase item from event (5854 ms)
+    ΓêÜ /events/:id/leaderboard (GET) - Get leaderboard (351 ms)
+
+  ΓùÅ Event Module APIs (e2e) ΓÇ║ /events (POST) - Create an event
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 10000
+    Received: 100
+
+      168 |     testEventId = res.body.id;
+      169 |     expect(res.body.name).toBe('Super Fest');
+    > 170 |     expect(Number(res.body.targetAmount)).toBe(10000); 
+          |                                           ^
+      171 |   });
+      172 |
+      173 |   it('/events (GET) - Get all events', async () => {
+
+      at Object.<anonymous> (event.e2e-spec.ts:170:43)
+
+  ΓùÅ Event Module APIs (e2e) ΓÇ║ /events/:id (GET) - Get event details
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "Tech Conference 2026"
+    Received: null
+
+      186 |
+      187 |     expect(res.body.id).toBe(testEventId);
+    > 188 |     expect(res.body.title).toBe('Tech Conference 2026');
+          |                            ^
+      189 |   });
+      190 |
+      191 |   it('/events/:id/contribute (POST) - Donate to event', async () => {
+
+      at Object.<anonymous> (event.e2e-spec.ts:188:28)
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 4 passed, 6 total
+Snapshots:   0 total
+Time:        33.328 s
+Ran all test suites matching /test\\event.e2e-spec.ts/i.
