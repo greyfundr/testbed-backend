@@ -19,6 +19,7 @@ import { PaymentModule } from './api/payment/payment.module';
 import { AdminModule } from './api/admin/admin.module';
 import { SplitBillModule } from './api/split-bill/split-bill.module';
 import { UploadModule } from './api/upload/upload.module';
+import { EventModule } from './api/event/event.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { UploadModule } from './api/upload/upload.module';
     AdminModule,
     SplitBillModule,
     UploadModule,
+    EventModule,
   ],
   controllers: [AppController],
   providers: [AppService],

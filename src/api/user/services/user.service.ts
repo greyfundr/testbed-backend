@@ -1,11 +1,19 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { UpdateUserDto, UpdateProfileDto } from '../dtos';
 import { User, Profile, Kyc } from '../entities';
 import { UserRepository, ProfileRepository } from '../repository';
 import { DataSource, MoreThan } from 'typeorm';
 import { Campaign, Donation } from 'src/api/campaign/entities';
 import { Settings } from 'src/api/settings';
-import { SplitBill, SplitBillParticipant, SplitBillActivity } from 'src/api/split-bill/entities';
+import {
+  SplitBill,
+  SplitBillParticipant,
+  SplitBillActivity,
+} from 'src/api/split-bill/entities';
 import { SplitBillStatus, ParticipantStatus } from 'src/api/split-bill/enums';
 import { Wallet } from 'src/api/wallet/entities';
 

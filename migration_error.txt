@@ -1,0 +1,20 @@
+
+> greyfundr@0.0.1 migration:run
+> npm run build && npx typeorm migration:run -d dist/config/database.config.js
+
+
+> greyfundr@0.0.1 build
+> nest build
+
+[90m[4mquery:[24m[39m [94mSELECT[0m [95mversion[0m[37m([0m[37m)[0m
+[30m[41mError during migration run:[49m[39m
+DataTypeNotSupportedError: Data type "Object" in "Event.startTime" is not supported by "mysql" database.
+    at C:\Users\olare\Desktop\Dev\greyfundr\node_modules\typeorm\metadata-builder\EntityMetadataValidator.js:89:27
+    at Array.forEach (<anonymous>)
+    at EntityMetadataValidator.validate (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\typeorm\metadata-builder\EntityMetadataValidator.js:86:18)
+    at C:\Users\olare\Desktop\Dev\greyfundr\node_modules\typeorm\metadata-builder\EntityMetadataValidator.js:38:58
+    at Array.forEach (<anonymous>)
+    at EntityMetadataValidator.validateMany (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\typeorm\metadata-builder\EntityMetadataValidator.js:38:25)
+    at DataSource.buildMetadatas (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\typeorm\data-source\DataSource.js:493:33)
+    at async DataSource.initialize (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\typeorm\data-source\DataSource.js:145:13)
+    at async Object.handler (C:\Users\olare\Desktop\Dev\greyfundr\node_modules\typeorm\commands\MigrationRunCommand.js:48:13)

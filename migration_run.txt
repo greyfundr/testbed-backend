@@ -1,0 +1,30 @@
+
+> greyfundr@0.0.1 migration:run
+> npm run build && npx typeorm migration:run -d dist/config/database.config.js
+
+
+> greyfundr@0.0.1 build
+> nest build
+
+[90m[4mquery:[24m[39m [94mSELECT[0m [95mversion[0m[37m([0m[37m)[0m
+[90m[4mquery:[24m[39m [94mSELECT[0m [37m*[0m [94mFROM[0m [37m`INFORMATION_SCHEMA`[0m[37m.[0m[37m`COLUMNS`[0m [94mWHERE[0m [37m`TABLE_SCHEMA`[0m [37m=[0m [37m'greyfundr'[0m [94mAND[0m [37m`TABLE_NAME`[0m [37m=[0m [37m'migrations'[0m
+[90m[4mquery:[24m[39m [94mSELECT[0m [37m*[0m [94mFROM[0m [37m`greyfundr`[0m[37m.[0m[37m`migrations`[0m [37m`migrations`[0m [94mORDER BY[0m [37m`id`[0m [94mDESC[0m
+[4m7 migrations are already loaded in the database.[24m
+[4m8 migrations were found in the source code.[24m
+[4mNewChanges1774369618692 is the last executed migration. It was executed on Tue Mar 24 2026 17:26:58 GMT+0100 (West Africa Standard Time).[24m
+[4m1 migrations are new migrations must be executed.[24m
+[90m[4mquery:[24m[39m [37mSTART[0m [37mTRANSACTION[0m
+[90m[4mquery:[24m[39m [94mALTER TABLE[0m [37m`events`[0m [37mCHANGE[0m [37m`title`[0m [37m`name`[0m [94mvarchar[0m[37m([0m[32m255[0m[37m)[0m [94mNOT NULL[0m
+[90m[4mquery:[24m[39m [94mALTER TABLE[0m [37m`events`[0m [94mADD[0m [37m`title`[0m [94mvarchar[0m[37m([0m[32m255[0m[37m)[0m [94mNULL[0m [37mAFTER[0m [37m`name`[0m
+[90m[4mquery:[24m[39m [94mALTER TABLE[0m [37m`events`[0m [94mADD[0m [37m`cover_images`[0m [37mjson[0m [94mNULL[0m [37mAFTER[0m [37m`detailed_description`[0m
+[90m[4mquery:[24m[39m [94mALTER TABLE[0m [37m`events`[0m [37mCHANGE[0m [37m`event_time`[0m [37m`start_date_time`[0m [94mtimestamp[0m [94mNOT NULL[0m
+[90m[4mquery:[24m[39m [94mALTER TABLE[0m [37m`events`[0m [94mADD[0m [37m`end_date_time`[0m [94mtimestamp[0m [94mNULL[0m [37mAFTER[0m [37m`start_date_time`[0m
+[90m[4mquery:[24m[39m [94mALTER TABLE[0m [37m`events`[0m [94mADD[0m [37m`start_time`[0m [94mvarchar[0m[37m([0m[32m255[0m[37m)[0m [94mNULL[0m [37mAFTER[0m [37m`end_date_time`[0m
+[90m[4mquery:[24m[39m [94mALTER TABLE[0m [37m`events`[0m [94mADD[0m [37m`span_multiple_days`[0m [94mtinyint[0m [94mNOT NULL[0m [94mDEFAULT[0m [37m'0'[0m [37mAFTER[0m [37m`start_time`[0m
+[90m[4mquery:[24m[39m [94mALTER TABLE[0m [37m`events`[0m [94mADD[0m [37m`accept_donations`[0m [94mtinyint[0m [94mNOT NULL[0m [94mDEFAULT[0m [37m'1'[0m [37mAFTER[0m [37m`amount_raised`[0m
+[90m[4mquery:[24m[39m [94mALTER TABLE[0m [37m`events`[0m [37mCHANGE[0m [37m`items_to_buy`[0m [37m`purchasable_items`[0m [37mjson[0m [94mNULL[0m
+[90m[4mquery:[24m[39m [94mALTER TABLE[0m [37m`events`[0m [94mADD[0m [37m`activities`[0m [37mjson[0m [94mNULL[0m [37mAFTER[0m [37m`purchasable_items`[0m
+[90m[4mquery:[24m[39m [94mALTER TABLE[0m [37m`events`[0m [94mADD[0m [37m`external_organizers`[0m [37mjson[0m [94mNULL[0m [37mAFTER[0m [37m`venue_name`[0m
+[90m[4mquery:[24m[39m [94mINSERT INTO[0m [37m`greyfundr`[0m[37m.[0m[37m`migrations`[0m[37m([0m[37m`timestamp`[0m[37m,[0m [37m`name`[0m[37m)[0m [94mVALUES[0m [37m([0m[37m?[0m[37m,[0m [37m?[0m[37m)[0m [90m-- PARAMETERS: [1774432000000,"AlignEventWithMobile1774432000000"][0m
+[4mMigration AlignEventWithMobile1774432000000 has been executed successfully.[24m
+[90m[4mquery:[24m[39m [94mCOMMIT[0m
