@@ -3,6 +3,8 @@ import {
   NotFoundException,
   BadRequestException,
   Logger,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
@@ -30,8 +32,10 @@ import {
   EventStatus,
   EventOrganizerRole,
   EventContributionType,
+  EventPaymentMethod,
 } from '../enums/event.enum';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { PaymentService } from '../../payment/services/payment.service';
 
 @Injectable()
 export class EventService {
@@ -43,7 +47,10 @@ export class EventService {
     private readonly eventCategoryRepository: EventCategoryRepository,
     private readonly eventOrganizerRepository: EventOrganizerRepository,
     private readonly eventContributionRepository: EventContributionRepository,
+    @Inject(forwardRef(() => WalletService))
     private readonly walletService: WalletService,
+    @Inject(forwardRef(() => PaymentService))
+    private readonly paymentService: PaymentService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -163,28 +170,48 @@ export class EventService {
     eventId: string,
     contributeDto: ContributeToEventDto,
     user: User,
-  ): Promise<EventContribution> {
+  ): Promise<EventContribution | any> {
+    const { type, amount, details, paymentMethod } = contributeDto;
     const event = await this.findOne(eventId);
 
     if (event.status !== EventStatus.ACTIVE) {
       throw new BadRequestException('Event is not active');
     }
 
-    const { amount, type, details } = contributeDto;
+    // Check if event accepts donations for DONATION type
+    if (type === EventContributionType.DONATION && !event.acceptDonations) {
+      throw new BadRequestException('This event does not accept donations');
+    }
 
-    // Check wallet balance
+    if (paymentMethod === EventPaymentMethod.PAYSTACK) {
+      const reference = `EC-${uuidv4().replace(/-/g, '').substring(0, 20).toUpperCase()}`;
+      return this.paymentService.initiateTransactions({
+        amount: Math.round(amount * 100),
+        email: user.email,
+        reference,
+        metadata: {
+          purpose: 'EVENT_CONTRIBUTION',
+          eventId: event.id,
+          userId: user.id,
+          contributeDto,
+        },
+      });
+    }
+
+    const amountInKobo = Math.round(amount * 100);
+
+    // Default Wallet Flow
     const wallet = await this.walletService.getWalletByUserId(user.id);
-    if (wallet.availableBalance < amount) {
+    if (wallet.availableBalance < amountInKobo) {
       throw new BadRequestException('Insufficient wallet balance');
     }
 
+    const reference = `EC-${uuidv4().replace(/-/g, '').substring(0, 20).toUpperCase()}`;
     const qr = this.dataSource.createQueryRunner();
     await qr.connect();
     await qr.startTransaction();
 
     try {
-      const reference = `EVT-${uuidv4().replace(/-/g, '').substring(0, 15).toUpperCase()}`;
-
       let transactionType: TransactionType;
       switch (type) {
         case EventContributionType.DONATION:
@@ -199,8 +226,6 @@ export class EventService {
         default:
           throw new BadRequestException('Invalid contribution type');
       }
-
-      const amountInKobo = Math.round(amount * 100);
 
       const transaction = await qr.manager.save(
         qr.manager.create(Transaction, {

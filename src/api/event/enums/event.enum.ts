@@ -16,3 +16,8 @@ export enum EventOrganizerRole {
   CO_ORGANIZER = 'co-organizer',
   COLLECTOR = 'collector',
 }
+
+export enum EventPaymentMethod {
+  WALLET = 'wallet',
+  PAYSTACK = 'paystack',
+}
