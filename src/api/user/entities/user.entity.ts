@@ -91,4 +91,7 @@ export class User extends AbstractEntity {
     name: 'password_reset_token_expiry',
   })
   passwordResetTokenExpiry: Date | null;
+
+  @Column({ type: 'date', nullable: true, name: 'date_of_birth' })
+  dateOfBirth: Date | null;
 }
