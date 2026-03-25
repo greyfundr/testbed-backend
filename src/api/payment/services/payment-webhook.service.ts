@@ -2,6 +2,7 @@ import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { DataSource, Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { WebhookLog, Transaction } from '../../transaction/entities';
+import { User } from '../../user/entities';
 import {
   VirtualAccount,
   WithdrawalRequest,
@@ -31,6 +32,8 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SplitBillParticipant, SplitBill } from '../../split-bill/entities';
 import { ParticipantStatus, SplitBillStatus } from '../../split-bill/enums';
+import { EventService } from '../../event/services/event.service';
+import { EventPaymentMethod } from '../../event/enums/event.enum';
 
 @Injectable()
 export class PaymentWebhookService {
@@ -44,6 +47,8 @@ export class PaymentWebhookService {
 
     @Inject(forwardRef(() => WalletService))
     private readonly walletService: WalletService,
+    @Inject(forwardRef(() => EventService))
+    private readonly eventService: EventService,
     private readonly paymentService: PaymentService,
     private readonly dataSource: DataSource,
     private readonly eventEmitter: EventEmitter2,
@@ -274,6 +279,11 @@ export class PaymentWebhookService {
         await this.processGuestBillPaymentWebhook(data);
         break;
 
+      case 'EVENT_CONTRIBUTION':
+        this.logger.log(`Routing webhook to event contribution: ${reference}`);
+        await this.processEventContributionWebhook(data);
+        break;
+
       case 'wallet_funding':
       default:
         this.logger.log(`Routing webhook to wallet funding: ${reference}`);
@@ -385,6 +395,103 @@ export class PaymentWebhookService {
       await qr.rollbackTransaction();
       this.logger.error(
         `Failed to process guest payment webhook: ${err.message}`,
+        err.stack,
+      );
+      throw err;
+    } finally {
+      await qr.release();
+    }
+  }
+
+  private async processEventContributionWebhook(
+    data: PaystackChargeSuccessData,
+  ): Promise<void> {
+    const { reference, amount: amountKobo, metadata, customer } = data;
+    const { eventId, userId, contributeDto } = metadata;
+
+    if (!eventId || !userId || !contributeDto) {
+      this.logger.error(
+        `Missing metadata for event contribution webhook: ${reference}`,
+      );
+      return;
+    }
+
+    // 1. Credit User Wallet (Funding)
+    // We reuse processWalletFundingWebhook logic or call it directly?
+    // processWalletFundingWebhook expects customer.customer_code to find VirtualAccount.
+    // If they paid via Card, we might need to find wallet by userId.
+    
+    const qr = this.dataSource.createQueryRunner();
+    await qr.connect();
+    await qr.startTransaction();
+
+    try {
+      const existingTx = await qr.manager.findOne(Transaction, {
+        where: { gatewayReference: reference },
+      });
+
+      if (existingTx && existingTx.status === TransactionStatus.COMPLETED) {
+        this.logger.warn(
+          `Webhook ignored: Event contribution ${reference} already processed.`,
+        );
+        await qr.rollbackTransaction();
+        return;
+      }
+
+      // Fund the wallet first
+      const wallet = await this.walletService.getWalletByUserId(userId);
+      
+      const fundingTx = await qr.manager.save(Transaction, {
+        walletId: wallet.id,
+        amount: amountKobo, // Transaction stores in Kobo
+        currency: 'NGN',
+        type: TransactionType.WALLET_FUNDING,
+        direction: TransactionDirection.CREDIT,
+        status: TransactionStatus.COMPLETED,
+        reference: `FND-${reference}`,
+        gatewayReference: reference,
+        description: `Wallet funding for event contribution — ${reference}`,
+        gatewayResponse: data,
+        confirmedAt: new Date(data.paid_at),
+        metadata: { ...metadata, channel: data.channel },
+      });
+
+      await this.walletService.creditWallet({
+        walletId: wallet.id,
+        amount: amountKobo, // creditWallet expects Kobo
+        transactionId: fundingTx.id,
+        sourceAccountType: LedgerAccountType.PAYMENT_GATEWAY,
+        description: `Funding for event contribution — ${reference}`,
+        qr,
+      });
+
+      await qr.commitTransaction();
+      this.logger.log(`Wallet funded for event contribution: ${reference}`);
+
+      // 2. Finalize Contribution
+      // We call eventService.contribute with WALLET method.
+      // We need to fetch the User entity.
+      const user = await this.dataSource.manager.findOne(User, { where: { id: userId } });
+      if (!user) {
+        throw new Error(`User ${userId} not found for event contribution finalize`);
+      }
+      
+      await this.eventService.contribute(
+        eventId,
+        {
+          ...contributeDto,
+          paymentMethod: EventPaymentMethod.WALLET,
+        },
+        user,
+      );
+
+      this.logger.log(
+        `Event contribution finalized via webhook for ref: ${reference}`,
+      );
+    } catch (err) {
+      await qr.rollbackTransaction();
+      this.logger.error(
+        `Failed to process event contribution webhook: ${err.message}`,
         err.stack,
       );
       throw err;

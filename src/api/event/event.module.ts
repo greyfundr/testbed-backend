@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EventController } from './controllers/event.controller';
 import { EventService } from './services/event.service';
@@ -18,6 +18,7 @@ import { EventGateway } from './gateways/event.gateway';
 import { WalletModule } from '../wallet/wallet.module';
 import { TransactionModule } from '../transaction/transaction.module';
 import { UserModule } from '../user/user.module';
+import { PaymentModule } from '../payment/payment.module';
 
 @Module({
   imports: [
@@ -27,9 +28,10 @@ import { UserModule } from '../user/user.module';
       EventOrganizer,
       EventContribution,
     ]),
-    WalletModule,
-    TransactionModule,
+    forwardRef(() => WalletModule),
+    forwardRef(() => TransactionModule),
     UserModule,
+    forwardRef(() => PaymentModule),
   ],
   controllers: [EventController],
   providers: [

@@ -15,6 +15,7 @@ import {
   EventStatus,
   EventOrganizerRole,
   EventContributionType,
+  EventPaymentMethod,
 } from '../enums/event.enum';
 
 class EventLocationDto {
@@ -237,6 +238,11 @@ export class ContributeToEventDto {
   @ApiProperty()
   @IsNumber()
   amount: number;
+
+  @ApiProperty({ enum: EventPaymentMethod, default: EventPaymentMethod.WALLET })
+  @IsEnum(EventPaymentMethod)
+  @IsOptional()
+  paymentMethod?: EventPaymentMethod = EventPaymentMethod.WALLET;
 
   @ApiProperty()
   @IsOptional()

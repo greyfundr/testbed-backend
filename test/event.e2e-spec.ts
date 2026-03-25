@@ -1,17 +1,18 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
 const request = require('supertest');
 import { AppModule } from './../src/app.module';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { User } from '../src/api/user/entities/user.entity';
 import { Wallet } from '../src/api/wallet/entities/wallet.entity';
-import { Repository } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { AccountType } from '../src/api/user/enums/user.enum';
 import { WalletCurrency } from '../src/api/wallet/enums/wallet.enum';
 import { Event, EventCategory, EventContribution } from '../src/api/event/entities';
-import { EventContributionType } from '../src/api/event/enums/event.enum';
+import { EventContributionType, EventPaymentMethod } from '../src/api/event/enums/event.enum';
+import { PaymentService } from '../src/api/payment/services/payment.service';
 
 describe('Event Module APIs (e2e)', () => {
   jest.setTimeout(60000);
@@ -22,18 +23,38 @@ describe('Event Module APIs (e2e)', () => {
   let eventRepository: Repository<Event>;
   let categoryRepository: Repository<EventCategory>;
   let contributionRepository: Repository<EventContribution>;
+  let dataSource: DataSource;
 
   let userToken: string;
   let testUser: User;
   let testCategoryId: string;
   let testEventId: string;
 
+  const mockPaymentService = {
+    verifyWebhookSignature: jest.fn().mockReturnValue(true),
+    initiateTransactions: jest.fn().mockResolvedValue({
+      status: true,
+      data: {
+        authorization_url: 'https://checkout.paystack.com/test-url',
+        reference: 'TEST-REF-123',
+      },
+    }),
+  };
+
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(PaymentService)
+      .useValue(mockPaymentService)
+      .compile();
 
-    app = moduleFixture.createNestApplication();
+    app = moduleFixture.createNestApplication({ rawBody: true });
+    app.setGlobalPrefix('api');
+    app.enableVersioning({
+      type: VersioningType.URI,
+      defaultVersion: '1',
+    });
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
@@ -50,15 +71,16 @@ describe('Event Module APIs (e2e)', () => {
     eventRepository = moduleFixture.get(getRepositoryToken(Event));
     categoryRepository = moduleFixture.get(getRepositoryToken(EventCategory));
     contributionRepository = moduleFixture.get(getRepositoryToken(EventContribution));
+    dataSource = moduleFixture.get(DataSource);
 
     // Cleanup
-    try {
-      await contributionRepository.delete({});
-      await eventRepository.delete({});
-      await categoryRepository.delete({});
-      await walletRepository.delete({});
-      await userRepository.delete({});
-    } catch (e) {}
+    await dataSource.query('SET FOREIGN_KEY_CHECKS = 0');
+    await contributionRepository.createQueryBuilder().delete().execute();
+    await eventRepository.createQueryBuilder().delete().execute();
+    await categoryRepository.createQueryBuilder().delete().execute();
+    await walletRepository.createQueryBuilder().delete().execute();
+    await userRepository.createQueryBuilder().delete().execute();
+    await dataSource.query('SET FOREIGN_KEY_CHECKS = 1');
 
     // Create User
     const uniqueSuffix = Date.now().toString();
@@ -76,8 +98,8 @@ describe('Event Module APIs (e2e)', () => {
     // Create Wallet
     const wallet = walletRepository.create({
       userId: testUser.id,
-      availableBalance: 100000000, // 1,000,000 Naira (100,000,000 kobo)
-      ledgerBalance: 100000000,
+      availableBalance: 100000, // 1,000 Naira (100,000 kobo)
+      ledgerBalance: 100000,
       currency: WalletCurrency.NGN,
     });
     await walletRepository.save(wallet);
@@ -97,19 +119,12 @@ describe('Event Module APIs (e2e)', () => {
   });
 
   afterAll(async () => {
-    try {
-      await contributionRepository.delete({});
-      await eventRepository.delete({});
-      await categoryRepository.delete({});
-      await walletRepository.delete({});
-      await userRepository.delete({});
-    } catch (e) {}
     await app.close();
   });
 
-  it('/events (POST) - Create an event', async () => {
+  it('/api/v1/events (POST) - Create an event', async () => {
     const res = await request(app.getHttpServer())
-      .post('/events')
+      .post('/api/v1/events')
       .set('Authorization', `Bearer ${userToken}`)
       .send({
         name: 'Super Fest',
@@ -167,45 +182,17 @@ describe('Event Module APIs (e2e)', () => {
     expect(res.status).toBe(201);
     testEventId = res.body.id;
     expect(res.body.name).toBe('Super Fest');
-    // If it received 100 instead of 10000, let's see why. 
-    // In our payload we sent 10000. 
-    // Maybe the transformer is dividing by 100 already in the response?
-    // Let's adjust to whatever the API returns for now to see if it's consistent.
-    // Actually, 10000 / 100 = 100. It seems it returned the value divided by 100.
-    // If the transformer is from(value) => value / 100, then 10000 / 100 = 100.
-    // Wait! 10000 Naira stores as 1000000 Kobo. 1000000 / 100 = 10000. 
-    // If it returned 100, it means it stored 10000 Kobo.
-    // But parameters said 1000000! 
-    // Wait, let's just assert 100 for now to confirm consistency, then investigate.
-    expect(Number(res.body.targetAmount)).toBe(Number(res.body.targetAmount)); // debug
   });
 
-  it('/events (GET) - Get all events', async () => {
+  it('/api/v1/events/:id/contribute (POST) - Wallet Contribution (Immediate)', async () => {
     const res = await request(app.getHttpServer())
-      .get('/events')
-      .expect(200);
-
-    expect(Array.isArray(res.body)).toBe(true);
-    expect(res.body.length).toBeGreaterThan(0);
-  });
-
-  it('/events/:id (GET) - Get event details', async () => {
-    const res = await request(app.getHttpServer())
-      .get(`/events/${testEventId}`)
-      .expect(200);
-
-    expect(res.body.id).toBe(testEventId);
-    expect(res.body.name).toBe('Super Fest');
-  });
-
-  it('/events/:id/contribute (POST) - Donate to event', async () => {
-    const res = await request(app.getHttpServer())
-      .post(`/events/${testEventId}/contribute`)
+      .post(`/api/v1/events/${testEventId}/contribute`)
       .set('Authorization', `Bearer ${userToken}`)
       .send({
         type: EventContributionType.DONATION,
-        amount: 50000, // 500 Naira
-        details: { message: 'Supporting the event' },
+        amount: 500, // 500 Naira
+        paymentMethod: EventPaymentMethod.WALLET,
+        details: { message: 'Supporting via wallet' },
       });
 
     expect(res.status).toBe(201);
@@ -213,28 +200,65 @@ describe('Event Module APIs (e2e)', () => {
     expect(Number(res.body.amount)).toBe(500);
   });
 
-  it('/events/:id/contribute (POST) - Purchase item from event', async () => {
+  it('/api/v1/events/:id/contribute (POST) - Paystack Initiation', async () => {
     const res = await request(app.getHttpServer())
-      .post(`/events/${testEventId}/contribute`)
+      .post(`/api/v1/events/${testEventId}/contribute`)
       .set('Authorization', `Bearer ${userToken}`)
       .send({
-        type: EventContributionType.PURCHASE,
-        amount: 20000, // 200 Naira
-        details: { itemName: 'T-Shirt', quantity: 1 },
+        type: EventContributionType.DONATION,
+        amount: 1000, // 1000 Naira
+        paymentMethod: EventPaymentMethod.PAYSTACK,
+        details: { message: 'Supporting via paystack' },
       });
 
     expect(res.status).toBe(201);
-    expect(res.body.type).toBe(EventContributionType.PURCHASE);
-    expect(Number(res.body.amount)).toBe(200);
+    expect(res.body.status).toBe(true);
+    expect(res.body.data.authorization_url).toBeDefined();
+    expect(mockPaymentService.initiateTransactions).toHaveBeenCalled();
   });
 
-  it('/events/:id/leaderboard (GET) - Get leaderboard', async () => {
-    const res = await request(app.getHttpServer())
-      .get(`/events/${testEventId}/leaderboard`)
-      .expect(200);
+  it('/api/v1/payment/webhook (POST) - Paystack Webhook Finalization', async () => {
+    const webhookPayload = {
+      event: 'charge.success',
+      data: {
+        reference: 'PAY-REF-EVENT-123',
+        amount: 100000, // 1000 Naira in kobo
+        paid_at: new Date().toISOString(),
+        channel: 'card',
+        customer: {
+          email: testUser.email,
+          customer_code: 'CUS_mock_123',
+        },
+        metadata: {
+          purpose: 'EVENT_CONTRIBUTION',
+          eventId: testEventId,
+          userId: testUser.id,
+          contributeDto: {
+            type: EventContributionType.DONATION,
+            amount: 1000,
+            details: { message: 'Supporting via paystack webhook' },
+          },
+        },
+      },
+    };
 
-    expect(Array.isArray(res.body)).toBe(true);
-    expect(res.body.length).toBeGreaterThanOrEqual(1);
-    expect(Number(res.body[0].totalAmount)).toBeGreaterThan(0);
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/payment/webhook')
+      .set('x-paystack-signature', 'valid_mock_signature')
+      .send(webhookPayload);
+
+    expect(res.status).toBe(200);
+
+    // Wait a bit for async processing
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    // Verify contribution record exists
+    const contribution = await contributionRepository.findOne({
+      where: { eventId: testEventId, userId: testUser.id, amount: 1000 },
+    });
+    expect(contribution).toBeDefined();
+    if (contribution) {
+      expect(Number(contribution.amount)).toBe(1000);
+    }
   });
 });

@@ -7,17 +7,13 @@ import { PaymentWebhookService } from './services/payment-webhook.service';
 import { PaymentWebhookController } from './controllers/payment-webhook.controller';
 import { WalletModule } from '../wallet/wallet.module';
 import { TransactionModule } from '../transaction/transaction.module';
+import { EventModule } from '../event/event.module';
 
 @Module({
   imports: [
     forwardRef(() => WalletModule),
     TransactionModule,
-    // TypeOrmModule.forFeature([
-    //   WebhookLog,
-    //   Transaction,
-    //   WithdrawalRequest,
-    //   VirtualAccount,
-    // ]),
+    forwardRef(() => EventModule),
   ],
   controllers: [PaymentWebhookController],
   providers: [PaymentService, PaymentWebhookService],
