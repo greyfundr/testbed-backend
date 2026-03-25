@@ -8,7 +8,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { KycVerificationType } from '../enums/user.enum';
+import { AccountType, KycVerificationType } from '../enums/user.enum';
 
 export class CreateUserDto {
   @IsEmail()
@@ -99,4 +99,26 @@ export class SubmitKycDto {
   @IsString()
   @IsOptional()
   documentImage?: string;
+}
+
+export class GetUsersFilterDto {
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  phoneNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  username?: string;
+
+  @IsOptional()
+  @IsEnum(AccountType)
+  accountType?: AccountType;
 }

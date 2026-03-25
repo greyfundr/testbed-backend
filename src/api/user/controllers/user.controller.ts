@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Patch,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { UserService } from '../services';
@@ -13,7 +14,7 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { User } from '../entities';
 import { ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { UpdateProfileDto } from '../dtos';
+import { GetUsersFilterDto, UpdateProfileDto } from '../dtos';
 
 @Controller('users')
 export class UserController {
@@ -40,8 +41,11 @@ export class UserController {
   @ApiBearerAuth('JWT-auth')
   @UseGuards(JwtAuthGuard)
   @Get('')
-  geAllUsers(@CurrentUser() user: User) {
-    return this.userService.getUsers();
+  getAllUsers(
+    @Query() filterDto: GetUsersFilterDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.userService.getUsers(filterDto);
   }
 
   @Delete('account')

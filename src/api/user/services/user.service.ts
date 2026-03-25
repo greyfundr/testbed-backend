@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { UpdateUserDto, UpdateProfileDto } from '../dtos';
+import { UpdateUserDto, UpdateProfileDto, GetUsersFilterDto } from '../dtos';
 import { User, Profile, Kyc } from '../entities';
 import { UserRepository, ProfileRepository } from '../repository';
 import { DataSource, MoreThan } from 'typeorm';
@@ -38,10 +38,42 @@ export class UserService {
     });
   }
 
-  async getUsers() {
-    return this.userRepository.findAll({
-      relations: ['profile', 'kyc'],
-    });
+  async getUsers(filterDto: GetUsersFilterDto) {
+    const { name, email, phoneNumber, username, accountType } = filterDto;
+
+    const query = this.userRepository
+      .createQueryBuilder('user')
+      .leftJoinAndSelect('user.profile', 'profile')
+      .leftJoinAndSelect('user.kyc', 'kyc');
+
+    if (email) {
+      query.andWhere('user.email LIKE :email', { email: `%${email}%` });
+    }
+
+    if (phoneNumber) {
+      query.andWhere('user.phoneNumber LIKE :phoneNumber', {
+        phoneNumber: `%${phoneNumber}%`,
+      });
+    }
+
+    if (username) {
+      query.andWhere('user.username LIKE :username', {
+        username: `%${username}%`,
+      });
+    }
+
+    if (accountType) {
+      query.andWhere('user.accountType = :accountType', { accountType });
+    }
+
+    if (name) {
+      query.andWhere(
+        '(user.firstName LIKE :name OR user.lastName LIKE :name)',
+        { name: `%${name}%` },
+      );
+    }
+
+    return query.getMany();
   }
 
   update(id: number, updateUserDto: UpdateUserDto) {
