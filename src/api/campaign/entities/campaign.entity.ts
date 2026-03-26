@@ -64,6 +64,9 @@ export class Campaign extends AbstractEntity {
   @Column({ name: 'share_slug', unique: true, length: 21 })
   shareSlug: string;
 
+  @Column({ type: 'varchar', length: 500, nullable: true, name: 'share_link' })
+  shareLink: string | null;
+
   @ApiProperty({ description: 'Fundraising target in Naira', example: 1000000 })
   @Column({
     type: 'bigint',

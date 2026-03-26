@@ -19,6 +19,7 @@ import { WalletModule } from '../wallet/wallet.module';
 import { TransactionModule } from '../transaction/transaction.module';
 import { UserModule } from '../user/user.module';
 import { PaymentModule } from '../payment/payment.module';
+import { DynamicLinkModule } from '../dynamic-link/dynamic-link.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { PaymentModule } from '../payment/payment.module';
     forwardRef(() => TransactionModule),
     UserModule,
     forwardRef(() => PaymentModule),
+    forwardRef(() => DynamicLinkModule),
   ],
   controllers: [EventController],
   providers: [

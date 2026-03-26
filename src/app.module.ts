@@ -20,6 +20,7 @@ import { AdminModule } from './api/admin/admin.module';
 import { SplitBillModule } from './api/split-bill/split-bill.module';
 import { UploadModule } from './api/upload/upload.module';
 import { EventModule } from './api/event/event.module';
+import { DynamicLinkModule } from './api/dynamic-link/dynamic-link.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { EventModule } from './api/event/event.module';
     SplitBillModule,
     UploadModule,
     EventModule,
+    DynamicLinkModule,
   ],
   controllers: [AppController],
   providers: [AppService],

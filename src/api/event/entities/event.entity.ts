@@ -177,4 +177,7 @@ export class Event extends AbstractEntity {
 
   @Column({ type: 'boolean', name: 'is_published', default: false })
   isPublished: boolean;
+
+  @Column({ type: 'varchar', length: 500, nullable: true, name: 'share_link' })
+  shareLink: string | null;
 }

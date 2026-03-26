@@ -39,6 +39,7 @@ import {
 } from '../enums/event.enum';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PaymentService } from '../../payment/services/payment.service';
+import { DynamicLinkService } from '../../dynamic-link/services/dynamic-link.service';
 
 @Injectable()
 export class EventService {
@@ -54,6 +55,8 @@ export class EventService {
     private readonly walletService: WalletService,
     @Inject(forwardRef(() => PaymentService))
     private readonly paymentService: PaymentService,
+    @Inject(forwardRef(() => DynamicLinkService))
+    private readonly dynamicLinkService: DynamicLinkService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -75,27 +78,23 @@ export class EventService {
       // financing,
     } = createEventDto;
 
-    // Resolve category
     let category = await this.eventCategoryRepository.findOne({
       where: { name: categoryName },
     });
 
     if (!category) {
-      category = await this.eventCategoryRepository.create({
+      const newCategory = this.eventCategoryRepository.create({
         name: categoryName,
         isActive: true,
       });
-    }
-
-    if (!category) {
-      throw new NotFoundException(
-        `Category ${categoryName} could not be resolved`,
-      );
+      category = await this.eventCategoryRepository.save(await newCategory);
     }
 
     const qr = this.dataSource.createQueryRunner();
     await qr.connect();
     await qr.startTransaction();
+
+    let savedEvent: Event;
 
     try {
       const event = qr.manager.create(Event, {
@@ -124,39 +123,44 @@ export class EventService {
         pageNumber: 1,
       });
 
-      const savedEvent = await qr.manager.save(event);
+      savedEvent = await qr.manager.save(Event, event);
 
-      // Add creator as owner
       const creatorOrganizer = qr.manager.create(EventOrganizer, {
         eventId: savedEvent.id,
         userId: user.id,
         role: EventOrganizerRole.OWNER,
       });
-      await qr.manager.save(creatorOrganizer);
-
-      // Add other internal organizers
-      // if (internalOrganizers && internalOrganizers.length > 0) {
-      //   const otherOrganizers = internalOrganizers
-      //     .filter((o) => o.userId !== user.id)
-      //     .map((o) =>
-      //       qr.manager.create(EventOrganizer, {
-      //         eventId: savedEvent.id,
-      //         userId: o.userId,
-      //         role: o.role,
-      //       }),
-      //     );
-      //   await qr.manager.save(EventOrganizer, otherOrganizers);
-      // }
+      await qr.manager.save(EventOrganizer, creatorOrganizer);
 
       await qr.commitTransaction();
-      return savedEvent;
     } catch (err) {
       await qr.rollbackTransaction();
-      this.logger.error('Failed to create event', err);
+      this.logger.error('Failed to create event in transaction', err);
       throw err;
     } finally {
       await qr.release();
     }
+
+    try {
+      const { shortUrl } = await this.dynamicLinkService.forEvent(
+        savedEvent.id,
+        savedEvent.name,
+      );
+
+      if (shortUrl) {
+        await this.eventRepository.update(savedEvent.id, {
+          shareLink: shortUrl,
+        });
+        savedEvent.shareLink = shortUrl;
+      }
+    } catch (linkErr) {
+      this.logger.warn(
+        `Event created, but failed to generate short link for event ${savedEvent.id}`,
+        linkErr,
+      );
+    }
+
+    return savedEvent;
   }
 
   async getMyDraft(userId: string): Promise<Event | null> {

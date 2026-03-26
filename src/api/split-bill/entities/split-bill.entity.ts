@@ -135,6 +135,9 @@ export class SplitBill extends AbstractEntity {
   @JoinColumn({ name: 'creator_id' })
   creator: User;
 
+  @Column({ type: 'varchar', length: 500, nullable: true, name: 'share_link' })
+  shareLink: string | null;
+
   @OneToMany(() => SplitBillParticipant, (p) => p.splitBill, { cascade: true })
   participants: SplitBillParticipant[];
 
