@@ -18,8 +18,10 @@ import { EventService } from '../services/event.service';
 import { Event, EventContribution } from '../entities';
 import {
   CreateEventDto,
-  UpdateEventDto,
   ContributeToEventDto,
+  UpdateEventDraftDto,
+  GetAllEventsDto,
+  GetMyEventsDto,
 } from '../dto/event.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { User } from '../../user/entities';
@@ -46,6 +48,31 @@ export class EventController {
     return this.eventService.create(createEventDto, user);
   }
 
+  @ApiOperation({ summary: 'Update an event draft' })
+  @ApiResponse({
+    status: 200,
+    description: 'The event draft has been successfully updated.',
+    type: Event,
+  })
+  @ApiBearerAuth('JWT-auth')
+  @Patch(':id/draft')
+  @UseGuards(JwtAuthGuard)
+  async updateDraft(
+    @Param('id') id: string,
+    @CurrentUser() user: User,
+    @Body() dto: UpdateEventDraftDto,
+  ) {
+    const event = await this.eventService.updateEventDraft(id, dto, user.id);
+    return {
+      success: true,
+      message:
+        dto.pageNumber === 4
+          ? 'Event published successfully'
+          : `Step ${dto.pageNumber} saved`,
+      data: event,
+    };
+  }
+
   @ApiOperation({ summary: 'Get all active events' })
   @ApiResponse({
     status: 200,
@@ -53,8 +80,20 @@ export class EventController {
     type: [Event],
   })
   @Get()
-  async findAll(@Query('categoryId') categoryId?: string) {
-    return this.eventService.findAll(categoryId);
+  async findAll(@Query() dto: GetAllEventsDto) {
+    return this.eventService.findAll(dto);
+  }
+
+  @ApiOperation({ summary: 'Get my events' })
+  @ApiResponse({
+    status: 200,
+    description: 'Return all my events.',
+    type: [Event],
+  })
+  @Get('my-events')
+  @UseGuards(JwtAuthGuard)
+  async getMyEvents(@CurrentUser() user: User, @Query() dto: GetMyEventsDto) {
+    return this.eventService.getMyEvents(user.id, dto);
   }
 
   @ApiOperation({ summary: 'Get an event by ID' })

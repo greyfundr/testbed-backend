@@ -9,6 +9,10 @@ import {
   ValidateNested,
   IsDateString,
   MaxLength,
+  IsBoolean,
+  Max,
+  Min,
+  IsInt,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import {
@@ -16,6 +20,7 @@ import {
   EventOrganizerRole,
   EventContributionType,
   EventPaymentMethod,
+  EventVisibilityStatus,
 } from '../enums/event.enum';
 
 class EventLocationDto {
@@ -172,7 +177,7 @@ export class CreateEventDto {
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
-  category: string; // Mobile sends category name
+  category: string;
 
   @ApiProperty({ type: [String] })
   @IsArray()
@@ -197,38 +202,135 @@ export class CreateEventDto {
   @IsOptional()
   endDateTime?: string;
 
-  @ApiProperty({ type: [ExternalOrganizerDto] })
+  // @ApiProperty({ type: [ExternalOrganizerDto] })
+  // @IsArray()
+  // @IsOptional()
+  // @ValidateNested({ each: true })
+  // @Type(() => ExternalOrganizerDto)
+  // organizers?: ExternalOrganizerDto[];
+
+  // @ApiProperty({ type: [InternalOrganizerDto] })
+  // @IsArray()
+  // @IsOptional()
+  // @ValidateNested({ each: true })
+  // @Type(() => InternalOrganizerDto)
+  // internalOrganizers?: InternalOrganizerDto[];
+
+  // @ApiProperty({ type: [DetailedDescriptionSegmentDto] })
+  // @IsArray()
+  // @ValidateNested({ each: true })
+  // @Type(() => DetailedDescriptionSegmentDto)
+  // detailedDescription: DetailedDescriptionSegmentDto[];
+
+  // @ApiProperty()
+  // @ValidateNested()
+  // @Type(() => EventLocationDto)
+  // location: EventLocationDto;
+
+  // @ApiProperty()
+  // @ValidateNested()
+  // @Type(() => EventFinancingDto)
+  // financing: EventFinancingDto;
+}
+
+export class UpdateEventDraftDto {
+  @IsNumber()
+  @Min(1)
+  @Max(4)
+  pageNumber: number;
+
+  // ── Step 1 fields ──────────────────────────────────────────────────────────
+  @IsString()
+  @IsOptional()
+  name?: string;
+
+  @IsString()
+  @IsOptional()
+  hashtag?: string;
+
+  @IsString()
+  @IsOptional()
+  shortDescription?: string;
+
+  @IsString()
+  @IsOptional()
+  category?: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  coverImages?: string[];
+
+  // ── Step 2 fields ──────────────────────────────────────────────────────────
+  @IsDateString()
+  @IsOptional()
+  startDateTime?: string;
+
+  @IsString()
+  @IsOptional()
+  startTime?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  spanMultipleDays?: boolean;
+
+  @IsDateString()
+  @IsOptional()
+  endDateTime?: string;
+
+  @ValidateNested()
+  @Type(() => EventLocationDto)
+  @IsOptional()
+  location?: EventLocationDto;
+
+  // ── Step 3 fields ──────────────────────────────────────────────────────────
+  @IsArray()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => DetailedDescriptionSegmentDto)
+  detailedDescription?: DetailedDescriptionSegmentDto[];
+
+  @IsNumber()
+  @IsOptional()
+  targetAmount?: number;
+
+  @IsNumber()
+  @IsOptional()
+  expectedParticipants?: number;
+
+  @IsBoolean()
+  @IsOptional()
+  acceptDonations?: boolean;
+
+  @IsArray()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => PurchasableItemDto)
+  purchasableItems?: PurchasableItemDto[];
+
+  @IsArray()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => EventActivityDto)
+  activities?: EventActivityDto[];
+
+  // ── Step 4 fields ──────────────────────────────────────────────────────────
   @IsArray()
   @IsOptional()
   @ValidateNested({ each: true })
   @Type(() => ExternalOrganizerDto)
   organizers?: ExternalOrganizerDto[];
 
-  @ApiProperty({ type: [InternalOrganizerDto] })
   @IsArray()
   @IsOptional()
   @ValidateNested({ each: true })
   @Type(() => InternalOrganizerDto)
   internalOrganizers?: InternalOrganizerDto[];
 
-  @ApiProperty({ type: [DetailedDescriptionSegmentDto] })
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => DetailedDescriptionSegmentDto)
-  detailedDescription: DetailedDescriptionSegmentDto[];
-
-  @ApiProperty()
-  @ValidateNested()
-  @Type(() => EventLocationDto)
-  location: EventLocationDto;
-
-  @ApiProperty()
-  @ValidateNested()
-  @Type(() => EventFinancingDto)
-  financing: EventFinancingDto;
+  @IsEnum(EventVisibilityStatus)
+  @IsOptional()
+  visibilityStatus?: EventVisibilityStatus;
 }
-
-export class UpdateEventDto extends CreateEventDto {}
 
 export class ContributeToEventDto {
   @ApiProperty({ enum: EventContributionType })
@@ -247,4 +349,49 @@ export class ContributeToEventDto {
   @ApiProperty()
   @IsOptional()
   details?: any;
+}
+
+export class GetAllEventsDto {
+  @IsOptional()
+  @IsString()
+  categoryId?: string;
+
+  @IsOptional()
+  @IsEnum(EventStatus)
+  status?: EventStatus;
+
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @IsEnum(['private', 'private_invitation', 'public', 'public_registration'])
+  visibilityStatus?: string;
+
+  @IsOptional()
+  @IsDateString()
+  fromDate?: string;
+
+  @IsOptional()
+  @IsDateString()
+  toDate?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  limit?: number = 20;
+}
+
+export class GetMyEventsDto extends GetAllEventsDto {
+  @IsOptional()
+  @IsEnum(['published', 'draft', 'all'])
+  publishedStatus?: 'published' | 'draft' | 'all' = 'all';
 }

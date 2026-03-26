@@ -5,7 +5,7 @@ import { User } from '../../user/entities';
 import { EventCategory } from './event-category.entity';
 import { EventOrganizer } from './event-organizer.entity';
 import { EventContribution } from './event-contribution.entity';
-import { EventStatus } from '../enums/event.enum';
+import { EventStatus, EventVisibilityStatus } from '../enums/event.enum';
 import { BigIntAmountTransformer } from '../../../common/transformers/column-numeric.transformer';
 
 export interface EventLocation {
@@ -22,7 +22,7 @@ export interface DetailedDescriptionSegment {
 }
 
 export interface PurchasableItem {
-  image: string[];
+  images: string[];
   name: string;
   price: number;
   quantity: number;
@@ -55,7 +55,9 @@ export class Event extends AbstractEntity {
   @Column({ name: 'short_description' })
   shortDescription: string;
 
-  @ApiProperty({ description: 'Detailed description with text and media segments' })
+  @ApiProperty({
+    description: 'Detailed description with text and media segments',
+  })
   @Column({ type: 'json', name: 'detailed_description' })
   detailedDescription: DetailedDescriptionSegment[];
 
@@ -156,4 +158,23 @@ export class Event extends AbstractEntity {
 
   @OneToMany('EventContribution', (contribution: any) => contribution.event)
   contributions: EventContribution[];
+
+  @Column({ name: 'page_number', default: 1 })
+  pageNumber: number;
+
+  @Column({ type: 'boolean', name: 'is_approved', default: false })
+  isApproved: boolean;
+
+  @Column({ type: 'varchar', name: 'rejection_reason', nullable: true })
+  rejectionReason: string | null;
+
+  @Column({
+    type: 'varchar',
+    default: EventVisibilityStatus.PUBLIC,
+    name: 'visibility_status',
+  })
+  visibilityStatus: EventVisibilityStatus;
+
+  @Column({ type: 'boolean', name: 'is_published', default: false })
+  isPublished: boolean;
 }

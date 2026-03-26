@@ -5,6 +5,7 @@ import {
   Logger,
   Inject,
   forwardRef,
+  ForbiddenException,
 } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
@@ -16,8 +17,10 @@ import {
 } from '../repository';
 import {
   CreateEventDto,
-  UpdateEventDto,
   ContributeToEventDto,
+  UpdateEventDraftDto,
+  GetAllEventsDto,
+  GetMyEventsDto,
 } from '../dto/event.dto';
 import { Event, EventOrganizer, EventContribution } from '../entities';
 import { User } from '../../user/entities';
@@ -65,11 +68,11 @@ export class EventService {
       startTime,
       spanMultipleDays,
       endDateTime,
-      organizers,
-      internalOrganizers,
-      detailedDescription,
-      location,
-      financing,
+      // organizers,
+      // internalOrganizers,
+      // detailedDescription,
+      // location,
+      // financing,
     } = createEventDto;
 
     // Resolve category
@@ -85,7 +88,9 @@ export class EventService {
     }
 
     if (!category) {
-      throw new NotFoundException(`Category ${categoryName} could not be resolved`);
+      throw new NotFoundException(
+        `Category ${categoryName} could not be resolved`,
+      );
     }
 
     const qr = this.dataSource.createQueryRunner();
@@ -104,18 +109,19 @@ export class EventService {
         startTime,
         spanMultipleDays: spanMultipleDays || false,
         endDateTime: endDateTime ? new Date(endDateTime) : null,
-        detailedDescription,
-        location,
-        venueName: location.venueName || '',
-        targetAmount: financing.targetAmount || 0,
-        expectedParticipants: financing.expectedParticipants || 0,
-        acceptDonations: financing.acceptDonations ?? true,
-        purchasableItems: financing.purchasableItems || [],
-        activities: financing.activities || [],
-        externalOrganizers: organizers || [],
+        detailedDescription: [],
+        location: {},
+        venueName: '',
+        targetAmount: 0,
+        expectedParticipants: 0,
+        acceptDonations: true,
+        purchasableItems: [],
+        activities: [],
+        externalOrganizers: [],
         creatorId: user.id,
         status: EventStatus.ACTIVE,
         amountRaised: 0,
+        pageNumber: 1,
       });
 
       const savedEvent = await qr.manager.save(event);
@@ -129,24 +135,168 @@ export class EventService {
       await qr.manager.save(creatorOrganizer);
 
       // Add other internal organizers
-      if (internalOrganizers && internalOrganizers.length > 0) {
-        const otherOrganizers = internalOrganizers
-          .filter((o) => o.userId !== user.id)
-          .map((o) =>
-            qr.manager.create(EventOrganizer, {
-              eventId: savedEvent.id,
-              userId: o.userId,
-              role: o.role,
-            }),
-          );
-        await qr.manager.save(EventOrganizer, otherOrganizers);
-      }
+      // if (internalOrganizers && internalOrganizers.length > 0) {
+      //   const otherOrganizers = internalOrganizers
+      //     .filter((o) => o.userId !== user.id)
+      //     .map((o) =>
+      //       qr.manager.create(EventOrganizer, {
+      //         eventId: savedEvent.id,
+      //         userId: o.userId,
+      //         role: o.role,
+      //       }),
+      //     );
+      //   await qr.manager.save(EventOrganizer, otherOrganizers);
+      // }
 
       await qr.commitTransaction();
       return savedEvent;
     } catch (err) {
       await qr.rollbackTransaction();
       this.logger.error('Failed to create event', err);
+      throw err;
+    } finally {
+      await qr.release();
+    }
+  }
+
+  async getMyDraft(userId: string): Promise<Event | null> {
+    return this.eventRepository.findOne({
+      where: { creatorId: userId, isPublished: false },
+      order: { updatedAt: 'DESC' },
+      relations: ['category', 'organizers'],
+    });
+  }
+
+  private async getOwnedDraft(eventId: string, userId: string): Promise<Event> {
+    const event = await this.eventRepository.findOne({
+      where: { id: eventId },
+    });
+    if (!event) throw new NotFoundException('Event not found');
+    if (event.creatorId !== userId)
+      throw new ForbiddenException('You do not own this event');
+    if (event.isPublished)
+      throw new BadRequestException(
+        'Event is already published — use the update endpoint',
+      );
+    return event;
+  }
+
+  private assertDraftIsComplete(event: Event): void {
+    const missing: string[] = [];
+    if (!event.name) missing.push('name');
+    if (!event.startDateTime || event.startDateTime.getTime() === 0)
+      missing.push('startDateTime');
+    if (!event.location?.address) missing.push('location');
+    if (!event.venueName) missing.push('venueName');
+    if (!event.shortDescription) missing.push('shortDescription');
+
+    if (missing.length) {
+      throw new BadRequestException(
+        `Cannot publish. Complete these fields first: ${missing.join(', ')}`,
+      );
+    }
+  }
+
+  async updateEventDraft(
+    eventId: string,
+    dto: UpdateEventDraftDto,
+    userId: string,
+  ): Promise<Event> {
+    const event = await this.getOwnedDraft(eventId, userId);
+    const { pageNumber } = dto;
+
+    const update: Partial<Event> = { pageNumber };
+
+    if (dto.name !== undefined) update.name = dto.name;
+    if (dto.hashtag !== undefined) update.hashtag = dto.hashtag;
+    if (dto.shortDescription !== undefined)
+      update.shortDescription = dto.shortDescription;
+    if (dto.coverImages !== undefined) update.coverImages = dto.coverImages;
+
+    // if (dto.category !== undefined) {
+    //   let category = await this.eventCategoryRepository.findOne({
+    //     where: { name: dto.category },
+    //   });
+    //   if (!category) {
+    //     category = await this.eventCategoryRepository.save(
+    //       this.eventCategoryRepository.create({
+    //         name: dto.category,
+    //         isActive: true,
+    //       }),
+    //     );
+    //   }
+    //   update.categoryId = category.id;
+    // }
+
+    if (dto.startDateTime !== undefined)
+      update.startDateTime = new Date(dto.startDateTime);
+    if (dto.startTime !== undefined) update.startTime = dto.startTime;
+    if (dto.endDateTime !== undefined)
+      update.endDateTime = new Date(dto.endDateTime);
+    if (dto.location !== undefined) {
+      update.location = dto.location;
+      update.venueName = dto.location.venueName ?? event.venueName ?? '';
+    }
+
+    // ── Step 3 fields ──────────────────────────────────────────────────────────
+    if (dto.detailedDescription !== undefined)
+      update.detailedDescription = dto.detailedDescription;
+    if (dto.targetAmount !== undefined) update.targetAmount = dto.targetAmount;
+    if (dto.expectedParticipants !== undefined)
+      update.expectedParticipants = dto.expectedParticipants;
+    if (dto.acceptDonations !== undefined)
+      update.acceptDonations = dto.acceptDonations;
+    if (dto.purchasableItems !== undefined)
+      update.purchasableItems = dto.purchasableItems;
+    if (dto.activities !== undefined) update.activities = dto.activities;
+
+    // ── Step 4 fields + publish ───────────────────────────────────────────────
+    if (dto.organizers !== undefined)
+      update.externalOrganizers = dto.organizers;
+    if (dto.visibilityStatus !== undefined)
+      update.visibilityStatus = dto.visibilityStatus;
+
+    if (pageNumber === 4) {
+      this.assertDraftIsComplete({ ...event, ...update } as Event);
+      update.isPublished = true;
+    }
+
+    const qr = this.dataSource.createQueryRunner();
+    await qr.connect();
+    await qr.startTransaction();
+
+    try {
+      await qr.manager.update(Event, eventId, update);
+
+      if (pageNumber === 4 && dto.internalOrganizers?.length) {
+        const existing = await qr.manager.find(EventOrganizer, {
+          where: { eventId },
+        });
+        const existingUserIds = new Set(existing.map((o) => o.userId));
+
+        const toAdd = dto.internalOrganizers
+          .filter((o) => o.userId !== userId && !existingUserIds.has(o.userId))
+          .map((o) =>
+            qr.manager.create(EventOrganizer, {
+              eventId,
+              userId: o.userId,
+              role: o.role,
+            }),
+          );
+
+        if (toAdd.length) await qr.manager.save(EventOrganizer, toAdd);
+
+        this.eventEmitter.emit('admin.event_created', {
+          eventId,
+          eventName: event.name,
+          creatorId: userId,
+        });
+      }
+
+      await qr.commitTransaction();
+      return this.findOne(eventId);
+    } catch (err) {
+      await qr.rollbackTransaction();
       throw err;
     } finally {
       await qr.release();
@@ -304,17 +454,149 @@ export class EventService {
       .getRawMany();
   }
 
-  async findAll(categoryId?: string) {
-    const query = this.eventRepository
+  async findAll(dto: GetAllEventsDto) {
+    const {
+      categoryId,
+      status,
+      search,
+      visibilityStatus,
+      fromDate,
+      toDate,
+      page = 1,
+      limit = 20,
+    } = dto;
+    const offset = (page - 1) * limit;
+
+    const qb = this.eventRepository
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.category', 'category')
       .leftJoinAndSelect('event.creator', 'creator')
-      .where('event.status = :status', { status: EventStatus.ACTIVE });
+      // .where('event.isPublished = :published', { published: true })
+      .andWhere('event.status = :status', {
+        status: status ?? EventStatus.ACTIVE,
+      });
 
     if (categoryId) {
-      query.andWhere('event.categoryId = :categoryId', { categoryId });
+      qb.andWhere('event.categoryId = :categoryId', { categoryId });
     }
 
-    return query.orderBy('event.createdAt', 'DESC').getMany();
+    if (visibilityStatus) {
+      qb.andWhere('event.visibilityStatus = :visibilityStatus', {
+        visibilityStatus,
+      });
+    } else {
+      qb.andWhere('event.visibilityStatus IN (:...publicTypes)', {
+        publicTypes: ['public', 'public_registration'],
+      });
+    }
+
+    if (search) {
+      qb.andWhere(
+        `(event.name LIKE :search
+        OR event.hashtag LIKE :search
+        OR event.shortDescription LIKE :search)`,
+        { search: `%${search}%` },
+      );
+    }
+
+    if (fromDate) {
+      qb.andWhere('event.startDateTime >= :fromDate', {
+        fromDate: new Date(fromDate),
+      });
+    }
+
+    if (toDate) {
+      qb.andWhere('event.startDateTime <= :toDate', {
+        toDate: new Date(toDate),
+      });
+    }
+
+    const [events, total] = await qb
+      .orderBy('event.startDateTime', 'ASC')
+      .skip(offset)
+      .take(limit)
+      .getManyAndCount();
+
+    return {
+      events: events.map((e) => this.shapeEventResponse(e)),
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getMyEvents(userId: string, dto: GetMyEventsDto) {
+    const {
+      categoryId,
+      status,
+      search,
+      publishedStatus = 'all',
+      fromDate,
+      toDate,
+      page = 1,
+      limit = 20,
+    } = dto;
+    const offset = (page - 1) * limit;
+
+    const qb = this.eventRepository
+      .createQueryBuilder('event')
+      .leftJoinAndSelect('event.category', 'category')
+      .leftJoinAndSelect('event.organizers', 'organizers')
+      .where('event.creatorId = :userId', { userId });
+
+    if (publishedStatus === 'published') {
+      qb.andWhere('event.isPublished = true');
+    } else if (publishedStatus === 'draft') {
+      qb.andWhere('event.isPublished = false');
+    }
+
+    if (status) {
+      qb.andWhere('event.status = :status', { status });
+    }
+
+    if (categoryId) {
+      qb.andWhere('event.categoryId = :categoryId', { categoryId });
+    }
+
+    if (search) {
+      qb.andWhere(`(event.name LIKE :search OR event.hashtag LIKE :search)`, {
+        search: `%${search}%`,
+      });
+    }
+
+    if (fromDate) {
+      qb.andWhere('event.startDateTime >= :fromDate', {
+        fromDate: new Date(fromDate),
+      });
+    }
+
+    if (toDate) {
+      qb.andWhere('event.startDateTime <= :toDate', {
+        toDate: new Date(toDate),
+      });
+    }
+
+    const [events, total] = await qb
+      .orderBy('event.createdAt', 'DESC')
+      .skip(offset)
+      .take(limit)
+      .getManyAndCount();
+
+    return {
+      events: events.map((e) => this.shapeEventResponse(e)),
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  private shapeEventResponse(event: Event) {
+    return {
+      ...event,
+      creatorName: event.creator
+        ? `${event.creator.firstName ?? ''} ${event.creator.lastName ?? ''}`.trim() ||
+          event.creator.email
+        : null,
+    };
   }
 }

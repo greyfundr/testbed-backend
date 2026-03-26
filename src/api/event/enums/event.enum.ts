@@ -21,3 +21,10 @@ export enum EventPaymentMethod {
   WALLET = 'wallet',
   PAYSTACK = 'paystack',
 }
+
+export enum EventVisibilityStatus {
+  PRIVATE = 'private',
+  PRIVATE_INVITATION = 'private_invitation',
+  PUBLIC = 'public',
+  PUBLIC_REGISTRATION = 'public_registration',
+}
