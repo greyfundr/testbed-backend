@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -11,6 +12,10 @@ import {
   DynamicLinkProjectRepository,
   DynamicLinkRepository,
 } from '../repository';
+import {
+  CreateDynamicLinkProjectDto,
+  UpdateDynamicLinkProjectDto,
+} from '../dtos/dynamic-link.dto';
 
 export interface GenerateLinkOptions {
   type: DynamicLinkType;
@@ -38,18 +43,104 @@ export class DynamicLinkService implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
+    await this.reloadProject();
+  }
+
+  async reloadProject(): Promise<void> {
     this.project = await this.projectRepo.findOne({
-      where: { name: 'GreyFundr', isActive: true },
+      where: { name: 'Greyfundr', isActive: true },
     });
 
     if (!this.project) {
       this.logger.warn(
-        '[DynamicLinkService] No active GreyFundr project found. ' +
-          'Dynamic links will not be generated until a project is seeded.',
+        '[DynamicLinkService] No active Greyfundr project found.',
       );
     } else {
-      this.logger.log('[DynamicLinkService] Project loaded ✅');
+      this.logger.log(
+        `[DynamicLinkService] Project loaded: ${this.project.id} ✅`,
+      );
     }
+  }
+
+  async create(dto: CreateDynamicLinkProjectDto) {
+    const exists = await this.projectRepo.findOne({
+      where: { name: dto.name },
+    });
+
+    if (exists) {
+      throw new ConflictException(
+        `A project named "${dto.name}" already exists.`,
+      );
+    }
+
+    const newProject = await this.projectRepo.create({
+      name: dto.name,
+      appScheme: dto.appScheme,
+      ios: dto.ios,
+      android: dto.android,
+      isActive: dto.isActive ?? true,
+    });
+
+    const project = await this.projectRepo.save(newProject);
+
+    await this.reloadProject();
+
+    return project;
+  }
+
+  async activate(id: string): Promise<DynamicLinkProject> {
+    const project = await this.projectRepo.findOne({ where: { id } });
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+    project.isActive = true;
+    const saved = await this.projectRepo.save(project);
+    await this.reloadProject(); // ✅ refresh cache
+    return saved;
+  }
+
+  async deactivate(id: string): Promise<DynamicLinkProject> {
+    const project = await this.projectRepo.findOne({ where: { id } });
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+    project.isActive = false;
+    const saved = await this.projectRepo.save(project);
+    await this.reloadProject(); // ✅ refresh cache
+    return saved;
+  }
+
+  async update(
+    id: string,
+    dto: UpdateDynamicLinkProjectDto,
+  ): Promise<DynamicLinkProject> {
+    const project = await this.projectRepo.findOne({ where: { id } });
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+
+    if (dto.name && dto.name !== project.name) {
+      const nameExists = await this.projectRepo.findOne({
+        where: { name: dto.name },
+      });
+      if (nameExists) {
+        throw new ConflictException(
+          `A project named "${dto.name}" already exists.`,
+        );
+      }
+    }
+
+    Object.assign(project, {
+      ...(dto.name !== undefined && { name: dto.name }),
+      ...(dto.appScheme !== undefined && { appScheme: dto.appScheme }),
+      ...(dto.ios !== undefined && { ios: dto.ios }),
+      ...(dto.android !== undefined && { android: dto.android }),
+      ...(dto.isActive !== undefined && { isActive: dto.isActive }),
+    });
+
+    const saved = await this.projectRepo.save(project);
+    await this.reloadProject();
+    return saved;
   }
 
   async generate(options: GenerateLinkOptions): Promise<GeneratedLink> {

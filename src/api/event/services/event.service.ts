@@ -14,6 +14,7 @@ import {
   EventCategoryRepository,
   EventOrganizerRepository,
   EventContributionRepository,
+  EventRsvpRepository,
 } from '../repository';
 import {
   CreateEventDto,
@@ -21,8 +22,17 @@ import {
   UpdateEventDraftDto,
   GetAllEventsDto,
   GetMyEventsDto,
+  GuestRsvpDto,
+  RsvpDto,
+  UpdateRsvpDto,
 } from '../dto/event.dto';
-import { Event, EventOrganizer, EventContribution } from '../entities';
+import {
+  Event,
+  EventOrganizer,
+  EventContribution,
+  EventRsvp,
+  RsvpStatus,
+} from '../entities';
 import { User } from '../../user/entities';
 import { WalletService } from '../../wallet/services/wallet.service';
 import { Transaction } from '../../transaction/entities';
@@ -36,6 +46,7 @@ import {
   EventOrganizerRole,
   EventContributionType,
   EventPaymentMethod,
+  EventVisibilityStatus,
 } from '../enums/event.enum';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PaymentService } from '../../payment/services/payment.service';
@@ -51,6 +62,7 @@ export class EventService {
     private readonly eventCategoryRepository: EventCategoryRepository,
     private readonly eventOrganizerRepository: EventOrganizerRepository,
     private readonly eventContributionRepository: EventContributionRepository,
+    private readonly eventRsvpRepository: EventRsvpRepository,
     @Inject(forwardRef(() => WalletService))
     private readonly walletService: WalletService,
     @Inject(forwardRef(() => PaymentService))
@@ -71,11 +83,7 @@ export class EventService {
       startTime,
       spanMultipleDays,
       endDateTime,
-      // organizers,
-      // internalOrganizers,
-      // detailedDescription,
-      // location,
-      // financing,
+      visibilityStatus,
     } = createEventDto;
 
     let category = await this.eventCategoryRepository.findOne({
@@ -121,6 +129,7 @@ export class EventService {
         status: EventStatus.ACTIVE,
         amountRaised: 0,
         pageNumber: 1,
+        visibilityStatus,
       });
 
       savedEvent = await qr.manager.save(Event, event);
@@ -259,6 +268,7 @@ export class EventService {
       update.externalOrganizers = dto.organizers;
     if (dto.visibilityStatus !== undefined)
       update.visibilityStatus = dto.visibilityStatus;
+    if (dto.isPublished !== undefined) update.isPublished = dto.isPublished;
 
     if (pageNumber === 4) {
       this.assertDraftIsComplete({ ...event, ...update } as Event);
@@ -602,5 +612,212 @@ export class EventService {
           event.creator.email
         : null,
     };
+  }
+
+  async rsvpAsUser(
+    eventId: string,
+    user: User,
+    dto: RsvpDto,
+  ): Promise<EventRsvp> {
+    const event = await this.getPublishedEvent(eventId);
+
+    this.assertEventAcceptsRsvp(event);
+
+    // if (event.visibilityStatus === EventVisibilityStatus.PRIVATE) {
+    //   throw new ForbiddenException(
+    //     'This event is private. Contact the organiser to be added.',
+    //   );
+    // }
+
+    const existing = await this.eventRsvpRepository.findOne({
+      where: { eventId, userId: user.id },
+    });
+
+    if (existing) {
+      return this.eventRsvpRepository.save({
+        ...existing,
+        status: dto.status ?? existing.status,
+        guestCount: dto.guestCount ?? existing.guestCount,
+        note: dto.note ?? existing.note,
+        respondedAt: new Date(),
+      });
+    }
+
+    const name =
+      dto.name ||
+      `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() ||
+      user.email;
+
+    return this.eventRsvpRepository.save(
+      await this.eventRsvpRepository.create({
+        eventId,
+        userId: user.id,
+        name,
+        guestEmail: user.email,
+        guestPhone: user.phoneNumber,
+        status: dto.status ?? RsvpStatus.ATTENDING,
+        guestCount: dto.guestCount ?? 1,
+        note: dto.note ?? null,
+        selfRegistered: true,
+        respondedAt: new Date(),
+      }),
+    );
+  }
+
+  async rsvpAsGuest(eventId: string, dto: GuestRsvpDto): Promise<EventRsvp> {
+    const event = await this.getPublishedEvent(eventId);
+
+    this.assertEventAcceptsRsvp(event);
+
+    if (
+      event.visibilityStatus === EventVisibilityStatus.PRIVATE ||
+      event.visibilityStatus === EventVisibilityStatus.PRIVATE_INVITATION
+    ) {
+      throw new ForbiddenException(
+        'This event requires an account to RSVP. Please download the GreyFundr app.',
+      );
+    }
+
+    if (!dto.email && !dto.phone) {
+      throw new BadRequestException(
+        'At least one contact (email or phone) is required to RSVP as a guest.',
+      );
+    }
+
+    if (dto.email) {
+      const emailExists = await this.eventRsvpRepository.findOne({
+        where: { eventId, guestEmail: dto.email },
+      });
+      if (emailExists) {
+        throw new BadRequestException(
+          'An RSVP with this email already exists for this event.',
+        );
+      }
+    }
+
+    return this.eventRsvpRepository.save(
+      await this.eventRsvpRepository.create({
+        eventId,
+        userId: null,
+        name: dto.name.trim(),
+        guestEmail: dto.email ?? null,
+        guestPhone: dto.phone ?? null,
+        status: dto.status ?? RsvpStatus.ATTENDING,
+        guestCount: dto.guestCount ?? 1,
+        note: dto.note ?? null,
+        selfRegistered: true,
+        respondedAt: new Date(),
+      }),
+    );
+  }
+
+  async updateRsvp(
+    rsvpId: string,
+    userId: string,
+    dto: UpdateRsvpDto,
+  ): Promise<EventRsvp> {
+    const rsvp = await this.eventRsvpRepository.findOne({
+      where: { id: rsvpId },
+    });
+    if (!rsvp) throw new NotFoundException('RSVP not found');
+    if (rsvp.userId !== userId) {
+      throw new ForbiddenException('You can only update your own RSVP');
+    }
+
+    return this.eventRsvpRepository.save({
+      ...rsvp,
+      ...(dto.status !== undefined && { status: dto.status }),
+      ...(dto.guestCount !== undefined && { guestCount: dto.guestCount }),
+      ...(dto.note !== undefined && { note: dto.note }),
+      respondedAt: new Date(),
+    });
+  }
+
+  async cancelRsvp(rsvpId: string, userId: string): Promise<void> {
+    const rsvp = await this.eventRsvpRepository.findOne({
+      where: { id: rsvpId },
+    });
+    if (!rsvp) throw new NotFoundException('RSVP not found');
+    if (rsvp.userId !== userId) {
+      throw new ForbiddenException('You can only cancel your own RSVP');
+    }
+
+    await this.eventRsvpRepository.remove(rsvpId);
+  }
+
+  async getMyRsvp(eventId: string, userId: string): Promise<EventRsvp | null> {
+    return this.eventRsvpRepository.findOne({ where: { eventId, userId } });
+  }
+
+  async getEventRsvps(
+    eventId: string,
+    actorId: string,
+    page = 1,
+    limit = 50,
+    status?: RsvpStatus,
+  ): Promise<{ rsvps: EventRsvp[]; total: number; attending: number }> {
+    const event = await this.eventRepository.findOne({
+      where: { id: eventId },
+    });
+    if (!event) throw new NotFoundException('Event not found');
+
+    if (event.creatorId !== actorId) {
+      const { EventOrganizerRepository } = await import('../repository');
+      throw new ForbiddenException(
+        'Only organizers can view the full RSVP list',
+      );
+    }
+
+    const qb = this.eventRsvpRepository
+      .createQueryBuilder('rsvp')
+      .leftJoinAndSelect('rsvp.user', 'user')
+      .where('rsvp.eventId = :eventId', { eventId });
+
+    if (status) {
+      qb.andWhere('rsvp.status = :status', { status });
+    }
+
+    const [rsvps, total] = await qb
+      .orderBy('rsvp.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+
+    const attending = await this.eventRsvpRepository
+      .createQueryBuilder('rsvp')
+      .select('SUM(rsvp.guest_count)', 'total')
+      .where('rsvp.eventId = :eventId', { eventId })
+      .andWhere('rsvp.status = :status', { status: RsvpStatus.ATTENDING })
+      .getRawOne()
+      .then((r) => Number(r?.total ?? 0));
+
+    return { rsvps, total, attending };
+  }
+
+  private async getPublishedEvent(eventId: string) {
+    const event = await this.eventRepository.findOne({
+      where: { id: eventId },
+    });
+    if (!event) throw new NotFoundException('Event not found');
+    if (!event.isPublished) {
+      throw new BadRequestException(
+        'This event is not available for RSVP yet.',
+      );
+    }
+    return event;
+  }
+
+  private assertEventAcceptsRsvp(event: any): void {
+    if (event.status === EventStatus.CANCELLED) {
+      throw new BadRequestException('This event has been cancelled.');
+    }
+    if (event.status === EventStatus.COMPLETED) {
+      throw new BadRequestException('This event has already ended.');
+    }
+    if (event.startDateTime && new Date(event.startDateTime) < new Date()) {
+      throw new BadRequestException(
+        'This event has already started. RSVP is closed.',
+      );
+    }
   }
 }

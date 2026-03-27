@@ -17,6 +17,7 @@ export interface EventLocation {
 }
 
 export interface DetailedDescriptionSegment {
+  title?: string;
   text: string;
   media: string[];
 }

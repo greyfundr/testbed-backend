@@ -7,6 +7,9 @@ import {
   UseGuards,
   Patch,
   Query,
+  Delete,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -15,13 +18,16 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { EventService } from '../services/event.service';
-import { Event, EventContribution } from '../entities';
+import { Event, EventContribution, RsvpStatus } from '../entities';
 import {
   CreateEventDto,
   ContributeToEventDto,
   UpdateEventDraftDto,
   GetAllEventsDto,
   GetMyEventsDto,
+  RsvpDto,
+  GuestRsvpDto,
+  UpdateRsvpDto,
 } from '../dto/event.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { User } from '../../user/entities';
@@ -134,5 +140,140 @@ export class EventController {
   @Get(':id/leaderboard')
   async getLeaderboard(@Param('id') id: string) {
     return this.eventService.getLeaderboard(id);
+  }
+
+  @ApiOperation({
+    summary: 'RSVP to an event (for authenticated users)',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'The RSVP was successful.',
+    type: EventContribution,
+  })
+  @ApiBearerAuth('JWT-auth')
+  @Post(':eventId/rsvp')
+  @UseGuards(JwtAuthGuard)
+  async rsvp(
+    @Param('eventId') eventId: string,
+    @CurrentUser() user: User,
+    @Body() dto: RsvpDto,
+  ) {
+    const rsvp = await this.eventService.rsvpAsUser(eventId, user, dto);
+    return {
+      success: true,
+      message: `RSVP recorded — you are marked as "${rsvp.status}"`,
+      data: rsvp,
+    };
+  }
+
+  @ApiOperation({
+    summary: 'RSVP to an event (for guests without an account)',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'The RSVP was successful.',
+    type: EventContribution,
+  })
+  @ApiBearerAuth('JWT-auth')
+  @Post(':eventId/rsvp/guest')
+  @UseGuards(JwtAuthGuard)
+  async rsvpAsGuest(
+    @Param('eventId') eventId: string,
+    @Body() dto: GuestRsvpDto,
+  ) {
+    const rsvp = await this.eventService.rsvpAsGuest(eventId, dto);
+    return {
+      success: true,
+      message: `RSVP recorded — you are marked as "${rsvp.status}"`,
+      data: rsvp,
+    };
+  }
+
+  @ApiOperation({
+    summary: 'Update your RSVP for an event',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'The RSVP update was successful.',
+    type: EventContribution,
+  })
+  @ApiBearerAuth('JWT-auth')
+  @Patch(':eventId/event/rsvp/:rsvpId')
+  @UseGuards(JwtAuthGuard)
+  async updateRsvp(
+    @Param('rsvpId') rsvpId: string,
+    @CurrentUser() user: User,
+    @Body() dto: UpdateRsvpDto,
+  ) {
+    const rsvp = await this.eventService.updateRsvp(rsvpId, user.id, dto);
+    return {
+      success: true,
+      message: 'RSVP updated',
+      data: rsvp,
+    };
+  }
+
+  @ApiOperation({
+    summary: 'Delete your RSVP for an event',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'The RSVP deletion was successful.',
+    type: EventContribution,
+  })
+  @ApiBearerAuth('JWT-auth')
+  @Delete(':eventId/event/rsvp/:rsvpId')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async cancelRsvp(@Param('rsvpId') rsvpId: string, @CurrentUser() user: User) {
+    await this.eventService.cancelRsvp(rsvpId, user.id);
+    return { success: true, message: 'RSVP cancelled' };
+  }
+
+  @ApiOperation({
+    summary: 'Get your RSVP for an event',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'The RSVP retrieval was successful.',
+    type: EventContribution,
+  })
+  @ApiBearerAuth('JWT-auth')
+  @Get(':eventId/event/rsvp/me')
+  @UseGuards(JwtAuthGuard)
+  async getMyRsvp(
+    @Param('eventId') eventId: string,
+    @CurrentUser() user: User,
+  ) {
+    const rsvp = await this.eventService.getMyRsvp(eventId, user.id);
+    return { success: true, data: rsvp };
+  }
+
+  @ApiOperation({
+    summary: 'Get all RSVPs for an event (organizers only)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'The RSVP retrieval was successful.',
+    type: EventContribution,
+  })
+  @ApiBearerAuth('JWT-auth')
+  @Get(':eventId/event/rsvp')
+  @UseGuards(JwtAuthGuard)
+  async getEventRsvps(
+    @Param('eventId') eventId: string,
+    @CurrentUser() user: User,
+    @Query('page') page = 1,
+    @Query('limit') limit = 50,
+    @Query('status') status?: RsvpStatus,
+  ) {
+    const result = await this.eventService.getEventRsvps(
+      eventId,
+      user.id,
+      +page,
+      +limit,
+      status,
+    );
+    return { success: true, data: result };
   }
 }

@@ -7,12 +7,14 @@ import {
   EventCategory,
   EventOrganizer,
   EventContribution,
+  EventRsvp,
 } from './entities';
 import {
   EventRepository,
   EventCategoryRepository,
   EventOrganizerRepository,
   EventContributionRepository,
+  EventRsvpRepository,
 } from './repository';
 import { EventGateway } from './gateways/event.gateway';
 import { WalletModule } from '../wallet/wallet.module';
@@ -28,6 +30,7 @@ import { DynamicLinkModule } from '../dynamic-link/dynamic-link.module';
       EventCategory,
       EventOrganizer,
       EventContribution,
+      EventRsvp,
     ]),
     forwardRef(() => WalletModule),
     forwardRef(() => TransactionModule),
@@ -43,6 +46,7 @@ import { DynamicLinkModule } from '../dynamic-link/dynamic-link.module';
     EventCategoryRepository,
     EventOrganizerRepository,
     EventContributionRepository,
+    EventRsvpRepository,
   ],
   exports: [EventService],
 })

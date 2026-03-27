@@ -3,6 +3,7 @@ import {
   EventCategory,
   EventOrganizer,
   EventContribution,
+  EventRsvp,
 } from '../entities';
 import { AbstractRepository } from '../../../common/entities';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -34,6 +35,12 @@ export class EventContributionRepository extends AbstractRepository<EventContrib
   constructor(
     @InjectRepository(EventContribution) repo: Repository<EventContribution>,
   ) {
+    super(repo);
+  }
+}
+
+export class EventRsvpRepository extends AbstractRepository<EventRsvp> {
+  constructor(@InjectRepository(EventRsvp) repo: Repository<EventRsvp>) {
     super(repo);
   }
 }

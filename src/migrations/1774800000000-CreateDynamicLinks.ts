@@ -53,24 +53,27 @@ export class CreateDynamicLinks1774800000000 implements MigrationInterface {
 
     // Seed the Greyfundr project — update values to match your real app config
     await queryRunner.query(`
-      INSERT INTO \`dynamic_link_projects\` (
-        \`id\`, \`name\`, \`app_scheme\`, \`ios\`, \`android\`, \`is_active\`
-      ) VALUES (
-        UUID(),
-        'GreyFundr',
-        'greyfundr',
-        JSON_OBJECT(
-          'bundleId',    'com.greyfundr.app',
-          'appStoreUrl', 'https://apps.apple.com/app/greyfundr/id0000000000',
-          'teamId',      'YOUR_APPLE_TEAM_ID'
+        INSERT INTO \`dynamic_link_projects\` (
+            \`id\`, \`name\`, \`app_scheme\`, \`ios\`, \`android\`, \`is_active\`
+        ) VALUES (
+            UUID(),
+            'Greyfundr',
+            'greyfundr',
+            JSON_OBJECT(
+            'bundleId',    'com.greyfundr.ios',
+            'appStoreUrl', 'https://greyfundr.com/',
+            'teamId',      ''
+            ),
+            JSON_OBJECT(
+            'packageName',            'com.greyfundr.android',
+            'playStoreUrl',           'https://greyfundr.com/',
+            'sha256CertFingerprints', JSON_ARRAY(
+                '34:C8:94:A0:79:5A:D9:AA:31:E1:47:73:4D:05:3B:8C:21:7A:DE:73:5E:97:D3:9C:B9:82:0A:2B:C2:DA:47:FB',
+                '69:48:65:4C:B5:79:A2:A8:27:43:49:CD:52:14:65:07:61:44:5F:0F:6E:B2:AB:A7:C4:1F:FB:02:F7:96:A2:76'
+            )
         ),
-        JSON_OBJECT(
-          'packageName',             'com.greyfundr.app',
-          'playStoreUrl',            'https://play.google.com/store/apps/details?id=com.greyfundr.app',
-          'sha256CertFingerprints',  JSON_ARRAY('YOUR:SHA256:FINGERPRINT')
-        ),
-        1
-      )
+            1
+        )
     `);
   }
 

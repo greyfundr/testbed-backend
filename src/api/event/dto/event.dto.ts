@@ -13,6 +13,7 @@ import {
   Max,
   Min,
   IsInt,
+  IsEmail,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import {
@@ -22,6 +23,7 @@ import {
   EventPaymentMethod,
   EventVisibilityStatus,
 } from '../enums/event.enum';
+import { RsvpStatus } from '../entities';
 
 class EventLocationDto {
   @ApiProperty()
@@ -49,6 +51,11 @@ class EventLocationDto {
 }
 
 class DetailedDescriptionSegmentDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  title: string;
+
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
@@ -202,6 +209,10 @@ export class CreateEventDto {
   @IsOptional()
   endDateTime?: string;
 
+  @IsEnum(EventVisibilityStatus)
+  @IsOptional()
+  visibilityStatus?: EventVisibilityStatus;
+
   // @ApiProperty({ type: [ExternalOrganizerDto] })
   // @IsArray()
   // @IsOptional()
@@ -330,6 +341,10 @@ export class UpdateEventDraftDto {
   @IsEnum(EventVisibilityStatus)
   @IsOptional()
   visibilityStatus?: EventVisibilityStatus;
+
+  @ApiProperty()
+  @IsOptional()
+  isPublished?: boolean;
 }
 
 export class ContributeToEventDto {
@@ -394,4 +409,74 @@ export class GetMyEventsDto extends GetAllEventsDto {
   @IsOptional()
   @IsEnum(['published', 'draft', 'all'])
   publishedStatus?: 'published' | 'draft' | 'all' = 'all';
+}
+
+// ── RSVP related DTOs ──────────────────────────────────────────────────────────
+
+export class RsvpDto {
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @IsEnum(RsvpStatus)
+  @IsOptional()
+  status?: RsvpStatus = RsvpStatus.ATTENDING;
+
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  @IsOptional()
+  @Type(() => Number)
+  guestCount?: number = 1;
+
+  @IsString()
+  @IsOptional()
+  note?: string;
+}
+
+export class GuestRsvpDto {
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  // At least one contact required for guests
+  @IsEmail()
+  @IsOptional()
+  email?: string;
+
+  @IsString()
+  @IsOptional()
+  phone?: string;
+
+  @IsEnum(RsvpStatus)
+  @IsOptional()
+  status?: RsvpStatus = RsvpStatus.ATTENDING;
+
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  @IsOptional()
+  @Type(() => Number)
+  guestCount?: number = 1;
+
+  @IsString()
+  @IsOptional()
+  note?: string;
+}
+
+export class UpdateRsvpDto {
+  @IsEnum(RsvpStatus)
+  @IsOptional()
+  status?: RsvpStatus;
+
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  @IsOptional()
+  @Type(() => Number)
+  guestCount?: number;
+
+  @IsString()
+  @IsOptional()
+  note?: string;
 }
