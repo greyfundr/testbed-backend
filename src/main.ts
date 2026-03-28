@@ -25,7 +25,13 @@ async function bootstrap() {
     );
 
     // Global prefix should be set before versioning and CORS
-    app.setGlobalPrefix('api');
+    app.setGlobalPrefix('api', {
+      exclude: [
+        'l/:shortCode',
+        '.well-known/apple-app-site-association',
+        '.well-known/assetlinks.json',
+      ],
+    });
 
     // Versioning
     app.enableVersioning({

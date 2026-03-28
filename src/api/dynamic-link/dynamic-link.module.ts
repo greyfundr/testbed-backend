@@ -7,6 +7,7 @@ import {
   DynamicLinkProjectRepository,
   DynamicLinkRepository,
 } from './repository';
+import { DynamicLinkRedirectController } from './controllers/dynamic-link-redirect.controller';
 
 @Module({
   imports: [TypeOrmModule.forFeature([DynamicLink, DynamicLinkProject])],
@@ -16,6 +17,6 @@ import {
     DynamicLinkProjectRepository,
   ],
   exports: [DynamicLinkService],
-  controllers: [DynamicLinkController],
+  controllers: [DynamicLinkController, DynamicLinkRedirectController],
 })
 export class DynamicLinkModule {}
