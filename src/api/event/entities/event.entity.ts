@@ -7,6 +7,7 @@ import { EventOrganizer } from './event-organizer.entity';
 import { EventContribution } from './event-contribution.entity';
 import { EventStatus, EventVisibilityStatus } from '../enums/event.enum';
 import { BigIntAmountTransformer } from '../../../common/transformers/column-numeric.transformer';
+import { EventRsvp } from './event-rsvp.entity';
 
 export interface EventLocation {
   lat: number;
@@ -181,4 +182,9 @@ export class Event extends AbstractEntity {
 
   @Column({ type: 'varchar', length: 500, nullable: true, name: 'share_link' })
   shareLink: string | null;
+
+  @OneToMany(() => EventRsvp, (rsvp) => rsvp.event)
+  rsvps: EventRsvp[];
+
+  rsvpCount?: number;
 }

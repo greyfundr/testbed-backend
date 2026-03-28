@@ -319,10 +319,15 @@ export class EventService {
   }
 
   async findOne(id: string): Promise<Event> {
-    const event = await this.eventRepository.findOne({
-      where: { id },
-      relations: ['category', 'creator', 'organizers', 'organizers.user'],
-    });
+    const event = await this.eventRepository
+      .createQueryBuilder('event')
+      .leftJoinAndSelect('event.category', 'category')
+      .leftJoinAndSelect('event.creator', 'creator')
+      .leftJoinAndSelect('event.organizers', 'organizers')
+      .leftJoinAndSelect('organizers.user', 'user')
+      .loadRelationCountAndMap('event.rsvpCount', 'event.rsvps')
+      .where('event.id = :id', { id })
+      .getOne();
 
     if (!event) {
       throw new NotFoundException('Event not found');
@@ -486,6 +491,7 @@ export class EventService {
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.category', 'category')
       .leftJoinAndSelect('event.creator', 'creator')
+      .loadRelationCountAndMap('event.rsvpCount', 'event.rsvps')
       .where('event.visibilityStatus IN (:...publicTypes)', {
         publicTypes: ['public', 'public_registration'],
       })
@@ -560,6 +566,7 @@ export class EventService {
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.category', 'category')
       .leftJoinAndSelect('event.organizers', 'organizers')
+      .loadRelationCountAndMap('event.rsvpCount', 'event.rsvps')
       .where('event.creatorId = :userId', { userId });
 
     if (publishedStatus === 'published') {
