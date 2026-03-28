@@ -4,9 +4,8 @@ import { User } from '../../user/entities';
 import { Event } from './event.entity';
 
 export enum RsvpStatus {
-  ATTENDING = 'attending',
-  NOT_ATTENDING = 'not_attending',
-  MAYBE = 'maybe',
+  VENUE = 'venue',
+  ONLINE = 'online',
 }
 
 @Entity('event_rsvps')
@@ -43,7 +42,7 @@ export class EventRsvp extends AbstractEntity {
 
   @Column({
     type: 'varchar',
-    default: RsvpStatus.ATTENDING,
+    default: RsvpStatus.VENUE,
   })
   status: RsvpStatus;
 

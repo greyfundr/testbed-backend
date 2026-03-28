@@ -659,7 +659,7 @@ export class EventService {
         name,
         guestEmail: user.email,
         guestPhone: user.phoneNumber,
-        status: dto.status ?? RsvpStatus.ATTENDING,
+        status: dto.status ?? RsvpStatus.VENUE,
         guestCount: dto.guestCount ?? 1,
         note: dto.note ?? null,
         selfRegistered: true,
@@ -706,7 +706,7 @@ export class EventService {
         name: dto.name.trim(),
         guestEmail: dto.email ?? null,
         guestPhone: dto.phone ?? null,
-        status: dto.status ?? RsvpStatus.ATTENDING,
+        status: dto.status ?? RsvpStatus.VENUE,
         guestCount: dto.guestCount ?? 1,
         note: dto.note ?? null,
         selfRegistered: true,
@@ -790,7 +790,7 @@ export class EventService {
       .createQueryBuilder('rsvp')
       .select('SUM(rsvp.guest_count)', 'total')
       .where('rsvp.eventId = :eventId', { eventId })
-      .andWhere('rsvp.status = :status', { status: RsvpStatus.ATTENDING })
+      .andWhere('rsvp.status = :status', { status: RsvpStatus.VENUE })
       .getRawOne()
       .then((r) => Number(r?.total ?? 0));
 

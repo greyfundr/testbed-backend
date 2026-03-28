@@ -420,7 +420,7 @@ export class RsvpDto {
 
   @IsEnum(RsvpStatus)
   @IsOptional()
-  status?: RsvpStatus = RsvpStatus.ATTENDING;
+  status?: RsvpStatus = RsvpStatus.VENUE;
 
   @IsInt()
   @Min(1)
@@ -450,7 +450,7 @@ export class GuestRsvpDto {
 
   @IsEnum(RsvpStatus)
   @IsOptional()
-  status?: RsvpStatus = RsvpStatus.ATTENDING;
+  status?: RsvpStatus = RsvpStatus.VENUE;
 
   @IsInt()
   @Min(1)
