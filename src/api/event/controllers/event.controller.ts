@@ -28,6 +28,7 @@ import {
   RsvpDto,
   GuestRsvpDto,
   UpdateRsvpDto,
+  GetMyRsvpEventsDto,
 } from '../dto/event.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { User } from '../../user/entities';
@@ -275,5 +276,20 @@ export class EventController {
       status,
     );
     return { success: true, data: result };
+  }
+
+  @ApiOperation({ summary: 'Get all events I have RSVPd to' })
+  @ApiResponse({
+    status: 200,
+    description: 'Return events with my RSVP status.',
+  })
+  @ApiBearerAuth('JWT-auth')
+  @Get('my-rsvps/all')
+  @UseGuards(JwtAuthGuard)
+  async getMyRsvpEvents(
+    @CurrentUser() user: User,
+    @Query() dto: GetMyRsvpEventsDto,
+  ) {
+    return this.eventService.getMyRsvpEvents(user.id, dto);
   }
 }

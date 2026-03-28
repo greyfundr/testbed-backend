@@ -25,6 +25,7 @@ import {
   GuestRsvpDto,
   RsvpDto,
   UpdateRsvpDto,
+  GetMyRsvpEventsDto,
 } from '../dto/event.dto';
 import {
   Event,
@@ -270,7 +271,7 @@ export class EventService {
       update.visibilityStatus = dto.visibilityStatus;
     if (dto.isPublished !== undefined) update.isPublished = dto.isPublished;
 
-    if (pageNumber === 4) {
+    if (pageNumber === 5) {
       this.assertDraftIsComplete({ ...event, ...update } as Event);
       update.isPublished = true;
     }
@@ -485,6 +486,9 @@ export class EventService {
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.category', 'category')
       .leftJoinAndSelect('event.creator', 'creator')
+      .where('event.visibilityStatus IN (:...publicTypes)', {
+        publicTypes: ['public', 'public_registration'],
+      })
       // .where('event.isPublished = :published', { published: true })
       .andWhere('event.status = :status', {
         status: status ?? EventStatus.ACTIVE,
@@ -762,7 +766,6 @@ export class EventService {
     if (!event) throw new NotFoundException('Event not found');
 
     if (event.creatorId !== actorId) {
-      const { EventOrganizerRepository } = await import('../repository');
       throw new ForbiddenException(
         'Only organizers can view the full RSVP list',
       );
@@ -792,6 +795,63 @@ export class EventService {
       .then((r) => Number(r?.total ?? 0));
 
     return { rsvps, total, attending };
+  }
+
+  async getMyRsvpEvents(
+    userId: string,
+    dto: GetMyRsvpEventsDto,
+  ): Promise<{
+    events: any[];
+    total: number;
+    page: number;
+    totalPages: number;
+  }> {
+    const { status, rsvpStatus, page = 1, limit = 20 } = dto;
+    const offset = (page - 1) * limit;
+
+    const qb = this.eventRepository
+      .createQueryBuilder('event')
+      .leftJoinAndSelect('event.category', 'category')
+      .leftJoin('event.creator', 'creator')
+      .addSelect(['creator.id', 'creator.firstName', 'creator.lastName'])
+      .innerJoinAndSelect(
+        'event_rsvps',
+        'rsvp',
+        'rsvp.event_id = event.id AND rsvp.user_id = :userId AND rsvp.deleted_at IS NULL',
+        { userId },
+      )
+      .where('event.isPublished = true');
+
+    if (status) {
+      qb.andWhere('event.status = :status', { status });
+    }
+
+    if (rsvpStatus) {
+      qb.andWhere('rsvp.status = :rsvpStatus', { rsvpStatus });
+    }
+
+    const total = await qb.getCount();
+    const raw = await qb
+      .orderBy('rsvp.responded_at', 'DESC')
+      .offset(offset)
+      .limit(limit)
+      .getRawAndEntities();
+
+    const events = raw.entities.map((event, index) => {
+      const r = raw.raw[index];
+      return {
+        ...this.shapeEventResponse(event),
+        myRsvp: {
+          rsvpId: r.rsvp_id,
+          status: r.rsvp_status,
+          guestCount: r.rsvp_guest_count,
+          note: r.rsvp_note,
+          respondedAt: r.rsvp_responded_at,
+        },
+      };
+    });
+
+    return { events, total, page, totalPages: Math.ceil(total / limit) };
   }
 
   private async getPublishedEvent(eventId: string) {
