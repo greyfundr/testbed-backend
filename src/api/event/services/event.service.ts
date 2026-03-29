@@ -188,10 +188,10 @@ export class EventService {
     if (!event) throw new NotFoundException('Event not found');
     if (event.creatorId !== userId)
       throw new ForbiddenException('You do not own this event');
-    if (event.isPublished)
-      throw new BadRequestException(
-        'Event is already published — use the update endpoint',
-      );
+    // if (event.isPublished)
+    //   throw new BadRequestException(
+    //     'Event is already published — use the update endpoint',
+    //   );
     return event;
   }
 
