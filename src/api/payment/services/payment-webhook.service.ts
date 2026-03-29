@@ -115,155 +115,6 @@ export class PaymentWebhookService {
     }
   }
 
-  // private async handleChargeSuccess(
-  //   data: PaystackChargeSuccessData,
-  // ): Promise<void> {
-  //   const { reference, amount, customer, channel } = data;
-
-  //   await this.paymentService.verifyTransaction(reference);
-
-  //   const qr = this.dataSource.createQueryRunner();
-  //   await qr.connect();
-  //   await qr.startTransaction();
-
-  //   try {
-  //     const existingTx = await qr.manager.findOne(Transaction, {
-  //       where: [
-  //         { gatewayReference: reference, status: TransactionStatus.PENDING },
-  //         { reference: reference, status: TransactionStatus.PENDING },
-  //       ],
-  //     });
-
-  //     let walletId: string | null;
-  //     let transactionId: string;
-  //     let amountKobo: number = amount;
-
-  //     if (existingTx) {
-  //       if (Number(existingTx.amount) !== Number(amount)) {
-  //         this.logger.error(
-  //           `Amount mismatch on ${reference}: recorded ${existingTx.amount} kobo, Paystack sent ${amount} kobo`,
-  //         );
-  //         await qr.rollbackTransaction();
-  //         await this.webhookLogRepo.update(
-  //           { gatewayReference: reference },
-  //           {
-  //             processingError: `Amount mismatch: expected ${existingTx.amount}, got ${amount}`,
-  //           },
-  //         );
-  //         return;
-  //       }
-
-  //       const claimed = await qr.manager
-  //         .createQueryBuilder()
-  //         .update(Transaction)
-  //         .set({
-  //           status: TransactionStatus.PROCESSING,
-  //           gatewayReference: reference,
-  //           // paymentGateway: 'paystack',
-  //           gatewayResponse: data,
-  //           confirmedAt: new Date(data.paid_at),
-  //           metadata: () =>
-  //             `JSON_MERGE_PATCH(COALESCE(metadata, '{}'), '${JSON.stringify({
-  //               channel,
-  //               senderName: data.authorization?.sender_name ?? null,
-  //               senderBank: data.authorization?.sender_bank ?? null,
-  //               senderAccount:
-  //                 data.authorization?.sender_bank_account_number ?? null,
-  //             })}')`,
-  //         })
-  //         .where('id = :id AND status = :status', {
-  //           id: existingTx.id,
-  //           status: TransactionStatus.PENDING,
-  //         })
-  //         .execute();
-
-  //       if (claimed.affected === 0) {
-  //         this.logger.warn(
-  //           `Webhook arrived after manual verify for ${reference} — skipping`,
-  //         );
-  //         await qr.rollbackTransaction();
-  //         return;
-  //       }
-
-  //       walletId = existingTx.walletId;
-  //       transactionId = existingTx.id;
-  //       amountKobo = existingTx.amount;
-  //     } else {
-  //       const virtualAccount = await qr.manager.findOne(VirtualAccount, {
-  //         where: { paystackCustomerCode: customer.customer_code },
-  //         relations: ['wallet'],
-  //       });
-
-  //       if (!virtualAccount) {
-  //         this.logger.error(
-  //           `charge.success — no virtual account for customer ${customer.customer_code} (ref: ${reference})`,
-  //         );
-  //         await qr.rollbackTransaction();
-  //         return;
-  //       }
-
-  //       if (!virtualAccount.wallet) {
-  //         this.logger.error(
-  //           `charge.success — virtual account ${virtualAccount.id} has no wallet`,
-  //         );
-  //         await qr.rollbackTransaction();
-  //         return;
-  //       }
-
-  //       walletId = virtualAccount.walletId;
-
-  //       const newTx = await qr.manager.save(Transaction, {
-  //         walletId,
-  //         amount: Number(amount) / 100,
-  //         currency: 'NGN',
-  //         type: TransactionType.WALLET_FUNDING,
-  //         direction: TransactionDirection.CREDIT,
-  //         status: TransactionStatus.PROCESSING,
-  //         reference: `WF-${uuidv4().replace(/-/g, '').substring(0, 16).toUpperCase()}`,
-  //         gatewayReference: reference,
-  //         // paymentGateway: 'paystack',
-  //         description: `Wallet top-up via ${this.channelLabel(channel)}`,
-  //         gatewayResponse: data,
-  //         confirmedAt: new Date(data.paid_at),
-  //         metadata: {
-  //           channel,
-  //           senderName: data.authorization?.sender_name ?? null,
-  //           senderBank: data.authorization?.sender_bank ?? null,
-  //           senderAccount:
-  //             data.authorization?.sender_bank_account_number ?? null,
-  //         },
-  //       });
-
-  //       transactionId = newTx.id;
-  //       amountKobo = amount;
-  //     }
-
-  //     await this.walletService.creditWallet({
-  //       walletId: walletId as string,
-  //       amount: Number(amountKobo) / 100,
-  //       transactionId,
-  //       sourceAccountType: LedgerAccountType.PAYMENT_GATEWAY,
-  //       description: `Top-up via ${this.channelLabel(channel)} — ${reference}`,
-  //       qr,
-  //     });
-
-  //     await qr.manager.update(Transaction, transactionId, {
-  //       status: TransactionStatus.COMPLETED,
-  //     });
-
-  //     await qr.commitTransaction();
-
-  //     this.logger.log(
-  //       `Wallet credited: ${amountKobo} kobo → wallet ${walletId} (ref: ${reference}, path: ${existingTx ? 'card' : 'dva'})`,
-  //     );
-  //   } catch (err) {
-  //     await qr.rollbackTransaction();
-  //     throw err;
-  //   } finally {
-  //     await qr.release();
-  //   }
-  // }
-
   private async handleChargeSuccess(
     data: PaystackChargeSuccessData,
   ): Promise<void> {
@@ -416,11 +267,6 @@ export class PaymentWebhookService {
       return;
     }
 
-    // 1. Credit User Wallet (Funding)
-    // We reuse processWalletFundingWebhook logic or call it directly?
-    // processWalletFundingWebhook expects customer.customer_code to find VirtualAccount.
-    // If they paid via Card, we might need to find wallet by userId.
-    
     const qr = this.dataSource.createQueryRunner();
     await qr.connect();
     await qr.startTransaction();
@@ -438,12 +284,11 @@ export class PaymentWebhookService {
         return;
       }
 
-      // Fund the wallet first
       const wallet = await this.walletService.getWalletByUserId(userId);
-      
+
       const fundingTx = await qr.manager.save(Transaction, {
         walletId: wallet.id,
-        amount: amountKobo, // Transaction stores in Kobo
+        amount: amountKobo,
         currency: 'NGN',
         type: TransactionType.WALLET_FUNDING,
         direction: TransactionDirection.CREDIT,
@@ -471,11 +316,15 @@ export class PaymentWebhookService {
       // 2. Finalize Contribution
       // We call eventService.contribute with WALLET method.
       // We need to fetch the User entity.
-      const user = await this.dataSource.manager.findOne(User, { where: { id: userId } });
+      const user = await this.dataSource.manager.findOne(User, {
+        where: { id: userId },
+      });
       if (!user) {
-        throw new Error(`User ${userId} not found for event contribution finalize`);
+        throw new Error(
+          `User ${userId} not found for event contribution finalize`,
+        );
       }
-      
+
       await this.eventService.contribute(
         eventId,
         {

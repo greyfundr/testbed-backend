@@ -348,7 +348,6 @@ export class EventService {
       throw new BadRequestException('Event is not active');
     }
 
-    // Check if event accepts donations for DONATION type
     if (type === EventContributionType.DONATION && !event.acceptDonations) {
       throw new BadRequestException('This event does not accept donations');
     }
@@ -427,7 +426,7 @@ export class EventService {
         userId: user.id,
         type,
         amount: amount, // Store in Naira (transformer handles DB conversion)
-        details,
+        details: details ?? {},
         transactionId: transaction.id,
       });
 

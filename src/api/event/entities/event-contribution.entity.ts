@@ -37,8 +37,8 @@ export class EventContribution extends AbstractEntity {
   })
   amount: number;
 
-  @Column({ type: 'json' })
-  details: any; // Stores specific info like activity name, item details, or gift info
+  @Column({ type: 'json', nullable: true })
+  details: any;
 
   @Column({ name: 'transaction_id', nullable: true })
   transactionId: string;
