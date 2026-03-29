@@ -247,7 +247,7 @@ export class CreateEventDto {
 export class UpdateEventDraftDto {
   @IsNumber()
   @Min(1)
-  @Max(4)
+  @Max(5)
   pageNumber: number;
 
   // ── Step 1 fields ──────────────────────────────────────────────────────────
