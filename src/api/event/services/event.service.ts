@@ -7,7 +7,7 @@ import {
   forwardRef,
   ForbiddenException,
 } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import {
   EventRepository,
@@ -886,6 +886,19 @@ export class EventService {
     });
 
     return { events, total, page, totalPages: Math.ceil(total / limit) };
+  }
+
+  async deleteAllEvents() {
+    const events = await this.eventRepository.findAll();
+    const eventIds = events.map((event) => event.id);
+
+    if (eventIds.length > 0) {
+      await this.eventOrganizerRepository.delete({ eventId: In(eventIds) });
+      await this.eventContributionRepository.delete({ eventId: In(eventIds) });
+      await this.eventRsvpRepository.delete({ eventId: In(eventIds) });
+
+      await this.eventRepository.delete({ id: In(eventIds) });
+    }
   }
 
   private async getPublishedEvent(eventId: string) {

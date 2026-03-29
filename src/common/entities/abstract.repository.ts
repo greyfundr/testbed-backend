@@ -97,6 +97,17 @@ export abstract class AbstractRepository<T extends AbstractEntity> {
     await this.getManager(em).delete(this.repository.target, id);
   }
 
+  async delete(
+    criteria: FindOptionsWhere<T>,
+    em?: EntityManager,
+  ): Promise<void> {
+    if (em) {
+      await em.delete(this.repository.target, criteria);
+    } else {
+      await this.repository.delete(criteria);
+    }
+  }
+
   createQueryBuilder(alias?: string, em?: EntityManager) {
     if (em) {
       return em.createQueryBuilder(this.repository.target, <string>alias);

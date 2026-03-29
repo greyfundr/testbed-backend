@@ -292,4 +292,17 @@ export class EventController {
   ) {
     return this.eventService.getMyRsvpEvents(user.id, dto);
   }
+
+  @ApiOperation({ summary: 'Delete all events (admin only)' })
+  @ApiResponse({
+    status: 200,
+    description: 'All events deleted successfully.',
+  })
+  @ApiBearerAuth('JWT-auth')
+  @Delete()
+  @UseGuards(JwtAuthGuard)
+  async deleteAll() {
+    await this.eventService.deleteAllEvents();
+    return { success: true, message: 'All events deleted' };
+  }
 }

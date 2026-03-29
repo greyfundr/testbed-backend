@@ -9,7 +9,7 @@ export class EventOrganizer extends AbstractEntity {
   @Column({ name: 'event_id' })
   eventId: string;
 
-  @ManyToOne(() => Event, (event) => event.organizers)
+  @ManyToOne(() => Event, (event) => event.organizers, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'event_id' })
   event: Event;
 

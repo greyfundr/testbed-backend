@@ -738,9 +738,10 @@ export class WalletService {
       if (!wallet) throw new NotFoundException('Wallet not found');
       if (wallet.status !== WalletStatus.ACTIVE)
         throw new ForbiddenException(`Wallet is ${wallet.status}`);
-      throw new BadRequestException(
-        `Insufficient available balance for escrow. Available: ${wallet.availableBalance} kobo`,
-      );
+
+      // throw new BadRequestException(
+      //   `Insufficient available balance for escrow. Available: ${wallet.availableBalance} kobo`,
+      // );
     }
 
     const wallet = await qr.manager
