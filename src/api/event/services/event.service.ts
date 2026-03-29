@@ -644,13 +644,14 @@ export class EventService {
     });
 
     if (existing) {
-      return this.eventRsvpRepository.save({
-        ...existing,
-        status: dto.status ?? existing.status,
-        guestCount: dto.guestCount ?? existing.guestCount,
-        note: dto.note ?? existing.note,
-        respondedAt: new Date(),
-      });
+      throw new BadRequestException('You have already RSVPed to this event');
+      // return this.eventRsvpRepository.save({
+      //   ...existing,
+      //   status: dto.status ?? existing.status,
+      //   guestCount: dto.guestCount ?? existing.guestCount,
+      //   note: dto.note ?? existing.note,
+      //   respondedAt: new Date(),
+      // });
     }
 
     const name =

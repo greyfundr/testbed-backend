@@ -33,7 +33,11 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SplitBillParticipant, SplitBill } from '../../split-bill/entities';
 import { ParticipantStatus, SplitBillStatus } from '../../split-bill/enums';
 import { EventService } from '../../event/services/event.service';
-import { EventPaymentMethod } from '../../event/enums/event.enum';
+import {
+  EventContributionType,
+  EventPaymentMethod,
+} from '../../event/enums/event.enum';
+import { Event, EventContribution } from 'src/api/event/entities';
 
 @Injectable()
 export class PaymentWebhookService {
@@ -257,7 +261,7 @@ export class PaymentWebhookService {
   private async processEventContributionWebhook(
     data: PaystackChargeSuccessData,
   ): Promise<void> {
-    const { reference, amount: amountKobo, metadata, customer } = data;
+    const { reference, amount: amountKobo, metadata } = data;
     const { eventId, userId, contributeDto } = metadata;
 
     if (!eventId || !userId || !contributeDto) {
@@ -284,59 +288,77 @@ export class PaymentWebhookService {
         return;
       }
 
+      const user = await qr.manager.findOne(User, { where: { id: userId } });
+      const event = await qr.manager.findOne(Event, { where: { id: eventId } });
       const wallet = await this.walletService.getWalletByUserId(userId);
 
-      const fundingTx = await qr.manager.save(Transaction, {
-        walletId: wallet.id,
-        amount: amountKobo,
-        currency: 'NGN',
-        type: TransactionType.WALLET_FUNDING,
-        direction: TransactionDirection.CREDIT,
-        status: TransactionStatus.COMPLETED,
-        reference: `FND-${reference}`,
-        gatewayReference: reference,
-        description: `Wallet funding for event contribution — ${reference}`,
-        gatewayResponse: data,
-        confirmedAt: new Date(data.paid_at),
-        metadata: { ...metadata, channel: data.channel },
-      });
-
-      await this.walletService.creditWallet({
-        walletId: wallet.id,
-        amount: amountKobo, // creditWallet expects Kobo
-        transactionId: fundingTx.id,
-        sourceAccountType: LedgerAccountType.PAYMENT_GATEWAY,
-        description: `Funding for event contribution — ${reference}`,
-        qr,
-      });
-
-      await qr.commitTransaction();
-      this.logger.log(`Wallet funded for event contribution: ${reference}`);
-
-      // 2. Finalize Contribution
-      // We call eventService.contribute with WALLET method.
-      // We need to fetch the User entity.
-      const user = await this.dataSource.manager.findOne(User, {
-        where: { id: userId },
-      });
-      if (!user) {
+      if (!user || !event) {
         throw new Error(
-          `User ${userId} not found for event contribution finalize`,
+          `User or Event not found for event contribution finalize`,
         );
       }
 
-      await this.eventService.contribute(
-        eventId,
-        {
-          ...contributeDto,
-          paymentMethod: EventPaymentMethod.WALLET,
+      let transactionType: TransactionType;
+      switch (contributeDto.type) {
+        case EventContributionType.DONATION:
+          transactionType = TransactionType.EVENT_DONATION;
+          break;
+        case EventContributionType.PURCHASE:
+          transactionType = TransactionType.EVENT_PURCHASE;
+          break;
+        case EventContributionType.GIFTING:
+          transactionType = TransactionType.EVENT_GIFTING;
+          break;
+        default:
+          transactionType = TransactionType.EVENT_DONATION;
+      }
+
+      const transaction = await qr.manager.save(Transaction, {
+        walletId: wallet.id,
+        amount: amountKobo,
+        currency: 'NGN',
+        type: transactionType,
+        direction: TransactionDirection.DEBIT,
+        status: TransactionStatus.COMPLETED,
+        reference: reference, // Paystack ref
+        gatewayReference: reference,
+        description: `Direct Paystack contribution to event: ${event.title} (${contributeDto.type})`,
+        gatewayResponse: data,
+        confirmedAt: new Date(data.paid_at),
+        metadata: {
+          eventId,
+          type: contributeDto.type,
+          userId: user.id,
+          channel: data.channel,
         },
-        user,
+      });
+
+      // 3. Create the Contribution Record directly
+      const contribution = qr.manager.create(EventContribution, {
+        eventId: event.id,
+        userId: user.id,
+        type: contributeDto.type,
+        amount: contributeDto.amount,
+        details: contributeDto.details ?? {},
+        transactionId: transaction.id,
+      });
+
+      const savedContribution = await qr.manager.save(contribution);
+
+      await qr.manager.update(Event, event.id, {
+        amountRaised: () => `amount_raised + ${amountKobo}`,
+      });
+
+      await qr.commitTransaction();
+      this.logger.log(
+        `Event contribution finalized directly via Paystack webhook for ref: ${reference}`,
       );
 
-      this.logger.log(
-        `Event contribution finalized via webhook for ref: ${reference}`,
-      );
+      this.eventEmitter.emit('event.contribution_created', {
+        eventId: event.id,
+        contribution: savedContribution,
+        newTotal: Number(event.amountRaised * 100) + amountKobo,
+      });
     } catch (err) {
       await qr.rollbackTransaction();
       this.logger.error(
