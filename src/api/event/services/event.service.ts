@@ -352,6 +352,33 @@ export class EventService {
       throw new BadRequestException('This event does not accept donations');
     }
 
+    if (type === EventContributionType.PURCHASE) {
+      if (!details || !details.items || !Array.isArray(details.items)) {
+        throw new BadRequestException(
+          'Purchase details with items are required',
+        );
+      }
+
+      let calculatedTotal = 0;
+      details.items.forEach((item: any) => {
+        const eventItem = event.purchasableItems?.find(
+          (i) => i.name === item.name,
+        );
+        if (!eventItem) {
+          throw new BadRequestException(
+            `Item ${item.name} is not available for this event`,
+          );
+        }
+        calculatedTotal += eventItem.price * item.quantity;
+      });
+
+      if (amount !== calculatedTotal) {
+        throw new BadRequestException(
+          'Total amount does not match the sum of item prices',
+        );
+      }
+    }
+
     if (paymentMethod === EventPaymentMethod.PAYSTACK) {
       const reference = `EC-${uuidv4().replace(/-/g, '').substring(0, 20).toUpperCase()}`;
       return this.paymentService.initiateTransactions({
