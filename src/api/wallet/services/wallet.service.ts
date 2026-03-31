@@ -351,7 +351,7 @@ export class WalletService {
     await this.transactionRepository.save(
       await this.transactionRepository.create({
         walletId: wallet.id,
-        amount: amountKobo,
+        amount: amountKobo / 100,
         currency: 'NGN',
         type: TransactionType.WALLET_FUNDING,
         direction: TransactionDirection.CREDIT,
@@ -479,7 +479,7 @@ export class WalletService {
 
       await this.creditWallet({
         walletId: wallet.id,
-        amount: tx.amount,
+        amount: Math.round(tx.amount * 100),
         transactionId: tx.id,
         sourceAccountType: LedgerAccountType.PAYMENT_GATEWAY,
         description: `Card top-up (verified) — ${reference}`,
@@ -590,20 +590,19 @@ export class WalletService {
       walletId,
       accountType: LedgerAccountType.USER_WALLET,
       direction: TransactionDirection.CREDIT,
-      amount,
+      amount: amount / 100,
       currency: 'NGN',
       runningBalance: wallet?.availableBalance ?? null,
       description,
     });
 
-    // Ledger entry 2: debit the source (gateway, escrow, etc.)
     await qr.manager.save(LedgerEntry, {
       transactionId,
       walletId: null,
       accountType: sourceAccountType,
       accountEntityId: sourceEntityId ?? null,
       direction: TransactionDirection.DEBIT,
-      amount,
+      amount: amount / 100,
       currency: 'NGN',
       runningBalance: null,
       description,
@@ -663,26 +662,24 @@ export class WalletService {
       .where('w.id = :id', { id: walletId })
       .getOne();
 
-    // Ledger entry 1: debit the user wallet
     await qr.manager.save(LedgerEntry, {
       transactionId,
       walletId,
       accountType: LedgerAccountType.USER_WALLET,
       direction: TransactionDirection.DEBIT,
-      amount,
+      amount: amount / 100,
       currency: 'NGN',
       runningBalance: wallet?.availableBalance ?? null,
       description,
     });
 
-    // Ledger entry 2: credit the destination
     await qr.manager.save(LedgerEntry, {
       transactionId,
       walletId: null,
       accountType: targetAccountType,
       accountEntityId: targetEntityId ?? null,
       direction: TransactionDirection.CREDIT,
-      amount,
+      amount: amount / 100,
       currency: 'NGN',
       runningBalance: null,
       description,
@@ -755,7 +752,7 @@ export class WalletService {
       walletId,
       accountType: LedgerAccountType.USER_WALLET,
       direction: TransactionDirection.DEBIT,
-      amount,
+      amount: amount / 100,
       currency: 'NGN',
       runningBalance: wallet?.availableBalance ?? null,
       description,
@@ -767,7 +764,7 @@ export class WalletService {
       accountType: escrowAccountType,
       accountEntityId: entityId,
       direction: TransactionDirection.CREDIT,
-      amount,
+      amount: amount / 100,
       currency: 'NGN',
       runningBalance: null,
       description,
@@ -825,7 +822,7 @@ export class WalletService {
       accountType: escrowAccountType,
       accountEntityId: entityId,
       direction: TransactionDirection.DEBIT,
-      amount: grossAmount,
+      amount: grossAmount / 100,
       currency: 'NGN',
       runningBalance: null,
       description: `${description} [escrow release]`,
@@ -857,11 +854,12 @@ export class WalletService {
       transactionId,
       walletId: recipientWalletId,
       accountType: LedgerAccountType.USER_WALLET,
+      accountEntityId: null,
       direction: TransactionDirection.CREDIT,
-      amount: netAmount,
+      amount: netAmount / 100,
       currency: 'NGN',
       runningBalance: recipient?.availableBalance ?? null,
-      description,
+      description: `${description} [net credit]`,
     });
 
     // 4. If there's a fee, credit platform revenue account
@@ -870,9 +868,9 @@ export class WalletService {
         transactionId,
         walletId: null,
         accountType: LedgerAccountType.PLATFORM_REVENUE,
-        accountEntityId: entityId,
+        accountEntityId: null,
         direction: TransactionDirection.CREDIT,
-        amount: feeAmount,
+        amount: feeAmount / 100,
         currency: 'NGN',
         runningBalance: null,
         description: `Platform fee for ${entityType} ${entityId}`,
@@ -1138,7 +1136,7 @@ export class WalletService {
       });
 
       const transfer = await this.paymentService.initiateTransfer({
-        amount: withdrawal.amount,
+        amount: Math.round(withdrawal.amount * 100),
         recipientCode: withdrawal.recipientCode,
         reference,
         reason: 'GreyFundr wallet withdrawal',

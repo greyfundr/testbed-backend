@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
+import {
+  INestApplication,
+  ValidationPipe,
+  VersioningType,
+} from '@nestjs/common';
 const request = require('supertest');
 import { AppModule } from './../src/app.module';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -10,8 +14,15 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { AccountType } from '../src/api/user/enums/user.enum';
 import { WalletCurrency } from '../src/api/wallet/enums/wallet.enum';
-import { Event, EventCategory, EventContribution } from '../src/api/event/entities';
-import { EventContributionType, EventPaymentMethod } from '../src/api/event/enums/event.enum';
+import {
+  Event,
+  EventCategory,
+  EventContribution,
+} from '../src/api/event/entities';
+import {
+  EventContributionType,
+  EventPaymentMethod,
+} from '../src/api/event/enums/event.enum';
 import { PaymentService } from '../src/api/payment/services/payment.service';
 
 describe('Event Module APIs (e2e)', () => {
@@ -38,6 +49,11 @@ describe('Event Module APIs (e2e)', () => {
         authorization_url: 'https://checkout.paystack.com/test-url',
         reference: 'TEST-REF-123',
       },
+    }),
+    verifyTransaction: jest.fn().mockResolvedValue({
+      status: true,
+      reference: 'PAY-REF-EVENT-123',
+      paid_at: new Date().toISOString(),
     }),
   };
 
@@ -70,7 +86,9 @@ describe('Event Module APIs (e2e)', () => {
     walletRepository = moduleFixture.get(getRepositoryToken(Wallet));
     eventRepository = moduleFixture.get(getRepositoryToken(Event));
     categoryRepository = moduleFixture.get(getRepositoryToken(EventCategory));
-    contributionRepository = moduleFixture.get(getRepositoryToken(EventContribution));
+    contributionRepository = moduleFixture.get(
+      getRepositoryToken(EventContribution),
+    );
     dataSource = moduleFixture.get(DataSource);
 
     // Cleanup

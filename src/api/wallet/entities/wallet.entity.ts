@@ -12,6 +12,7 @@ import { User } from '../../user/entities';
 import { VirtualAccount } from './virtual-account.entity';
 import { Transaction, LedgerEntry } from '../../transaction/entities';
 import { WalletStatus, WalletCurrency } from '../enums/wallet.enum';
+import { BigIntAmountTransformer } from '../../../common/transformers/column-numeric.transformer';
 
 @Entity('wallets')
 @Index(['userId'], { unique: true })
@@ -23,19 +24,44 @@ export class Wallet extends AbstractEntity {
   @JoinColumn({ name: 'user_id' })
   user: User;
 
-  @Column({ type: 'bigint', default: 0, name: 'available_balance' })
+  @Column({
+    type: 'bigint',
+    default: 0,
+    name: 'available_balance',
+    transformer: new BigIntAmountTransformer(),
+  })
   availableBalance: number;
 
-  @Column({ type: 'bigint', default: 0, name: 'ledger_balance' })
+  @Column({
+    type: 'bigint',
+    default: 0,
+    name: 'ledger_balance',
+    transformer: new BigIntAmountTransformer(),
+  })
   ledgerBalance: number;
 
-  @Column({ type: 'bigint', default: 0, name: 'escrow_balance' })
+  @Column({
+    type: 'bigint',
+    default: 0,
+    name: 'escrow_balance',
+    transformer: new BigIntAmountTransformer(),
+  })
   escrowBalance: number;
 
-  @Column({ type: 'bigint', default: 0, name: 'lifetime_credited' })
+  @Column({
+    type: 'bigint',
+    default: 0,
+    name: 'lifetime_credited',
+    transformer: new BigIntAmountTransformer(),
+  })
   lifetimeCredited: number;
 
-  @Column({ type: 'bigint', default: 0, name: 'lifetime_debited' })
+  @Column({
+    type: 'bigint',
+    default: 0,
+    name: 'lifetime_debited',
+    transformer: new BigIntAmountTransformer(),
+  })
   lifetimeDebited: number;
 
   @Column({

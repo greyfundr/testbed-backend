@@ -6,6 +6,7 @@ import {
   LedgerAccountType,
   TransactionDirection,
 } from '../enums/transaction.enum';
+import { BigIntAmountTransformer } from '../../../common/transformers/column-numeric.transformer';
 
 /**
  * Every financial event produces EXACTLY TWO ledger entries:
@@ -55,14 +56,19 @@ export class LedgerEntry extends AbstractEntity {
   @Column({ type: 'varchar' })
   direction: TransactionDirection;
 
-  @Column({ type: 'bigint' })
-  amount: number; // in kobo
+  @Column({ type: 'bigint', transformer: new BigIntAmountTransformer() })
+  amount: number; // dynamically converted to Naira from kobo in typescript
 
   @Column({ default: 'NGN' })
   currency: string;
 
   // Running balance snapshot at the time of entry (for this wallet only)
-  @Column({ type: 'bigint', nullable: true, name: 'running_balance' })
+  @Column({
+    type: 'bigint',
+    nullable: true,
+    name: 'running_balance',
+    transformer: new BigIntAmountTransformer(),
+  })
   runningBalance: number | null;
 
   @Column({ type: 'text', nullable: true })

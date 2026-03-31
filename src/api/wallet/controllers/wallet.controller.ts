@@ -151,8 +151,8 @@ export class WalletController {
 
     const messages = {
       success: result.credited
-        ? `₦${result.amount / 100} has been added to your wallet.`
-        : `Payment already confirmed. ₦${result.amount / 100} is in your wallet.`,
+        ? `₦${result.amount} has been added to your wallet.`
+        : `Payment already confirmed. ₦${result.amount} is in your wallet.`,
       failed: 'Payment was not completed. No funds have been deducted.',
       pending: 'Payment is still being processed. Please check back shortly.',
     };
@@ -161,7 +161,7 @@ export class WalletController {
       status: result.status,
       message: messages[result.status] ?? 'Unknown status',
       amount: result.amount,
-      amountFormatted: `₦${(result.amount / 100).toLocaleString('en-NG')}`,
+      amountFormatted: `₦${result.amount.toLocaleString('en-NG')}`,
     };
   }
 

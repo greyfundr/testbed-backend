@@ -58,7 +58,9 @@ export class AlignEventWithMobile1774432000000 implements MigrationInterface {
     await queryRunner.query(
       `ALTER TABLE \`events\` DROP COLUMN \`external_organizers\``,
     );
-    await queryRunner.query(`ALTER TABLE \`events\` DROP COLUMN \`activities\``);
+    await queryRunner.query(
+      `ALTER TABLE \`events\` DROP COLUMN \`activities\``,
+    );
     await queryRunner.query(
       `ALTER TABLE \`events\` CHANGE \`purchasable_items\` \`items_to_buy\` json NULL`,
     );
@@ -68,14 +70,18 @@ export class AlignEventWithMobile1774432000000 implements MigrationInterface {
     await queryRunner.query(
       `ALTER TABLE \`events\` DROP COLUMN \`span_multiple_days\``,
     );
-    await queryRunner.query(`ALTER TABLE \`events\` DROP COLUMN \`start_time\``);
+    await queryRunner.query(
+      `ALTER TABLE \`events\` DROP COLUMN \`start_time\``,
+    );
     await queryRunner.query(
       `ALTER TABLE \`events\` DROP COLUMN \`end_date_time\``,
     );
     await queryRunner.query(
       `ALTER TABLE \`events\` CHANGE \`start_date_time\` \`event_time\` timestamp NOT NULL`,
     );
-    await queryRunner.query(`ALTER TABLE \`events\` DROP COLUMN \`cover_images\``);
+    await queryRunner.query(
+      `ALTER TABLE \`events\` DROP COLUMN \`cover_images\``,
+    );
     await queryRunner.query(`ALTER TABLE \`events\` DROP COLUMN \`title\``);
     await queryRunner.query(
       `ALTER TABLE \`events\` CHANGE \`name\` \`title\` varchar(255) NOT NULL`,
