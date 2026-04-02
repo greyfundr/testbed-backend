@@ -35,6 +35,7 @@ import { OtpAuthService } from './otp-auth.service';
 import { WalletService } from '../../wallet/services';
 import { AccountType } from '../../user/enums/user.enum';
 import * as crypto from 'crypto';
+import { WhatsAppService } from 'src/common/services/whatsapp.service';
 
 @Injectable()
 export class AuthService {
@@ -46,6 +47,7 @@ export class AuthService {
     private readonly settingsService: SettingsService,
     private readonly eventEmitter: EventEmitter2,
     private readonly walletService: WalletService,
+    private readonly whatsAppService: WhatsAppService,
     @Inject(OtpAuthService) private readonly otpAuthService: OtpAuthService,
   ) {}
 
@@ -178,6 +180,11 @@ export class AuthService {
         refreshToken: null,
       };
     }
+
+    // await this.whatsAppService.sendMessage(
+    //   '+2349027647320',
+    //   `User ${user.email} logged in at ${new Date().toISOString()}`,
+    // );
 
     const tokens = await this.generateTokens(user.id);
     await this.updateRefreshToken(user.id, tokens.refreshToken);

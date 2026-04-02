@@ -10,6 +10,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { TermiiService } from '../../common/services/termii.service';
 import { OtpAuthService } from './services';
 import { WalletModule } from '../wallet/wallet.module';
+import { WhatsAppService } from '../../common/services/whatsapp.service';
 
 @Module({
   imports: [
@@ -27,7 +28,13 @@ import { WalletModule } from '../wallet/wallet.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, TermiiService, OtpAuthService],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    TermiiService,
+    OtpAuthService,
+    WhatsAppService,
+  ],
   exports: [OtpAuthService],
 })
 export class AuthModule {}
