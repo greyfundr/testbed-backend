@@ -186,5 +186,9 @@ export class Event extends AbstractEntity {
   @OneToMany(() => EventRsvp, (rsvp) => rsvp.event)
   rsvps: EventRsvp[];
 
+  @Column({ type: 'int', name: 'rsvp_count', default: 0 })
   rsvpCount?: number;
+
+  @Column({ type: 'boolean', name: 'hide_donation_amount', default: false })
+  hideDonationAmount: boolean;
 }

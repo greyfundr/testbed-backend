@@ -345,6 +345,10 @@ export class UpdateEventDraftDto {
   @ApiProperty()
   @IsOptional()
   isPublished?: boolean;
+
+  @ApiProperty()
+  @IsOptional()
+  hideDonationAmount?: boolean;
 }
 
 export class ContributeToEventDto {

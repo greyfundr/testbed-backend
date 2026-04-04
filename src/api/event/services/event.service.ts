@@ -270,6 +270,8 @@ export class EventService {
     if (dto.visibilityStatus !== undefined)
       update.visibilityStatus = dto.visibilityStatus;
     if (dto.isPublished !== undefined) update.isPublished = dto.isPublished;
+    if (dto.hideDonationAmount !== undefined)
+      update.hideDonationAmount = dto.hideDonationAmount;
 
     if (pageNumber === 5) {
       this.assertDraftIsComplete({ ...event, ...update } as Event);
