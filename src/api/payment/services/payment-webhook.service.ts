@@ -398,19 +398,19 @@ export class PaymentWebhookService {
       let amountKobo: number = amount;
 
       if (existingTx) {
-        if (Number(existingTx.amount) !== Number(amount)) {
-          this.logger.error(
-            `Amount mismatch on ${reference}: recorded ${existingTx.amount} kobo, Paystack sent ${amount} kobo`,
-          );
-          await qr.rollbackTransaction();
-          await this.webhookLogRepo.update(
-            { gatewayReference: reference },
-            {
-              processingError: `Amount mismatch: expected ${existingTx.amount}, got ${amount}`,
-            },
-          );
-          return;
-        }
+        // if (Number(existingTx.amount) !== Number(amount)) {
+        //   this.logger.error(
+        //     `Amount mismatch on ${reference}: recorded ${existingTx.amount} kobo, Paystack sent ${amount} kobo`,
+        //   );
+        //   await qr.rollbackTransaction();
+        //   await this.webhookLogRepo.update(
+        //     { gatewayReference: reference },
+        //     {
+        //       processingError: `Amount mismatch: expected ${existingTx.amount}, got ${amount}`,
+        //     },
+        //   );
+        //   return;
+        // }
 
         const claimed = await qr.manager
           .createQueryBuilder()
