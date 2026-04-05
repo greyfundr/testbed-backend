@@ -9,6 +9,7 @@ import {
   IsDateString,
   IsEnum,
   IsInt,
+  IsNumber,
   IsUUID,
   Max,
   MaxLength,
@@ -24,9 +25,9 @@ export class DonateToCampaignDto {
   @IsUUID()
   campaignId: string;
 
-  @IsInt()
-  @Min(100, { message: 'Minimum donation is ₦1 (100 kobo)' })
-  amount: number; // in kobo
+  @IsNumber()
+  @Min(50, { message: 'Minimum donation is ₦50' })
+  amount: number; // in Naira
 
   @IsString()
   @IsOptional()
@@ -45,8 +46,8 @@ export class PaySplitBillDto {
   @IsUUID()
   billShareId: string;
 
-  @IsInt()
-  @Min(100)
+  @IsNumber()
+  @Min(0.01)
   amount: number;
 
   @IsString()
@@ -62,8 +63,8 @@ export class PayInvoiceDto {
   @IsUUID()
   recipientUserId: string;
 
-  @IsInt()
-  @Min(100)
+  @IsNumber()
+  @Min(1)
   amount: number;
 }
 
@@ -71,9 +72,9 @@ export class InternalTransferDto {
   @IsUUID()
   recipientUserId: string;
 
-  @IsInt()
-  @Min(100)
-  amount: number; // in kobo
+  @IsNumber()
+  @Min(1)
+  amount: number; // in Naira
 
   @IsString()
   @IsOptional()

@@ -49,7 +49,7 @@ import { FundingAccountResponse, InitiateFundingResponse } from '../interfaces';
 
 interface CreditParams {
   walletId: string;
-  amount: number; // kobo
+  amount: number; // Naira
   transactionId: string;
   sourceAccountType: LedgerAccountType;
   sourceEntityId?: string;
@@ -59,7 +59,7 @@ interface CreditParams {
 
 interface DebitParams {
   walletId: string;
-  amount: number; // kobo
+  amount: number; // Naira
   transactionId: string;
   targetAccountType: LedgerAccountType;
   targetEntityId?: string;
@@ -81,8 +81,8 @@ interface LockEscrowParams {
 export class WalletService {
   private readonly logger = new Logger(WalletService.name);
 
-  private readonly MIN_FUNDING_KOBO = 100_00;
-  private readonly MAX_FUNDING_KOBO = 10_000_000_00;
+  private readonly MIN_FUNDING_NAIRA = 100.0;
+  private readonly MAX_FUNDING_NAIRA = 10_000_000.0;
 
   constructor(
     private readonly userRepository: UserRepository,
@@ -324,16 +324,16 @@ export class WalletService {
    */
   async initiateWalletFunding(
     userId: string,
-    amountKobo: number,
+    amountNaira: number,
   ): Promise<InitiateFundingResponse> {
-    if (amountKobo < this.MIN_FUNDING_KOBO) {
+    if (amountNaira < this.MIN_FUNDING_NAIRA) {
       throw new BadRequestException(
-        `Minimum top-up is ₦${this.MIN_FUNDING_KOBO / 100}`,
+        `Minimum top-up is ₦${this.MIN_FUNDING_NAIRA}`,
       );
     }
-    if (amountKobo > this.MAX_FUNDING_KOBO) {
+    if (amountNaira > this.MAX_FUNDING_NAIRA) {
       throw new BadRequestException(
-        `Maximum top-up is ₦${this.MAX_FUNDING_KOBO / 100}`,
+        `Maximum top-up is ₦${this.MAX_FUNDING_NAIRA}`,
       );
     }
 
@@ -351,7 +351,7 @@ export class WalletService {
     await this.transactionRepository.save(
       await this.transactionRepository.create({
         walletId: wallet.id,
-        amount: amountKobo / 100,
+        amount: amountNaira,
         currency: 'NGN',
         type: TransactionType.WALLET_FUNDING,
         direction: TransactionDirection.CREDIT,
@@ -366,7 +366,7 @@ export class WalletService {
     const data = await this.paymentService.initiateTransactions({
       email: user.email,
       reference,
-      amount: amountKobo,
+      amount: Math.round(amountNaira * 100),
       metadata: {
         wallet_id: wallet.id,
         user_id: userId,
@@ -393,14 +393,14 @@ export class WalletService {
     }
 
     this.logger.log(
-      `Card funding initiated: ${reference} — ${amountKobo} kobo for wallet ${wallet.id}`,
+      `Card funding initiated: ${reference} — ₦${amountNaira} for wallet ${wallet.id}`,
     );
 
     return {
       reference,
       authorizationUrl: data.data.authorization_url,
       accessCode: data.data.access_code,
-      amount: amountKobo,
+      amount: amountNaira,
       currency: 'NGN',
       channel: ['card', 'bank', 'ussd', 'bank_transfer'],
     };
@@ -479,7 +479,7 @@ export class WalletService {
 
       await this.creditWallet({
         walletId: wallet.id,
-        amount: Math.round(tx.amount * 100),
+        amount: tx.amount,
         transactionId: tx.id,
         sourceAccountType: LedgerAccountType.PAYMENT_GATEWAY,
         description: `Card top-up (verified) — ${reference}`,
@@ -506,7 +506,7 @@ export class WalletService {
       await qr.commitTransaction();
 
       this.logger.log(
-        `Card funding verified manually: ${reference} — ${tx.amount} kobo credited to wallet ${wallet.id}`,
+        `Card funding verified manually: ${reference} — ₦${tx.amount} credited to wallet ${wallet.id}`,
       );
 
       return { status: 'success', credited: true, amount: tx.amount };
@@ -590,7 +590,7 @@ export class WalletService {
       walletId,
       accountType: LedgerAccountType.USER_WALLET,
       direction: TransactionDirection.CREDIT,
-      amount: amount / 100,
+      amount: amount,
       currency: 'NGN',
       runningBalance: wallet?.availableBalance ?? null,
       description,
@@ -602,7 +602,7 @@ export class WalletService {
       accountType: sourceAccountType,
       accountEntityId: sourceEntityId ?? null,
       direction: TransactionDirection.DEBIT,
-      amount: amount / 100,
+      amount: amount,
       currency: 'NGN',
       runningBalance: null,
       description,
@@ -652,7 +652,7 @@ export class WalletService {
       if (wallet.status !== WalletStatus.ACTIVE)
         throw new ForbiddenException(`Wallet is ${wallet.status}`);
       throw new BadRequestException(
-        `Insufficient balance. Available: ${wallet.availableBalance} kobo, Required: ${amount} kobo`,
+        `Insufficient balance. Available: ₦${wallet.availableBalance}, Required: ₦${amount}`,
       );
     }
 
@@ -667,7 +667,7 @@ export class WalletService {
       walletId,
       accountType: LedgerAccountType.USER_WALLET,
       direction: TransactionDirection.DEBIT,
-      amount: amount / 100,
+      amount: amount,
       currency: 'NGN',
       runningBalance: wallet?.availableBalance ?? null,
       description,
@@ -679,7 +679,7 @@ export class WalletService {
       accountType: targetAccountType,
       accountEntityId: targetEntityId ?? null,
       direction: TransactionDirection.CREDIT,
-      amount: amount / 100,
+      amount: amount,
       currency: 'NGN',
       runningBalance: null,
       description,
@@ -752,7 +752,7 @@ export class WalletService {
       walletId,
       accountType: LedgerAccountType.USER_WALLET,
       direction: TransactionDirection.DEBIT,
-      amount: amount / 100,
+      amount: amount,
       currency: 'NGN',
       runningBalance: wallet?.availableBalance ?? null,
       description,
@@ -764,7 +764,7 @@ export class WalletService {
       accountType: escrowAccountType,
       accountEntityId: entityId,
       direction: TransactionDirection.CREDIT,
-      amount: amount / 100,
+      amount: amount,
       currency: 'NGN',
       runningBalance: null,
       description,
@@ -779,8 +779,8 @@ export class WalletService {
   async releaseEscrowToWallet(params: {
     escrowHolderWalletId: string; // wallet that held the escrow funds
     recipientWalletId: string;
-    grossAmount: number; // total escrowed (kobo)
-    feeAmount: number; // platform fee (kobo)
+    grossAmount: number; // total escrowed (Naira)
+    feeAmount: number; // platform fee (Naira)
     transactionId: string;
     entityType: 'campaign' | 'split_bill' | 'invoice';
     entityId: string;
@@ -822,7 +822,7 @@ export class WalletService {
       accountType: escrowAccountType,
       accountEntityId: entityId,
       direction: TransactionDirection.DEBIT,
-      amount: grossAmount / 100,
+      amount: grossAmount,
       currency: 'NGN',
       runningBalance: null,
       description: `${description} [escrow release]`,
@@ -856,7 +856,7 @@ export class WalletService {
       accountType: LedgerAccountType.USER_WALLET,
       accountEntityId: null,
       direction: TransactionDirection.CREDIT,
-      amount: netAmount / 100,
+      amount: netAmount,
       currency: 'NGN',
       runningBalance: recipient?.availableBalance ?? null,
       description: `${description} [net credit]`,
@@ -870,7 +870,7 @@ export class WalletService {
         accountType: LedgerAccountType.PLATFORM_REVENUE,
         accountEntityId: null,
         direction: TransactionDirection.CREDIT,
-        amount: feeAmount / 100,
+        amount: feeAmount,
         currency: 'NGN',
         runningBalance: null,
         description: `Platform fee for ${entityType} ${entityId}`,
@@ -1029,12 +1029,12 @@ export class WalletService {
 
     if (wallet.availableBalance < dto.amount) {
       throw new BadRequestException(
-        `Insufficient balance. Available: ${wallet.availableBalance} kobo`,
+        `Insufficient balance. Available: ₦${wallet.availableBalance}`,
       );
     }
 
-    // Minimum withdrawal: ₦100 = 10000 kobo
-    if (dto.amount < 10_000) {
+    // Minimum withdrawal: ₦100
+    if (dto.amount < 100) {
       throw new BadRequestException('Minimum withdrawal is ₦100');
     }
 

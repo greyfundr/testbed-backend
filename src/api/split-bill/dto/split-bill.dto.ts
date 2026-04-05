@@ -295,7 +295,7 @@ export class AddParticipantDto {
   @IsOptional()
   @IsInt()
   @Min(1)
-  amount?: number; // kobo — required for MANUAL split
+  amount?: number; // Naira — required for MANUAL split
 
   @IsOptional()
   @IsInt()
@@ -332,11 +332,11 @@ export class RemoveParticipantDto {
 
 export class PayBillShareDto {
   /**
-   * Amount to pay in kobo. Must not exceed amountRemaining on the participant.
+   * Amount to pay in Naira. Must not exceed amountRemaining on the participant.
    * If allowPartialPayment=false, must equal the full amountRemaining.
    */
-  @IsInt()
-  @Min(1)
+  @IsNumber()
+  @Min(0.01)
   amount: number;
 }
 

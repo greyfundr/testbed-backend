@@ -194,7 +194,7 @@ export class PaymentWebhookService {
 
       const tx = await qr.manager.save(Transaction, {
         walletId: null,
-        amount: amountKobo,
+        amount: amountKobo / 100,
         currency: bill.currency,
         type: TransactionType.SPLIT_BILL_PAYMENT,
         direction: TransactionDirection.CREDIT,
@@ -214,7 +214,7 @@ export class PaymentWebhookService {
 
       const effectiveOwed =
         participant.amountOwed + participant.balanceAdjustment;
-      const newAmountPaid = participant.amountPaid + amountKobo;
+      const newAmountPaid = participant.amountPaid + amountKobo / 100;
       const newAmountRemaining = Math.max(0, effectiveOwed - newAmountPaid);
       const participantFullyPaid = newAmountRemaining === 0;
 
@@ -229,7 +229,7 @@ export class PaymentWebhookService {
         fullyPaidAt: participantFullyPaid ? new Date() : null,
       });
 
-      const newTotalCollected = bill.totalCollected + amountKobo;
+      const newTotalCollected = bill.totalCollected + amountKobo / 100;
       const billFullyFunded = newTotalCollected >= bill.totalAmount;
 
       await qr.manager.update(SplitBill, billId, {
@@ -315,7 +315,7 @@ export class PaymentWebhookService {
 
       const transaction = await qr.manager.save(Transaction, {
         walletId: wallet.id,
-        amount: amountKobo,
+        amount: amountKobo / 100,
         currency: 'NGN',
         type: transactionType,
         direction: TransactionDirection.DEBIT,
@@ -346,7 +346,7 @@ export class PaymentWebhookService {
       const savedContribution = await qr.manager.save(contribution);
 
       await qr.manager.update(Event, event.id, {
-        amountRaised: () => `amount_raised + ${amountKobo}`,
+        amountRaised: () => `amount_raised + ${amountKobo / 100}`,
       });
 
       await qr.commitTransaction();
@@ -357,7 +357,7 @@ export class PaymentWebhookService {
       this.eventEmitter.emit('event.contribution_created', {
         eventId: event.id,
         contribution: savedContribution,
-        newTotal: Number(event.amountRaised * 100) + amountKobo,
+        newTotal: Number(event.amountRaised) + amountKobo / 100,
       });
     } catch (err) {
       await qr.rollbackTransaction();
@@ -395,23 +395,9 @@ export class PaymentWebhookService {
 
       let walletId: string | null;
       let transactionId: string;
-      let amountKobo: number = amount;
+      let amountNaira: number = amount / 100;
 
       if (existingTx) {
-        // if (Number(existingTx.amount) !== Number(amount)) {
-        //   this.logger.error(
-        //     `Amount mismatch on ${reference}: recorded ${existingTx.amount} kobo, Paystack sent ${amount} kobo`,
-        //   );
-        //   await qr.rollbackTransaction();
-        //   await this.webhookLogRepo.update(
-        //     { gatewayReference: reference },
-        //     {
-        //       processingError: `Amount mismatch: expected ${existingTx.amount}, got ${amount}`,
-        //     },
-        //   );
-        //   return;
-        // }
-
         const claimed = await qr.manager
           .createQueryBuilder()
           .update(Transaction)
@@ -446,7 +432,7 @@ export class PaymentWebhookService {
 
         walletId = existingTx.walletId;
         transactionId = existingTx.id;
-        amountKobo = existingTx.amount;
+        amountNaira = existingTx.amount;
       } else {
         const virtualAccount = await qr.manager.findOne(VirtualAccount, {
           where: { paystackCustomerCode: customer.customer_code },
@@ -473,7 +459,7 @@ export class PaymentWebhookService {
 
         const newTx = await qr.manager.save(Transaction, {
           walletId,
-          amount: Number(amount) / 100,
+          amount: amountNaira,
           currency: 'NGN',
           type: TransactionType.WALLET_FUNDING,
           direction: TransactionDirection.CREDIT,
@@ -494,12 +480,11 @@ export class PaymentWebhookService {
         });
 
         transactionId = newTx.id;
-        amountKobo = amount;
       }
 
       await this.walletService.creditWallet({
         walletId: walletId as string,
-        amount: Number(amountKobo) / 100,
+        amount: amountNaira,
         transactionId,
         sourceAccountType: LedgerAccountType.PAYMENT_GATEWAY,
         description: `Top-up via ${this.channelLabel(channel)} — ${reference}`,
@@ -513,7 +498,7 @@ export class PaymentWebhookService {
       await qr.commitTransaction();
 
       this.logger.log(
-        `Wallet credited: ${amountKobo} kobo → wallet ${walletId} (ref: ${reference}, path: ${existingTx ? 'card' : 'dva'})`,
+        `Wallet credited: ₦${amountNaira} → wallet ${walletId} (ref: ${reference}, path: ${existingTx ? 'card' : 'dva'})`,
       );
     } catch (err) {
       await qr.rollbackTransaction();
@@ -637,7 +622,7 @@ export class PaymentWebhookService {
       await qr.commitTransaction();
 
       this.logger.warn(
-        `Withdrawal ${withdrawal.id} failed. ${withdrawal.amount} kobo returned to wallet ${withdrawal.walletId}`,
+        `Withdrawal ${withdrawal.id} failed. ₦${withdrawal.amount} returned to wallet ${withdrawal.walletId}`,
       );
     } catch (err) {
       await qr.rollbackTransaction();

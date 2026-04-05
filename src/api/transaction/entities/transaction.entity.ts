@@ -14,7 +14,7 @@ import {
   TransactionStatus,
   TransactionDirection,
 } from '../enums/transaction.enum';
-import { BigIntAmountTransformer } from '../../../common/transformers/column-numeric.transformer';
+import { ColumnNumericTransformer } from '../../../common/transformers/column-numeric.transformer';
 
 @Entity('transactions')
 @Index(['walletId', 'createdAt'])
@@ -29,7 +29,12 @@ export class Transaction extends AbstractEntity {
   @JoinColumn({ name: 'wallet_id' })
   wallet: Wallet | null;
 
-  @Column({ type: 'bigint', transformer: new BigIntAmountTransformer() })
+  @Column({
+    type: 'decimal',
+    precision: 20,
+    scale: 2,
+    transformer: new ColumnNumericTransformer(),
+  })
   amount: number;
 
   @Column({ default: 'NGN' })
@@ -85,10 +90,12 @@ export class Transaction extends AbstractEntity {
   counterpartyWalletId: string | null;
 
   @Column({
-    type: 'bigint',
+    type: 'decimal',
+    precision: 20,
+    scale: 2,
     default: 0,
     name: 'fee_amount',
-    transformer: new BigIntAmountTransformer(),
+    transformer: new ColumnNumericTransformer(),
   })
   feeAmount: number;
 

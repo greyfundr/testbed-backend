@@ -3,7 +3,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AbstractEntity } from '../../../common/entities';
 import { User } from '../../user/entities';
 import { Transaction } from '../../transaction/entities';
-import { BigIntAmountTransformer } from '../../../common/transformers/column-numeric.transformer';
+import { ColumnNumericTransformer } from '../../../common/transformers/column-numeric.transformer';
 import { Campaign } from './campaign.entity';
 import { DonationOnBehalfOf } from '../enums/campaign.enum';
 
@@ -14,9 +14,11 @@ export class Donation extends AbstractEntity {
     example: 5000,
   })
   @Column({
-    type: 'bigint',
+    type: 'decimal',
+    precision: 20,
+    scale: 2,
     default: 0,
-    transformer: new BigIntAmountTransformer(),
+    transformer: new ColumnNumericTransformer(),
   })
   amount: number; // Stored in kobo, retrieved as Naira
 

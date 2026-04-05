@@ -2,7 +2,7 @@ import { Entity, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { AbstractEntity } from '../../../common/entities';
 import { Wallet } from './wallet.entity';
 import { Transaction } from '../../transaction/entities/transaction.entity';
-import { BigIntAmountTransformer } from '../../../common/transformers/column-numeric.transformer';
+import { ColumnNumericTransformer } from '../../../common/transformers/column-numeric.transformer';
 
 export enum WithdrawalStatus {
   PENDING = 'pending',
@@ -23,7 +23,12 @@ export class WithdrawalRequest extends AbstractEntity {
   @JoinColumn({ name: 'wallet_id' })
   wallet: Wallet;
 
-  @Column({ type: 'bigint', transformer: new BigIntAmountTransformer() })
+  @Column({
+    type: 'decimal',
+    precision: 20,
+    scale: 2,
+    transformer: new ColumnNumericTransformer(),
+  })
   amount: number;
 
   @Column({ default: 'NGN' })

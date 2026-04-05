@@ -2,6 +2,7 @@ import { Entity, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { AbstractEntity } from '../../../common/entities/abstract.entity';
 import { SplitBill } from './split-bill.entity';
 import { ActivityActionType } from '../enums';
+import { ColumnNumericTransformer } from '../../../common/transformers/column-numeric.transformer';
 
 @Entity('split_bill_activities')
 @Index(['splitBillId', 'createdAt'])
@@ -31,13 +32,34 @@ export class SplitBillActivity extends AbstractEntity {
   @Column({ type: 'text', nullable: true })
   description: string | null;
 
-  @Column({ type: 'bigint', nullable: true, name: 'amount_before' })
+  @Column({
+    type: 'decimal',
+    precision: 20,
+    scale: 2,
+    nullable: true,
+    name: 'amount_before',
+    transformer: new ColumnNumericTransformer(),
+  })
   amountBefore: number | null;
 
-  @Column({ type: 'bigint', nullable: true, name: 'amount_after' })
+  @Column({
+    type: 'decimal',
+    precision: 20,
+    scale: 2,
+    nullable: true,
+    name: 'amount_after',
+    transformer: new ColumnNumericTransformer(),
+  })
   amountAfter: number | null;
 
-  @Column({ type: 'bigint', nullable: true, name: 'amount_difference' })
+  @Column({
+    type: 'decimal',
+    precision: 20,
+    scale: 2,
+    nullable: true,
+    name: 'amount_difference',
+    transformer: new ColumnNumericTransformer(),
+  })
   amountDifference: number | null;
 
   @Column({ type: 'varchar', nullable: true, name: 'bill_status_at_time' })

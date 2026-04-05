@@ -13,7 +13,7 @@ import { User } from '../../user/entities';
 import { CampaignStatus } from '../enums/campaign.enum';
 import { Donation } from './donation.entity';
 import { CampaignCategory } from './campaign-category.entity';
-import { BigIntAmountTransformer } from '../../../common/transformers/column-numeric.transformer';
+import { ColumnNumericTransformer } from '../../../common/transformers/column-numeric.transformer';
 
 export interface CampaignOffer {
   type: 'auto' | 'manual';
@@ -69,9 +69,11 @@ export class Campaign extends AbstractEntity {
 
   @ApiProperty({ description: 'Fundraising target in Naira', example: 1000000 })
   @Column({
-    type: 'bigint',
+    type: 'decimal',
+    precision: 20,
+    scale: 2,
     default: 0,
-    transformer: new BigIntAmountTransformer(),
+    transformer: new ColumnNumericTransformer(),
   })
   target: number;
 
@@ -80,10 +82,12 @@ export class Campaign extends AbstractEntity {
     example: 250000,
   })
   @Column({
-    type: 'bigint',
+    type: 'decimal',
+    precision: 20,
+    scale: 2,
     default: 0,
     name: 'current_amount',
-    transformer: new BigIntAmountTransformer(),
+    transformer: new ColumnNumericTransformer(),
   })
   currentAmount: number;
 

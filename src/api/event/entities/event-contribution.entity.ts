@@ -5,7 +5,7 @@ import { User } from '../../user/entities';
 import { Event } from './event.entity';
 import { Transaction } from '../../transaction/entities';
 import { EventContributionType } from '../enums/event.enum';
-import { BigIntAmountTransformer } from '../../../common/transformers/column-numeric.transformer';
+import { ColumnNumericTransformer } from '../../../common/transformers/column-numeric.transformer';
 
 @Entity('event_contributions')
 export class EventContribution extends AbstractEntity {
@@ -33,9 +33,11 @@ export class EventContribution extends AbstractEntity {
 
   @ApiProperty({ description: 'Contribution amount' })
   @Column({
-    type: 'bigint',
+    type: 'decimal',
+    precision: 20,
+    scale: 2,
     default: 0,
-    transformer: new BigIntAmountTransformer(),
+    transformer: new ColumnNumericTransformer(),
   })
   amount: number;
 
