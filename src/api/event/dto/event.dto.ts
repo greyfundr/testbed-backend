@@ -14,8 +14,9 @@ import {
   Min,
   IsInt,
   IsEmail,
+  IsPositive,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   EventStatus,
   EventOrganizerRole,
@@ -357,7 +358,8 @@ export class ContributeToEventDto {
   type: EventContributionType;
 
   @ApiProperty()
-  @IsNumber()
+  @IsPositive()
+  @Transform(({ value }) => parseFloat(value))
   amount: number;
 
   @ApiProperty({ enum: EventPaymentMethod, default: EventPaymentMethod.WALLET })
@@ -367,7 +369,7 @@ export class ContributeToEventDto {
 
   @ApiProperty()
   @IsOptional()
-  details?: any;
+  details?: Record<string, any>;
 }
 
 export class GetAllEventsDto {

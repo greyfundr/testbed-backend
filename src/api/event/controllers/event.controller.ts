@@ -130,7 +130,7 @@ export class EventController {
     @Body() contributeDto: ContributeToEventDto,
     @CurrentUser() user: User,
   ) {
-    return this.eventService.contribute(id, contributeDto, user);
+    return await this.eventService.contribute(id, contributeDto, user);
   }
 
   @ApiOperation({ summary: 'Get leaderboard for an event' })
