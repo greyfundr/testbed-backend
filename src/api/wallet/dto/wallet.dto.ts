@@ -1,5 +1,6 @@
 import {
   IsInt,
+  IsNumber,
   Min,
   Max,
   IsString,
@@ -13,11 +14,13 @@ import {
 import { ApiProperty } from '@nestjs/swagger';
 
 export class InitiateFundingDto {
-  @IsInt({
-    message: 'Amount must be an integer in kobo (e.g. 500000 = ₦5,000)',
+  @ApiProperty({
+    description: 'Amount in Naira',
+    example: 5000,
   })
-  @Min(10_000, { message: 'Minimum top-up is ₦100' })
-  @Max(10_000_000_00, {
+  @IsNumber()
+  @Min(100, { message: 'Minimum top-up is ₦100' })
+  @Max(10_000_000, {
     message: 'Maximum top-up is ₦10,000,000 per transaction',
   })
   amount: number;
@@ -53,9 +56,9 @@ export class WithdrawDto {
 
   @ApiProperty({
     description: 'amount',
-    example: 50000,
+    example: 500,
   })
-  @IsInt({ message: 'Amount must be an integer in kobo' })
-  @Min(10_000, { message: 'Minimum withdrawal is ₦100 (10,000 kobo)' })
+  @IsNumber()
+  @Min(100, { message: 'Minimum withdrawal is ₦100' })
   amount: number;
 }

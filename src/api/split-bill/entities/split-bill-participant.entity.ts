@@ -4,7 +4,7 @@ import { User } from '../../user/entities';
 import { Wallet } from '../../wallet/entities/wallet.entity';
 import { SplitBill } from './split-bill.entity';
 import { ParticipantStatus, ParticipantRole } from '../enums/split-bill.enum';
-import { BigIntAmountTransformer } from 'src/common/transformers/column-numeric.transformer';
+import { ColumnNumericTransformer } from 'src/common/transformers/column-numeric.transformer';
 
 @Entity('split_bill_participants')
 @Index(['splitBillId', 'userId'], {
@@ -50,34 +50,42 @@ export class SplitBillParticipant extends AbstractEntity {
   role: ParticipantRole;
 
   @Column({
-    type: 'bigint',
+    type: 'decimal',
+    precision: 20,
+    scale: 2,
     default: 0,
     name: 'amount_owed',
-    transformer: new BigIntAmountTransformer(),
+    transformer: new ColumnNumericTransformer(),
   })
   amountOwed: number;
 
   @Column({
-    type: 'bigint',
+    type: 'decimal',
+    precision: 20,
+    scale: 2,
     default: 0,
     name: 'amount_paid',
-    transformer: new BigIntAmountTransformer(),
+    transformer: new ColumnNumericTransformer(),
   })
   amountPaid: number;
 
   @Column({
-    type: 'bigint',
+    type: 'decimal',
+    precision: 20,
+    scale: 2,
     default: 0,
     name: 'amount_remaining',
-    transformer: new BigIntAmountTransformer(),
+    transformer: new ColumnNumericTransformer(),
   })
   amountRemaining: number;
 
   @Column({
-    type: 'bigint',
+    type: 'decimal',
+    precision: 20,
+    scale: 2,
     default: 0,
     name: 'balance_adjustment',
-    transformer: new BigIntAmountTransformer(),
+    transformer: new ColumnNumericTransformer(),
   })
   balanceAdjustment: number;
 

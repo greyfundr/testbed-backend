@@ -6,7 +6,7 @@ import { EventCategory } from './event-category.entity';
 import { EventOrganizer } from './event-organizer.entity';
 import { EventContribution } from './event-contribution.entity';
 import { EventStatus, EventVisibilityStatus } from '../enums/event.enum';
-import { BigIntAmountTransformer } from '../../../common/transformers/column-numeric.transformer';
+import { ColumnNumericTransformer } from '../../../common/transformers/column-numeric.transformer';
 import { EventRsvp } from './event-rsvp.entity';
 
 export interface EventLocation {
@@ -84,19 +84,23 @@ export class Event extends AbstractEntity {
 
   @ApiProperty({ description: 'Target amount to be raised' })
   @Column({
-    type: 'bigint',
+    type: 'decimal',
+    precision: 20,
+    scale: 2,
     default: 0,
     name: 'target_amount',
-    transformer: new BigIntAmountTransformer(),
+    transformer: new ColumnNumericTransformer(),
   })
   targetAmount: number;
 
   @ApiProperty({ description: 'Current amount raised' })
   @Column({
-    type: 'bigint',
+    type: 'decimal',
+    precision: 20,
+    scale: 2,
     default: 0,
     name: 'amount_raised',
-    transformer: new BigIntAmountTransformer(),
+    transformer: new ColumnNumericTransformer(),
   })
   amountRaised: number;
 

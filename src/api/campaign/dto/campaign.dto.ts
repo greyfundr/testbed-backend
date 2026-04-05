@@ -148,13 +148,13 @@ class ExternalPersonDto {
 
 export class DonateDto {
   @ApiProperty({
-    description: 'Amount to donate in kobo',
-    example: 500000,
+    description: 'Amount to donate in Naira',
+    example: 5000,
     minimum: 100,
   })
   @IsNumber()
   @Min(100)
-  amount: number; // In kobo
+  amount: number; // In Naira
 
   @ApiPropertyOptional({
     description: 'Whether to remain anonymous',

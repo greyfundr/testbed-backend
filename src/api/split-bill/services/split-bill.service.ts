@@ -333,7 +333,7 @@ export class SplitBillService {
           if (!stillPresent) {
             throw new BadRequestException(
               `Cannot remove participant ${p.userId ?? p.guestPhone} — ` +
-                `they have already made a payment of ₦${p.amountPaid / 100}.`,
+                `they have already made a payment of ₦${p.amountPaid}.`,
             );
           }
         }
@@ -419,7 +419,7 @@ export class SplitBillService {
           if (totalAssigned !== effectiveAmount) {
             throw new BadRequestException(
               `Manual split amounts must sum to the total bill amount. ` +
-                `Got ₦${totalAssigned / 100}, expected ₦${effectiveAmount / 100}.`,
+                `Got ₦${totalAssigned}, expected ₦${effectiveAmount}.`,
             );
           }
 
@@ -604,7 +604,7 @@ export class SplitBillService {
       if (bill.splitMethod === SplitMethod.MANUAL) {
         if (!dto.amount || dto.amount <= 0) {
           throw new BadRequestException(
-            'amount (kobo) is required when adding to a MANUAL split bill',
+            'amount (Naira) is required when adding to a MANUAL split bill',
           );
         }
         newParticipantAmount = dto.amount;
@@ -618,8 +618,8 @@ export class SplitBillService {
         if (newParticipantAmount > remaining) {
           if (!dto.redistribution?.length) {
             throw new BadRequestException(
-              `Only ${remaining} kobo unallocated. ` +
-                `Provide redistribution to make room for the new participant's ${newParticipantAmount} kobo share.`,
+              `Only ${remaining} Naira unallocated. ` +
+                `Provide redistribution to make room for the new participant's ${newParticipantAmount} Naira share.`,
             );
           }
           await this.applyManualRedistribution(
@@ -803,7 +803,7 @@ export class SplitBillService {
 
       if (participant.amountPaid > 0) {
         throw new BadRequestException(
-          `Cannot remove a participant who has paid ${participant.amountPaid} kobo. Process a refund first.`,
+          `Cannot remove a participant who has paid ₦${participant.amountPaid}. Process a refund first.`,
         );
       }
 
@@ -816,7 +816,7 @@ export class SplitBillService {
       ) {
         if (!dto.redistribution?.length) {
           throw new BadRequestException(
-            `Participant has ${participant.amountOwed} kobo allocated. ` +
+            `Participant has ₦${participant.amountOwed} allocated. ` +
               `Provide redistribution for the ${remaining.length} remaining participants.`,
           );
         }
@@ -955,19 +955,19 @@ export class SplitBillService {
 
       if (!bill.allowPartialPayment && dto.amount < remaining) {
         throw new BadRequestException(
-          `This bill requires full payment. You owe ${remaining} kobo.`,
+          `This bill requires full payment. You owe ₦${remaining}.`,
         );
       }
 
       if (bill.minPaymentAmount && dto.amount < bill.minPaymentAmount) {
         throw new BadRequestException(
-          `Minimum payment is ${bill.minPaymentAmount} kobo.`,
+          `Minimum payment is ₦${bill.minPaymentAmount}.`,
         );
       }
 
       if (dto.amount > remaining) {
         throw new BadRequestException(
-          `Payment of ${dto.amount} kobo exceeds remaining balance of ${remaining} kobo.`,
+          `Payment of ₦${dto.amount} exceeds remaining balance of ₦${remaining}.`,
         );
       }
 
@@ -1053,7 +1053,7 @@ export class SplitBillService {
         actorId: payerId,
         actionType: ActivityActionType.PAYMENT_MADE,
         participantId,
-        description: `Payment of ${dto.amount} kobo made`,
+        description: `Payment of ₦${dto.amount} made`,
         amountBefore: participant.amountPaid,
         amountAfter: newAmountPaid,
         amountDifference: dto.amount,
@@ -1076,7 +1076,7 @@ export class SplitBillService {
       await qr.commitTransaction();
 
       this.logger.log(
-        `Bill payment: ${dto.amount} kobo by ${payerId} for bill ${billId} (participant ${participantId})`,
+        `Bill payment: ₦${dto.amount} by ${payerId} for bill ${billId} (participant ${participantId})`,
       );
 
       return { participantFullyPaid, billFullyFunded };
@@ -1102,7 +1102,7 @@ export class SplitBillService {
       );
     }
 
-    const verifiedAmount = amount;
+    const verifiedAmount = amount / 100; // Paystack returns kobo
 
     const qr = this.dataSource.createQueryRunner();
     await qr.connect();
@@ -1191,7 +1191,7 @@ export class SplitBillService {
         actorId: null,
         actionType: ActivityActionType.PAYMENT_MADE,
         participantId,
-        description: `Guest payment of ${verifiedAmount} kobo verified`,
+        description: `Guest payment of ₦${verifiedAmount} verified`,
         amountBefore: participant.amountPaid,
         amountAfter: newAmountPaid,
         amountDifference: verifiedAmount,
@@ -1244,7 +1244,7 @@ export class SplitBillService {
 
     const { data } = await this.paymentService.initiateTransactions({
       email,
-      amount: amountToPay,
+      amount: Math.round(amountToPay * 100), // Paystack needs kobo
       reference,
       metadata: {
         split_bill_id: billId,
@@ -1694,10 +1694,11 @@ export class SplitBillService {
    * Updates the participant rows atomically within the provided QueryRunner.
    *
    * EVEN split:
-   *   base = floor(totalAmount / count)
-   *   remainder = totalAmount mod count
-   *   First `remainder` participants each get base+1 kobo.
-   *   This ensures SUM(shares) === totalAmount exactly, always.
+   *   Internal computation done in kobo for precision.
+   *   baseKobo = floor(totalKobo / count)
+   *   remainderKobo = totalKobo mod count
+   *   First `remainderKobo` participants each get (baseKobo + 1) / 100 Naira.
+   *   This ensures SUM(shares) === totalAmount exactly.
    *
    * PERCENTAGE split:
    *   share = floor((totalAmount * percentage) / 100)
@@ -1730,18 +1731,20 @@ export class SplitBillService {
 
     switch (splitMethod) {
       case SplitMethod.EVEN: {
-        // Pure integer arithmetic — no floats, no rounding errors
-        const base = Math.floor(totalAmount / count);
-        const remainder = totalAmount % count; // kobo, will be <= count-1
+        const totalKobo = Math.round(totalAmount * 100);
+        const baseKobo = Math.floor(totalKobo / count);
+        const remainderKobo = totalKobo % count;
 
         for (let i = 0; i < count; i++) {
-          owedAmounts[i] = base + (i < remainder ? 1 : 0);
+          const participantKobo = baseKobo + (i < remainderKobo ? 1 : 0);
+          owedAmounts[i] = participantKobo / 100;
         }
         break;
       }
 
       case SplitMethod.PERCENTAGE: {
-        let allocated = 0;
+        let allocatedKobo = 0;
+        const totalKobo = Math.round(totalAmount * 100);
 
         for (let i = 0; i < count; i++) {
           const pct = participants[i].percentage;
@@ -1750,9 +1753,10 @@ export class SplitBillService {
               `Participant ${i + 1} has invalid percentage. Must be 0-100.`,
             );
           }
-          // Integer arithmetic: floor(amount * pct / 100)
-          owedAmounts[i] = Math.floor((totalAmount * pct) / 100);
-          allocated += owedAmounts[i];
+          // Integer arithmetic in kobo
+          const shareKobo = Math.floor((totalKobo * pct) / 100);
+          owedAmounts[i] = shareKobo / 100;
+          allocatedKobo += shareKobo;
         }
 
         const pctSum = participants.reduce(
@@ -1765,10 +1769,11 @@ export class SplitBillService {
           );
         }
 
-        // Distribute rounding remainder to first participant
-        const roundingRemainder = totalAmount - allocated;
-        if (roundingRemainder > 0) {
-          owedAmounts[0] += roundingRemainder;
+        // Distribute rounding remainder (in kobo) to first participant
+        const roundingRemainderKobo = totalKobo - allocatedKobo;
+        if (roundingRemainderKobo > 0) {
+          owedAmounts[0] =
+            (Math.round(owedAmounts[0] * 100) + roundingRemainderKobo) / 100;
         }
         break;
       }
@@ -1776,20 +1781,21 @@ export class SplitBillService {
       case SplitMethod.MANUAL: {
         let manualSum = 0;
         for (let i = 0; i < count; i++) {
-          const amt = participants[i].amount;
+          const amt = participants[i].amount; // Now in Naira
           if (amt === undefined || amt < 0) {
             throw new BadRequestException(
-              `Participant ${i + 1} requires a valid amount (kobo) for MANUAL split`,
+              `Participant ${i + 1} requires a valid amount (Naira) for MANUAL split`,
             );
           }
           owedAmounts[i] = amt;
           manualSum += amt;
         }
 
-        if (manualSum !== totalAmount) {
+        // Use epsilon-style or kobo-based comparison for floats
+        if (Math.abs(manualSum - totalAmount) > 0.001) {
           throw new BadRequestException(
-            `Manual amounts sum to ${manualSum} kobo but bill is ${totalAmount} kobo. ` +
-              `Difference: ${totalAmount - manualSum} kobo.`,
+            `Manual amounts sum to ₦${manualSum} but bill is ₦${totalAmount}. ` +
+              `Difference: ₦${Math.round((totalAmount - manualSum) * 100) / 100}.`,
           );
         }
         break;
@@ -1853,7 +1859,7 @@ export class SplitBillService {
             newOwed,
             amountPaid: 0,
             action: 'AMOUNT_ADJUSTED',
-            message: `Amount changed from ${oldOwed} to ${newOwed} kobo.`,
+            message: `Amount changed from ₦${oldOwed} to ₦${newOwed}.`,
           });
         }
       }
@@ -1891,7 +1897,7 @@ export class SplitBillService {
 
     if (redistributionTotal !== expectedTotal) {
       throw new BadRequestException(
-        `Redistribution total ${redistributionTotal} kobo must equal ${expectedTotal} kobo.`,
+        `Redistribution total ₦${redistributionTotal} must equal ₦${expectedTotal}.`,
       );
     }
 
@@ -1908,8 +1914,8 @@ export class SplitBillService {
       const p = bill.participants.find((x) => x.id === redist.participantId);
       if (p && p.amountPaid > redist.value) {
         throw new BadRequestException(
-          `Cannot set ${p.guestName ?? 'User'}'s share to ${redist.value} kobo — ` +
-            `they've already paid ${p.amountPaid} kobo. Refund first.`,
+          `Cannot set ${p.guestName ?? 'User'}'s share to ₦${redist.value} — ` +
+            `they've already paid ₦${p.amountPaid}. Refund first.`,
         );
       }
 
@@ -2048,7 +2054,7 @@ export class SplitBillService {
       const sum = participants.reduce((s, p) => s + (p.amount ?? 0), 0);
       if (sum !== totalAmount) {
         throw new BadRequestException(
-          `Manual amounts sum to ${sum} kobo but bill total is ${totalAmount} kobo.`,
+          `Manual amounts sum to ₦${sum} but bill total is ₦${totalAmount}.`,
         );
       }
     }

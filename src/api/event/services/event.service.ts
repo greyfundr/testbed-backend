@@ -396,11 +396,9 @@ export class EventService {
       });
     }
 
-    const amountInKobo = Math.round(amount * 100);
-
     // Default Wallet Flow
     const wallet = await this.walletService.getWalletByUserId(user.id);
-    if (wallet.availableBalance < amountInKobo) {
+    if (wallet.availableBalance < amount) {
       throw new BadRequestException('Insufficient wallet balance');
     }
 
@@ -428,7 +426,7 @@ export class EventService {
       const transaction = await qr.manager.save(
         qr.manager.create(Transaction, {
           walletId: wallet.id,
-          amount: amountInKobo,
+          amount: amount,
           currency: 'NGN',
           type: transactionType,
           direction: TransactionDirection.DEBIT,
@@ -442,7 +440,7 @@ export class EventService {
       // Lock funds into event escrow
       await this.walletService.lockIntoEscrow({
         walletId: wallet.id,
-        amount: amountInKobo,
+        amount: amount,
         transactionId: transaction.id,
         entityType: 'event',
         entityId: event.id,
@@ -463,7 +461,7 @@ export class EventService {
 
       // Update event amount raised
       await qr.manager.update(Event, event.id, {
-        amountRaised: () => `amount_raised + ${amountInKobo}`,
+        amountRaised: () => `amount_raised + ${amount}`,
       });
 
       await qr.commitTransaction();
@@ -472,7 +470,7 @@ export class EventService {
       this.eventEmitter.emit('event.contribution_created', {
         eventId: event.id,
         contribution: savedContribution,
-        newTotal: Number(event.amountRaised * 100) + amountInKobo, // working with kobo for accuracy
+        newTotal: Number(event.amountRaised) + amount,
       });
 
       return savedContribution;

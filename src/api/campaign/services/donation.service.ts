@@ -105,7 +105,7 @@ export class DonationService {
       const transaction = await qr.manager.save(
         qr.manager.create(Transaction, {
           walletId: wallet.id,
-          amount: amount, // Stored in kobo
+          amount: amount, // Naira
           currency: 'NGN',
           type: TransactionType.CAMPAIGN_DONATION,
           direction: TransactionDirection.DEBIT,
@@ -128,7 +128,7 @@ export class DonationService {
       });
 
       const donation = qr.manager.create(Donation, {
-        amount: amount / 100, // Converter will multiply by 100 to store as kobo
+        amount: amount, // Naira
         donorId: user.id,
         campaignId: campaign.id,
         transactionId: transaction.id,
@@ -159,11 +159,11 @@ export class DonationService {
       await qr.commitTransaction();
 
       this.logger.log(
-        `Donation of ${amount} kobo completed by user ${user.id} for campaign ${campaign.id}`,
+        `Donation of ₦${amount} completed by user ${user.id} for campaign ${campaign.id}`,
       );
 
       // --- Notifications ---
-      const trueDonationAmount = amount / 100;
+      const trueDonationAmount = amount;
 
       // 1. Send receipt to donor
       this.eventEmitter.emit('donation.receipt', {

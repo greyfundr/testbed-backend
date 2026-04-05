@@ -11,7 +11,7 @@ import { User } from '../../user/entities';
 import { SplitBillParticipant } from './split-bill-participant.entity';
 import { SplitBillActivity } from './split-bill-activity.entity';
 import { SplitMethod, SplitBillStatus } from '../enums/split-bill.enum';
-import { BigIntAmountTransformer } from '../../../common/transformers/column-numeric.transformer';
+import { ColumnNumericTransformer } from '../../../common/transformers/column-numeric.transformer';
 
 @Entity('split_bills')
 @Index(['creatorId', 'status'])
@@ -36,17 +36,21 @@ export class SplitBill extends AbstractEntity {
   billReceipt: string | null;
 
   @Column({
-    type: 'bigint',
+    type: 'decimal',
+    precision: 20,
+    scale: 2,
     name: 'total_amount',
-    transformer: new BigIntAmountTransformer(),
+    transformer: new ColumnNumericTransformer(),
   })
   totalAmount: number;
 
   @Column({
-    type: 'bigint',
+    type: 'decimal',
+    precision: 20,
+    scale: 2,
     default: 0,
     name: 'total_collected',
-    transformer: new BigIntAmountTransformer(),
+    transformer: new ColumnNumericTransformer(),
   })
   totalCollected: number;
 
@@ -66,10 +70,12 @@ export class SplitBill extends AbstractEntity {
   allowPartialPayment: boolean;
 
   @Column({
-    type: 'bigint',
+    type: 'decimal',
+    precision: 20,
+    scale: 2,
     nullable: true,
     name: 'min_payment_amount',
-    transformer: new BigIntAmountTransformer(),
+    transformer: new ColumnNumericTransformer(),
   })
   minPaymentAmount: number | null;
 
