@@ -82,6 +82,11 @@ export class UpdateProfileDto {
   @IsString()
   @IsOptional()
   image?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  dateOfBirth?: string;
 }
 
 export class SubmitKycDto {
