@@ -94,4 +94,7 @@ export class User extends AbstractEntity {
 
   @Column({ type: 'date', nullable: true, name: 'date_of_birth' })
   dateOfBirth: Date | null;
+
+  @Column({ type: 'varchar', length: 11, nullable: true, name: 'bvn' })
+  bvn: string | null;
 }

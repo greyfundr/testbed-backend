@@ -11,7 +11,7 @@ import {
   ProfileRepository,
   UserRepository,
 } from '../repository';
-import { SubmitKycDto } from '../dtos';
+import { SubmitBvnDto, SubmitKycDto } from '../dtos';
 import { User, Kyc } from '../entities';
 import { KycLevels, KycStatus, KycVerificationType } from '../enums/user.enum';
 import { UserKycService } from 'src/common/services/kyc-verification.service';
@@ -99,6 +99,53 @@ export class KycService {
     return kyc;
   }
 
+  async submitBvn(user: User, dto: SubmitBvnDto) {
+    let kyc = await this.kycRepository.findOne({
+      where: { user: { id: user.id } },
+    });
+
+    if (kyc && kyc.status === KycStatus.VERIFIED) {
+      if (kyc.name === KycLevels.LEVEL_2) {
+        throw new ConflictException(
+          'You have already completed Tier 2 KYC verification.',
+        );
+      }
+      if (
+        user.bvn ||
+        (kyc.name === KycLevels.LEVEL_1 &&
+          kyc.verificationType === KycVerificationType.BVN)
+      ) {
+        throw new ConflictException('Your BVN has already been submitted.');
+      }
+    }
+
+    user.bvn = dto.bvn;
+    await this.userRepository.save(user);
+
+    if (!kyc) {
+      kyc = new Kyc();
+      kyc.user = user;
+    }
+
+    kyc.name = KycLevels.LEVEL_1;
+    kyc.verificationType = KycVerificationType.BVN;
+    kyc.idNumber = dto.bvn;
+    kyc.status = KycStatus.VERIFIED;
+    kyc.rejectionReason = null;
+
+    await this.kycRepository.save(kyc);
+
+    this.logger.log(
+      `[KYC] User ${user.id} upgraded to LEVEL_1. BVN securely saved.`,
+    );
+
+    return {
+      status: 'success',
+      message: 'BVN saved successfully. You are now at KYC Level 1.',
+      data: kyc,
+    };
+  }
+
   async createKycSession(userId: string) {
     const queryRunner = this.kycRepository
       .getManager()
@@ -119,6 +166,20 @@ export class KycService {
       if (!user.dateOfBirth) {
         throw new BadRequestException(
           'Please fill in your date of birth in account information to proceed with KYC',
+        );
+      }
+
+      const existingKyc = await queryRunner.manager.findOne(Kyc, {
+        where: {
+          user: { id: userId },
+          verificationType: KycVerificationType.BVN,
+          status: KycStatus.VERIFIED,
+        },
+      });
+
+      if (!existingKyc) {
+        throw new BadRequestException(
+          'You have not completed Level 1 KYC verification. Please submit your BVN to proceed.',
         );
       }
 
@@ -340,7 +401,7 @@ export class KycService {
         });
       } else {
         const kyc = qr.manager.create(Kyc, {
-          name: KycLevels.LEVEL_1,
+          name: KycLevels.LEVEL_2,
           status: KycStatus.VERIFIED,
           verificationType,
           idNumber: document_number,
@@ -461,7 +522,7 @@ export class KycService {
       await this.kycRepository.update(user.kyc.id, { status, ...extra });
     } else {
       const kyc = this.kycRepository.create({
-        name: KycLevels.LEVEL_1,
+        name: KycLevels.LEVEL_2,
         status,
         verificationType: extra?.verificationType ?? KycVerificationType.NIN,
         idNumber: extra?.idNumber ?? '',

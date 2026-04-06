@@ -22,7 +22,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { SubmitKycDto } from '../dtos';
+import { SubmitBvnDto, SubmitKycDto } from '../dtos';
 import { Request, Response } from 'express';
 
 @ApiTags('KYC')
@@ -45,6 +45,17 @@ export class KycController {
   @ApiOperation({ summary: 'Get current KYC status' })
   getKycStatus(@CurrentUser() user: User) {
     return this.kycService.getKycStatus(user);
+  }
+
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  @Post('bvn')
+  @ApiOperation({ summary: 'Submit BVN to attain KYC level 1' })
+  async submitBvn(
+    @CurrentUser() user: User,
+    @Body() submitBvnDto: SubmitBvnDto,
+  ) {
+    return await this.kycService.submitBvn(user, submitBvnDto);
   }
 
   @ApiBearerAuth('JWT-auth')

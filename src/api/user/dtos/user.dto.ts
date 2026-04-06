@@ -5,6 +5,8 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Length,
+  Matches,
   MinLength,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
@@ -126,4 +128,13 @@ export class GetUsersFilterDto {
   @IsOptional()
   @IsEnum(AccountType)
   accountType?: AccountType;
+}
+
+export class SubmitBvnDto {
+  @ApiProperty({ description: 'User 11-digit Bank Verification Number' })
+  @IsNotEmpty()
+  @IsString()
+  @Length(11, 11, { message: 'BVN must be exactly 11 digits' })
+  @Matches(/^[0-9]+$/, { message: 'BVN must contain only numbers' })
+  bvn: string;
 }
