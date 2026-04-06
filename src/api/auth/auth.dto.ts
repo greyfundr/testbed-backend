@@ -138,6 +138,14 @@ export class SubmitBasicInfoDto {
   @IsNotEmpty({ message: 'Agree to terms and conditions is required' })
   // @Transform(({ value }) => value === 'true')
   agreeToTerms: boolean;
+
+  @ApiProperty({ description: 'Date of birth', example: '1990-01-01' })
+  @IsNotEmpty({ message: 'Date of birth is required' })
+  @IsString({ message: 'Date of birth must be a string in YYYY-MM-DD format' })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, {
+    message: 'Date of birth must be in YYYY-MM-DD format',
+  })
+  dateOfBirth: string;
 }
 
 export class CompleteKycDto {

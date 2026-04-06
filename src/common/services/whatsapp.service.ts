@@ -8,10 +8,12 @@ export class WhatsAppService {
   private readonly axiosInstance: AxiosInstance;
 
   private readonly phoneNumberId = '984194248121334';
+  // private readonly phoneNumberId =
+  //   this.configService.get<string>('WHATSAPP_PHONE_ID');
 
   constructor(private readonly configService: ConfigService) {
     this.axiosInstance = axios.create({
-      baseURL: 'https://graph.facebook.com/v22.0/',
+      baseURL: 'https://graph.facebook.com/v23.0/',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${this.configService.get<string>('WHATSAPP_API_TOKEN')}`,
@@ -22,22 +24,26 @@ export class WhatsAppService {
   async sendMessage(to: string, message: string) {
     const formattedPhoneNumber = to.replace(/\+/g, '');
 
-    this.logger.log(`Sending WhatsApp message to ${formattedPhoneNumber}...`);
+    this.logger.log(
+      `Sending WhatsApp message to ${formattedPhoneNumber}...`,
+      this.phoneNumberId,
+    );
 
     try {
       const payload = {
         messaging_product: 'whatsapp',
+        recipient_type: 'individual',
         to: formattedPhoneNumber,
-        type: 'template',
-        template: {
-          name: 'hello_world',
-          language: { code: 'en_US' },
-        },
-        // type: 'text',
-        // text: {
-        //   preview_url: false,
-        //   body: message,
+        // type: 'template',
+        // template: {
+        //   name: 'hello_world',
+        //   language: { code: 'en_US' },
         // },
+        type: 'text',
+        text: {
+          preview_url: false,
+          body: message,
+        },
       };
 
       const response = await this.axiosInstance.post(

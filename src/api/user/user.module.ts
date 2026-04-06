@@ -5,6 +5,7 @@ import { UserController, KycController } from './controllers';
 import { User, Profile, Kyc } from './entities';
 import { UserRepository, ProfileRepository, KycRepository } from './repository';
 import { SettingsModule } from '../settings/settings.module';
+import { UserKycService } from 'src/common/services/kyc-verification.service';
 
 @Module({
   imports: [TypeOrmModule.forFeature([User, Profile, Kyc]), SettingsModule],
@@ -15,6 +16,7 @@ import { SettingsModule } from '../settings/settings.module';
     UserRepository,
     ProfileRepository,
     KycRepository,
+    UserKycService
   ],
   exports: [
     UserService,

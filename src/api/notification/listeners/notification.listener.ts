@@ -204,4 +204,58 @@ export class NotificationListener {
       },
     });
   }
+
+  @OnEvent('kyc.approved')
+  async handleKycApproved(payload: { userId: string; email: string }) {
+    await this.notificationService.notify(payload.userId, 'securityAlerts', {
+      title: '✅ Identity Verified!',
+      message:
+        'Your identity has been successfully verified. You now have full access to GreyFundr.',
+      type: 'kyc',
+      metadata: { email: payload.email },
+    });
+  }
+
+  @OnEvent('kyc.declined')
+  async handleKycDeclined(payload: { userId: string; email: string }) {
+    await this.notificationService.notify(payload.userId, 'securityAlerts', {
+      title: 'Verification Declined',
+      message:
+        'Your identity verification was declined. Please contact support via live chat for assistance.',
+      type: 'kyc',
+      metadata: { email: payload.email },
+    });
+  }
+
+  @OnEvent('kyc.in_review')
+  async handleKycInReview(payload: { userId: string; email: string }) {
+    await this.notificationService.notify(payload.userId, 'securityAlerts', {
+      title: 'Verification In Review',
+      message:
+        'Your identity verification is currently under review. We will notify you once complete.',
+      type: 'kyc',
+      metadata: { email: payload.email },
+    });
+  }
+
+  @OnEvent('kyc.name_mismatch')
+  async handleKycNameMismatch(payload: { userId: string }) {
+    await this.notificationService.notify(payload.userId, 'securityAlerts', {
+      title: 'Verification Failed — Name Mismatch',
+      message:
+        'The name on your document does not match your registered name. Please contact support.',
+      type: 'kyc',
+    });
+  }
+
+  @OnEvent('kyc.dob_mismatch')
+  async handleKycDobMismatch(payload: { userId: string }) {
+    await this.notificationService.notify(payload.userId, 'securityAlerts', {
+      title: 'Verification Failed — Date of Birth Mismatch',
+      message:
+        'The date of birth on your document does not match your profile. ' +
+        'Please update your date of birth and retry verification.',
+      type: 'kyc',
+    });
+  }
 }

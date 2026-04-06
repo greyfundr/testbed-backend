@@ -487,6 +487,7 @@ export class AuthService {
     user.agreeToTerms = params.agreeToTerms;
     user.username = params.username;
     user.hasSubmittedBasicInfo = true;
+    user.dateOfBirth = new Date(params.dateOfBirth);
 
     await this.userRepository.save(user);
   }
