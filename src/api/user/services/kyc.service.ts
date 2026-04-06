@@ -147,9 +147,7 @@ export class KycService {
   }
 
   async createKycSession(userId: string) {
-    const queryRunner = this.kycRepository
-      .getManager()
-      .connection.createQueryRunner();
+    const queryRunner = this.dataSource.createQueryRunner();
 
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -201,7 +199,10 @@ export class KycService {
         error: null,
       };
     } catch (error) {
-      await queryRunner.rollbackTransaction();
+      if (queryRunner.isTransactionActive) {
+        await queryRunner.rollbackTransaction();
+      }
+      throw error;
     } finally {
       await queryRunner.release();
     }
