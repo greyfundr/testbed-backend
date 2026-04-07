@@ -34,7 +34,7 @@ export class UserService {
   async getUserProfile(userId: string) {
     return this.userRepository.findOne({
       where: { id: userId },
-      relations: ['profile', 'kyc'],
+      relations: ['profile', 'kycs'],
     });
   }
 
@@ -44,7 +44,7 @@ export class UserService {
     const query = this.userRepository
       .createQueryBuilder('user')
       .leftJoinAndSelect('user.profile', 'profile')
-      .leftJoinAndSelect('user.kyc', 'kyc');
+      .leftJoinAndSelect('user.kycs', 'kycs');
 
     if (email) {
       query.andWhere('user.email LIKE :email', { email: `%${email}%` });
@@ -133,7 +133,7 @@ export class UserService {
       // Reload user with profile
       return this.userRepository.findOne({
         where: { id: user.id },
-        relations: ['profile', 'kyc'],
+        relations: ['profile', 'kycs'],
       });
     } catch (err) {
       await queryRunner.rollbackTransaction();
@@ -146,7 +146,7 @@ export class UserService {
   async deleteAccount(userId: string): Promise<void> {
     const user = await this.userRepository.findOne({
       where: { id: userId },
-      relations: ['settings', 'profile', 'kyc'],
+      relations: ['settings', 'profile', 'kycs'],
     });
 
     if (!user) throw new NotFoundException('User not found');
@@ -249,7 +249,7 @@ export class UserService {
       if (user.profile) {
         await manager.softDelete(Profile, { user: { id: userId } });
       }
-      if (user.kyc) {
+      if (user.kycs && user.kycs.length > 0) {
         await manager.softDelete(Kyc, { user: { id: userId } });
       }
 

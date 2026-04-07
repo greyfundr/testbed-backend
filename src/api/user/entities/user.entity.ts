@@ -74,8 +74,8 @@ export class User extends AbstractEntity {
   @OneToOne(() => Profile, (profile) => profile.user, { cascade: true })
   profile: Profile;
 
-  @OneToOne(() => Kyc, (kyc) => kyc.user, { cascade: true })
-  kyc: Kyc;
+  @OneToMany(() => Kyc, (kyc) => kyc.user, { cascade: true })
+  kycs: Kyc[];
 
   @Column({
     type: 'varchar',

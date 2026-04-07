@@ -44,7 +44,7 @@ export class KycController {
   @Get('status')
   @ApiOperation({ summary: 'Get current KYC status' })
   getKycStatus(@CurrentUser() user: User) {
-    return this.kycService.getKycStatus(user);
+    return this.kycService.getKycStatus(user.id);
   }
 
   @ApiBearerAuth('JWT-auth')

@@ -56,18 +56,28 @@ export class KycService {
     private readonly dataSource: DataSource,
   ) {}
 
+  private async getKycByLevel(
+    userId: string,
+    level: KycLevels,
+    qrManager?: any,
+  ): Promise<Kyc | null> {
+    const repo = qrManager ? qrManager.getRepository(Kyc) : this.kycRepository;
+    return repo.findOne({ where: { user: { id: userId }, name: level } });
+  }
+
   async submitKyc(user: User, submitKycDto: SubmitKycDto) {
-    let kyc = await this.kycRepository.findOne({
-      where: { user: { id: user.id } },
-    });
+    let kyc = await this.getKycByLevel(user.id, KycLevels.LEVEL_2);
 
     if (kyc && kyc.status === KycStatus.VERIFIED) {
-      throw new ConflictException('KYC already verified');
+      throw new ConflictException('KYC Tier 2 already verified');
     }
 
     if (!kyc) {
-      kyc = new Kyc();
-      kyc.user = user;
+      kyc = await this.kycRepository.create({
+        user: { id: user.id },
+        name: KycLevels.LEVEL_2,
+        attemptCount: 0,
+      });
     }
 
     kyc.verificationType = submitKycDto.verificationType;
@@ -75,6 +85,7 @@ export class KycService {
     kyc.documentImage = submitKycDto.documentImage || null;
     kyc.status = KycStatus.PENDING;
     kyc.rejectionReason = null;
+    kyc.attemptCount = (kyc.attemptCount || 0) + 1;
 
     await this.kycRepository.save(kyc);
 
@@ -86,62 +97,89 @@ export class KycService {
     return kyc;
   }
 
-  async getKycStatus(user: User) {
-    const kyc = await this.kycRepository.findOne({
-      where: { user: { id: user.id } },
+  async getKycStatus(userId: string) {
+    const kycs = await this.kycRepository.findAll({
+      where: { user: { id: userId } },
+      order: { name: 'ASC' },
     });
 
-    if (!kyc) {
-      return { status: 'not_submitted' };
-    }
+    const level1 = kycs.find((k) => k.name === KycLevels.LEVEL_1) ?? null;
+    const level2 = kycs.find((k) => k.name === KycLevels.LEVEL_2) ?? null;
 
-    return kyc;
+    return {
+      level1: level1
+        ? {
+            status: level1.status,
+            verificationType: level1.verificationType,
+            verifiedAt: level1.verifiedAt,
+            rejectedAt: level1.rejectedAt,
+            rejectionReason: level1.rejectionReason,
+          }
+        : { status: 'not_submitted' },
+
+      level2: level2
+        ? {
+            status: level2.status,
+            verificationType: level2.verificationType,
+            verifiedAt: level2.verifiedAt,
+            rejectedAt: level2.rejectedAt,
+            rejectionReason: level2.rejectionReason,
+            attemptCount: level2.attemptCount,
+            canRetry:
+              level2.status === KycStatus.REJECTED &&
+              (level2.attemptCount || 0) < 3,
+          }
+        : { status: 'not_submitted' },
+
+      isLevel1Verified: level1?.status === KycStatus.VERIFIED,
+      isLevel2Verified: level2?.status === KycStatus.VERIFIED,
+      hasCompletedKyc:
+        level1?.status === KycStatus.VERIFIED &&
+        level2?.status === KycStatus.VERIFIED,
+    };
   }
 
   async submitBvn(user: User, dto: SubmitBvnDto) {
-    let kyc = await this.kycRepository.findOne({
-      where: { user: { id: user.id } },
-    });
+    const level1 = await this.getKycByLevel(user.id, KycLevels.LEVEL_1);
 
-    if (kyc && kyc.status === KycStatus.VERIFIED) {
-      if (kyc.name === KycLevels.LEVEL_2) {
-        throw new ConflictException(
-          'You have already completed Tier 2 KYC verification.',
-        );
-      }
-      if (
-        user.bvn ||
-        (kyc.name === KycLevels.LEVEL_1 &&
-          kyc.verificationType === KycVerificationType.BVN)
-      ) {
-        throw new ConflictException('Your BVN has already been submitted.');
-      }
+    if (level1?.status === KycStatus.VERIFIED) {
+      throw new ConflictException(
+        'Your BVN has already been verified (Level 1 complete).',
+      );
     }
 
-    user.bvn = dto.bvn;
-    await this.userRepository.save(user);
+    await this.userRepository.update(user.id, { bvn: dto.bvn });
 
-    if (!kyc) {
-      kyc = new Kyc();
-      kyc.user = user;
+    if (level1) {
+      await this.kycRepository.update(level1.id, {
+        verificationType: KycVerificationType.BVN,
+        idNumber: dto.bvn,
+        status: KycStatus.VERIFIED,
+        rejectionReason: null,
+        verifiedAt: new Date(),
+        attemptCount: (level1.attemptCount || 0) + 1,
+      });
+    } else {
+      await this.kycRepository.save(
+        await this.kycRepository.create({
+          user: { id: user.id },
+          name: KycLevels.LEVEL_1,
+          verificationType: KycVerificationType.BVN,
+          idNumber: dto.bvn,
+          status: KycStatus.VERIFIED,
+          rejectionReason: null,
+          verifiedAt: new Date(),
+          attemptCount: 1,
+        }),
+      );
     }
 
-    kyc.name = KycLevels.LEVEL_1;
-    kyc.verificationType = KycVerificationType.BVN;
-    kyc.idNumber = dto.bvn;
-    kyc.status = KycStatus.VERIFIED;
-    kyc.rejectionReason = null;
-
-    await this.kycRepository.save(kyc);
-
-    this.logger.log(
-      `[KYC] User ${user.id} upgraded to LEVEL_1. BVN securely saved.`,
-    );
+    this.logger.log(`[KYC] User ${user.id} Level 1 (BVN) verified.`);
 
     return {
-      status: 'success',
-      message: 'BVN saved successfully. You are now at KYC Level 1.',
-      data: kyc,
+      message: 'BVN verified. You have completed Level 1 KYC.',
+      level: KycLevels.LEVEL_1,
+      status: KycStatus.VERIFIED,
     };
   }
 
@@ -166,15 +204,15 @@ export class KycService {
         );
       }
 
-      const existingKyc = await queryRunner.manager.findOne(Kyc, {
+      const existingLevel1 = await queryRunner.manager.findOne(Kyc, {
         where: {
           user: { id: userId },
-          verificationType: KycVerificationType.BVN,
+          name: KycLevels.LEVEL_1,
           status: KycStatus.VERIFIED,
         },
       });
 
-      if (!existingKyc) {
+      if (!existingLevel1) {
         throw new BadRequestException(
           'You have not completed Level 1 KYC verification. Please submit your BVN to proceed.',
         );
@@ -231,16 +269,12 @@ export class KycService {
 
   verifyWebhookSignature(rawBody: string, signature: string): boolean {
     const secret = this.config.get<string>('DIDIT_WEBHOOK_SECRET');
-    if (!secret) {
-      this.logger.error('[KYC Webhook] DIDIT_WEBHOOK_SECRET is not configured');
-      return false;
-    }
+    if (!secret) return false;
 
     const expected = crypto
       .createHmac('sha256', secret)
       .update(rawBody, 'utf8')
       .digest('hex');
-
     const incoming = signature.startsWith('sha256=')
       ? signature.slice(7)
       : signature;
@@ -257,58 +291,33 @@ export class KycService {
     signature: string,
   ): Promise<void> {
     if (!this.verifyWebhookSignature(rawBody, signature)) {
-      this.logger.warn('[KYC Webhook] Invalid signature — rejecting');
       throw new UnauthorizedException('Invalid webhook signature');
     }
 
-    const { webhook_type, vendor_data: userId, decision, session_id } = payload;
+    const { webhook_type, vendor_data: userId, decision } = payload;
 
-    this.logger.log(
-      `[KYC Webhook] Received: type=${webhook_type} userId=${userId} session=${session_id}`,
-    );
-
-    if (webhook_type !== 'status.updated') {
-      this.logger.log(`[KYC Webhook] Ignoring event type: ${webhook_type}`);
-      return;
-    }
-
-    if (!userId) {
-      throw new BadRequestException('Missing vendor_data (userId) in payload');
-    }
-
-    if (!decision?.status) {
-      this.logger.log('[KYC Webhook] No decision in payload — skipping');
+    if (webhook_type !== 'status.updated' || !userId || !decision?.status) {
       return;
     }
 
     const user = await this.userRepository.findOne({
       where: { id: userId },
-      relations: ['kyc', 'profile'],
     });
 
     if (!user) {
-      this.logger.error(`[KYC Webhook] User not found: ${userId}`);
       throw new NotFoundException(`User ${userId} not found`);
     }
-
-    this.logger.log(
-      `[KYC Webhook] Processing decision "${decision.status}" for user ${userId}`,
-    );
 
     switch (decision.status) {
       case 'Approved':
         await this.handleApproved(user, decision);
         break;
       case 'Declined':
-        await this.handleDeclined(user);
+        await this.handleDeclined(user.id);
         break;
       case 'In Review':
-        await this.handleInReview(user, decision);
+        await this.handleInReview(user.id, decision);
         break;
-      default:
-        this.logger.warn(
-          `[KYC Webhook] Unknown decision status: ${decision.status}`,
-        );
     }
   }
 
@@ -317,13 +326,7 @@ export class KycService {
     decision: DiditDecision,
   ): Promise<void> {
     const idVerification = decision.id_verification;
-
-    if (!idVerification) {
-      this.logger.warn(
-        `[KYC Webhook] Approved but no id_verification for user ${user.id}`,
-      );
-      return;
-    }
+    if (!idVerification) return;
 
     const {
       first_name,
@@ -342,17 +345,11 @@ export class KycService {
       !docFullName.includes(userFirstName) ||
       !docFullName.includes(userLastName)
     ) {
-      this.logger.warn(
-        `[KYC Webhook] Name mismatch for user ${user.id}: ` +
-          `doc="${docFullName}" user="${userFirstName} ${userLastName}"`,
-      );
-
-      await this.updateKycStatus(user, KycStatus.REJECTED, {
+      await this.updateLevel2Status(user.id, KycStatus.REJECTED, {
         rejectionReason:
-          'Name on document does not match your registered name. ' +
-          'Please contact support.',
+          'Name on document does not match your registered name.',
+        rejectedAt: new Date(),
       });
-
       this.eventEmitter.emit('kyc.name_mismatch', { userId: user.id });
       return;
     }
@@ -364,17 +361,11 @@ export class KycService {
       );
 
       if (docDob !== userDob) {
-        this.logger.warn(
-          `[KYC Webhook] DOB mismatch for user ${user.id}: ` +
-            `doc="${docDob}" user="${userDob}"`,
-        );
-
-        await this.updateKycStatus(user, KycStatus.REJECTED, {
+        await this.updateLevel2Status(user.id, KycStatus.REJECTED, {
           rejectionReason:
-            'Date of birth on document does not match your registered date of birth. ' +
-            'Please update your profile and retry verification.',
+            'Date of birth on document does not match your profile.',
+          rejectedAt: new Date(),
         });
-
         this.eventEmitter.emit('kyc.dob_mismatch', { userId: user.id });
         return;
       }
@@ -390,37 +381,37 @@ export class KycService {
     await qr.startTransaction();
 
     try {
-      const existingKyc = user.kyc;
+      const existingLevel2 = await qr.manager.findOne(Kyc, {
+        where: { user: { id: user.id }, name: KycLevels.LEVEL_2 },
+      });
 
-      if (existingKyc) {
-        await qr.manager.update(Kyc, existingKyc.id, {
-          name: KycLevels.LEVEL_2,
+      if (existingLevel2) {
+        await qr.manager.update(Kyc, existingLevel2.id, {
           status: KycStatus.VERIFIED,
           verificationType,
           idNumber: document_number,
           rejectionReason: null,
+          verifiedAt: new Date(),
+          rejectedAt: null,
+          attemptCount: (existingLevel2.attemptCount || 0) + 1,
         });
       } else {
-        const kyc = qr.manager.create(Kyc, {
-          name: KycLevels.LEVEL_2,
-          status: KycStatus.VERIFIED,
-          verificationType,
-          idNumber: document_number,
-          documentImage: null,
-          rejectionReason: null,
-          user: { id: user.id },
-        });
-        await qr.manager.save(Kyc, kyc);
+        await qr.manager.save(
+          qr.manager.create(Kyc, {
+            user: { id: user.id },
+            name: KycLevels.LEVEL_2,
+            status: KycStatus.VERIFIED,
+            verificationType,
+            idNumber: document_number,
+            rejectionReason: null,
+            verifiedAt: new Date(),
+            attemptCount: 1,
+          }),
+        );
       }
 
       await qr.manager.update(User, user.id, { hasCompletedKyc: true });
-
       await qr.commitTransaction();
-
-      this.logger.log(
-        `[KYC Webhook] ✅ Approved and persisted for user ${user.id} ` +
-          `(${verificationType} / ${document_type})`,
-      );
 
       this.eventEmitter.emit('kyc.approved', {
         userId: user.id,
@@ -429,112 +420,111 @@ export class KycService {
       });
     } catch (err) {
       await qr.rollbackTransaction();
-      this.logger.error(
-        `[KYC Webhook] DB error during approval for user ${user.id}`,
-        err,
-      );
       throw err;
     } finally {
       await qr.release();
     }
   }
 
-  private async handleDeclined(user: User): Promise<void> {
-    await this.updateKycStatus(user, KycStatus.REJECTED, {
+  private async handleDeclined(userId: string): Promise<void> {
+    await this.updateLevel2Status(userId, KycStatus.REJECTED, {
       rejectionReason:
         'Your identity verification was declined. Please contact support.',
+      rejectedAt: new Date(),
     });
 
-    this.logger.log(`[KYC Webhook] ❌ Declined for user ${user.id}`);
-
-    this.eventEmitter.emit('kyc.declined', {
-      userId: user.id,
-      email: user.email,
-    });
+    this.logger.log(`[KYC Webhook] ❌ Level 2 Declined for user ${userId}`);
+    this.eventEmitter.emit('kyc.declined', { userId });
   }
 
   private async handleInReview(
-    user: User,
+    userId: string,
     decision: DiditDecision,
   ): Promise<void> {
     const idVerification = decision.id_verification;
+    const verificationType = idVerification
+      ? this.mapDocTypeToVerificationType(
+          idVerification.document_type,
+          idVerification.issuing_state_name,
+        )
+      : KycVerificationType.NIN;
+
+    const idNumber = idVerification?.document_number || '';
 
     const qr = this.dataSource.createQueryRunner();
     await qr.connect();
     await qr.startTransaction();
 
     try {
-      const existingKyc = user.kyc;
+      const existingLevel2 = await qr.manager.findOne(Kyc, {
+        where: { user: { id: userId }, name: KycLevels.LEVEL_2 },
+      });
 
-      if (existingKyc) {
-        await qr.manager.update(Kyc, existingKyc.id, {
-          name: KycLevels.LEVEL_2, // <-- FIX: Mark attempt as Level 2
+      if (existingLevel2) {
+        await qr.manager.update(Kyc, existingLevel2.id, {
           status: KycStatus.PENDING,
-          ...(idVerification && {
-            verificationType: this.mapDocTypeToVerificationType(
-              idVerification.document_type,
-              idVerification.issuing_state_name,
-            ),
-            idNumber: idVerification.document_number,
+          verificationType,
+          idNumber,
+        });
+      } else {
+        await qr.manager.save(
+          qr.manager.create(Kyc, {
+            user: { id: userId },
+            name: KycLevels.LEVEL_2,
+            status: KycStatus.PENDING,
+            verificationType,
+            idNumber,
+            rejectionReason: null,
+            attemptCount: 1,
           }),
-        });
-      } else if (idVerification) {
-        const kyc = qr.manager.create(Kyc, {
-          name: KycLevels.LEVEL_2, // <-- FIX: This should also be LEVEL_2 since Didit is for Tier 2
-          status: KycStatus.PENDING,
-          verificationType: this.mapDocTypeToVerificationType(
-            idVerification.document_type,
-            idVerification.issuing_state_name,
-          ),
-          idNumber: idVerification.document_number,
-          rejectionReason: null,
-          user: { id: user.id },
-        });
-        await qr.manager.save(Kyc, kyc);
+        );
       }
 
       await qr.commitTransaction();
-
-      this.logger.log(`[KYC Webhook] 🕐 In Review for user ${user.id}`);
-
-      this.eventEmitter.emit('kyc.in_review', {
-        userId: user.id,
-        email: user.email,
-      });
+      this.logger.log(`[KYC Webhook] 🕐 Level 2 In Review for user ${userId}`);
+      this.eventEmitter.emit('kyc.in_review', { userId });
     } catch (err) {
       await qr.rollbackTransaction();
-      this.logger.error(
-        `[KYC Webhook] DB error during in_review for user ${user.id}`,
-        err,
-      );
       throw err;
     } finally {
       await qr.release();
     }
   }
 
-  private async updateKycStatus(
-    user: User,
+  private async updateLevel2Status(
+    userId: string,
     status: KycStatus,
-    extra?: Partial<
-      Pick<Kyc, 'rejectionReason' | 'verificationType' | 'idNumber'>
+    extra: Partial<
+      Pick<
+        Kyc,
+        | 'rejectionReason'
+        | 'verifiedAt'
+        | 'rejectedAt'
+        | 'verificationType'
+        | 'idNumber'
+      >
     >,
   ): Promise<void> {
-    if (user.kyc) {
-      await this.kycRepository.update(user.kyc.id, {
+    const existing = await this.getKycByLevel(userId, KycLevels.LEVEL_2);
+
+    if (existing) {
+      await this.kycRepository.update(existing.id, {
         status,
+        attemptCount: (existing.attemptCount || 0) + 1,
         ...extra,
       });
     } else {
-      const kyc = this.kycRepository.create({
-        name: KycLevels.LEVEL_2,
-        status,
-        verificationType: extra?.verificationType ?? KycVerificationType.NIN,
-        idNumber: extra?.idNumber ?? '',
-        rejectionReason: extra?.rejectionReason ?? null,
-        user: { id: user.id },
-      });
-      await this.kycRepository.save(await kyc);
+      await this.kycRepository.save(
+        await this.kycRepository.create({
+          user: { id: userId },
+          name: KycLevels.LEVEL_2,
+          status,
+          verificationType: extra.verificationType ?? KycVerificationType.NIN,
+          idNumber: extra.idNumber ?? '',
+          attemptCount: 1,
+          ...extra,
+        }),
+      );
     }
   }
 }
