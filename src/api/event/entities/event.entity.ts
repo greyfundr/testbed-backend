@@ -195,4 +195,10 @@ export class Event extends AbstractEntity {
 
   @Column({ type: 'boolean', name: 'hide_donation_amount', default: false })
   hideDonationAmount: boolean;
+
+  @ApiProperty({ description: 'Total RSVPs for physical venue' })
+  venueCount?: number;
+
+  @ApiProperty({ description: 'Total RSVPs for online attendance' })
+  onlineCount?: number;
 }

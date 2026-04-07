@@ -328,6 +328,25 @@ export class EventService {
       .leftJoinAndSelect('event.organizers', 'organizers')
       .leftJoinAndSelect('organizers.user', 'user')
       .loadRelationCountAndMap('event.rsvpCount', 'event.rsvps')
+      .loadRelationCountAndMap(
+        'event.venueCount',
+        'event.rsvps',
+        'rsvp',
+        (qb) =>
+          qb.where('rsvp.status = :venueStatus', {
+            venueStatus: RsvpStatus.VENUE,
+          }),
+      )
+      .loadRelationCountAndMap(
+        'event.onlineCount',
+        'event.rsvps',
+        'rsvp',
+        (qb) =>
+          qb.where('rsvp.status = :onlineStatus', {
+            onlineStatus: RsvpStatus.ONLINE,
+          }),
+      )
+
       .where('event.id = :id', { id })
       .getOne();
 
