@@ -27,7 +27,7 @@ interface DiditIdVerification {
   document_number: string;
   document_type: string;
   issuing_state_name: string;
-  date_of_birth: string; // "YYYY-MM-DD" or "DD/MM/YYYY"
+  date_of_birth: string;
 }
 
 interface DiditDecision {
@@ -41,6 +41,7 @@ interface DiditWebhookPayload {
   session_id: string;
   decision?: DiditDecision;
 }
+
 @Injectable()
 export class KycService {
   private readonly logger = new Logger(KycService.name);
@@ -56,7 +57,6 @@ export class KycService {
   ) {}
 
   async submitKyc(user: User, submitKycDto: SubmitKycDto) {
-    // Check if user already has a verified KYC
     let kyc = await this.kycRepository.findOne({
       where: { user: { id: user.id } },
     });
@@ -78,7 +78,6 @@ export class KycService {
 
     await this.kycRepository.save(kyc);
 
-    // Reset user completion flag if it was somehow set
     if (user.hasCompletedKyc) {
       user.hasCompletedKyc = false;
       await this.userRepository.save(user);
@@ -395,6 +394,7 @@ export class KycService {
 
       if (existingKyc) {
         await qr.manager.update(Kyc, existingKyc.id, {
+          name: KycLevels.LEVEL_2,
           status: KycStatus.VERIFIED,
           verificationType,
           idNumber: document_number,
@@ -468,6 +468,7 @@ export class KycService {
 
       if (existingKyc) {
         await qr.manager.update(Kyc, existingKyc.id, {
+          name: KycLevels.LEVEL_2, // <-- FIX: Mark attempt as Level 2
           status: KycStatus.PENDING,
           ...(idVerification && {
             verificationType: this.mapDocTypeToVerificationType(
@@ -479,7 +480,7 @@ export class KycService {
         });
       } else if (idVerification) {
         const kyc = qr.manager.create(Kyc, {
-          name: KycLevels.LEVEL_1,
+          name: KycLevels.LEVEL_2, // <-- FIX: This should also be LEVEL_2 since Didit is for Tier 2
           status: KycStatus.PENDING,
           verificationType: this.mapDocTypeToVerificationType(
             idVerification.document_type,
@@ -520,7 +521,10 @@ export class KycService {
     >,
   ): Promise<void> {
     if (user.kyc) {
-      await this.kycRepository.update(user.kyc.id, { status, ...extra });
+      await this.kycRepository.update(user.kyc.id, {
+        status,
+        ...extra,
+      });
     } else {
       const kyc = this.kycRepository.create({
         name: KycLevels.LEVEL_2,
