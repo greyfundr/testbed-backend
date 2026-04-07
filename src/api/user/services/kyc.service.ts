@@ -26,20 +26,28 @@ interface DiditIdVerification {
   last_name: string;
   document_number: string;
   document_type: string;
+  issuing_state: string;
   issuing_state_name: string;
   date_of_birth: string;
+  full_name: string;
+  node_id: string;
 }
 
 interface DiditDecision {
-  status: 'Approved' | 'Declined' | 'In Review';
-  id_verification?: DiditIdVerification;
+  id_verifications: DiditIdVerification[];
+  status?: string;
+  features?: string[];
+  session_id?: string;
 }
 
 interface DiditWebhookPayload {
   webhook_type: string;
-  vendor_data: string; // userId
+  vendor_data: string;
   session_id: string;
+  status: string;
   decision?: DiditDecision;
+  timestamp?: number;
+  workflow_id?: string;
 }
 
 @Injectable()
@@ -249,13 +257,17 @@ export class KycService {
     docType: string,
     issuingState: string,
   ): KycVerificationType {
-    const type = docType?.toLowerCase();
-    const state = issuingState?.toLowerCase();
+    const type = docType?.toLowerCase().trim();
+    const state = issuingState?.toLowerCase().trim();
 
     if (type === 'passport') return KycVerificationType.PASSPORT;
-    if (type === 'id_card' && state === 'ng') return KycVerificationType.NIN;
-    if (type === 'id_card') return KycVerificationType.NIN;
-    return KycVerificationType.DRIVERS_LICENSE;
+    if (type === 'driving license' || type === 'id_card')
+      return KycVerificationType.DRIVERS_LICENSE;
+    if ((type === 'identity card' || type === 'id_card') && state === 'ng')
+      return KycVerificationType.NIN;
+    if (type === 'identity card') return KycVerificationType.NATIONAL_ID;
+
+    return KycVerificationType.NATIONAL_ID;
   }
 
   normaliseDob(raw: string): string {
@@ -294,9 +306,16 @@ export class KycService {
       throw new UnauthorizedException('Invalid webhook signature');
     }
 
-    const { webhook_type, vendor_data: userId, decision } = payload;
+    const { webhook_type, vendor_data: userId, decision, status } = payload;
 
-    if (webhook_type !== 'status.updated' || !userId || !decision?.status) {
+    this.logger.log(
+      `[KYC Webhook] type=${webhook_type} userId=${userId} status=${status}`,
+    );
+
+    if (webhook_type !== 'status.updated' || !userId || !status) {
+      this.logger.log(
+        '[KYC Webhook] Skipping — not a status.updated event or missing data',
+      );
       return;
     }
 
@@ -308,36 +327,47 @@ export class KycService {
       throw new NotFoundException(`User ${userId} not found`);
     }
 
-    switch (decision.status) {
+    const idVerification = decision?.id_verifications?.[0] ?? null;
+
+    switch (status) {
       case 'Approved':
-        await this.handleApproved(user, decision);
+        await this.handleApproved(user, idVerification);
         break;
       case 'Declined':
         await this.handleDeclined(user.id);
         break;
       case 'In Review':
-        await this.handleInReview(user.id, decision);
+        await this.handleInReview(user.id, idVerification);
         break;
+      default:
+        this.logger.warn(`[KYC Webhook] Unknown status: ${status}`);
     }
   }
 
   private async handleApproved(
     user: User,
-    decision: DiditDecision,
+    idVerification: DiditIdVerification | null,
   ): Promise<void> {
-    const idVerification = decision.id_verification;
-    if (!idVerification) return;
+    if (!idVerification) {
+      this.logger.warn(
+        `[KYC Webhook] Approved but no id_verifications for user ${user.id}`,
+      );
+      return;
+    }
 
     const {
       first_name,
       last_name,
+      full_name,
       document_number,
       document_type,
-      issuing_state_name,
+      issuing_state,
       date_of_birth,
     } = idVerification;
 
-    const docFullName = `${first_name} ${last_name}`.toUpperCase().trim();
+    const docFullName = (full_name ?? `${first_name} ${last_name}`)
+      .toUpperCase()
+      .trim();
     const userFirstName = (user.firstName ?? '').toUpperCase().trim();
     const userLastName = (user.lastName ?? '').toUpperCase().trim();
 
@@ -373,7 +403,7 @@ export class KycService {
 
     const verificationType = this.mapDocTypeToVerificationType(
       document_type,
-      issuing_state_name,
+      issuing_state,
     );
 
     const qr = this.dataSource.createQueryRunner();
@@ -439,17 +469,16 @@ export class KycService {
 
   private async handleInReview(
     userId: string,
-    decision: DiditDecision,
+    idVerification: DiditIdVerification | null,
   ): Promise<void> {
-    const idVerification = decision.id_verification;
     const verificationType = idVerification
       ? this.mapDocTypeToVerificationType(
           idVerification.document_type,
-          idVerification.issuing_state_name,
+          idVerification.issuing_state,
         )
       : KycVerificationType.NIN;
 
-    const idNumber = idVerification?.document_number || '';
+    const idNumber = idVerification?.document_number ?? '';
 
     const qr = this.dataSource.createQueryRunner();
     await qr.connect();

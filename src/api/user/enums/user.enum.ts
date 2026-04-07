@@ -37,6 +37,7 @@ export enum KycVerificationType {
   PASSPORT = 'passport',
   DRIVERS_LICENSE = 'drivers_license',
   VOTERS_CARD = 'voters_card',
+  NATIONAL_ID = 'national_id',
 }
 
 export enum KycStatus {
