@@ -26,6 +26,7 @@ import {
   RsvpDto,
   UpdateRsvpDto,
   GetMyRsvpEventsDto,
+  GetListingsDto,
 } from '../dto/event.dto';
 import {
   Event,
@@ -52,6 +53,7 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PaymentService } from '../../payment/services/payment.service';
 import { DynamicLinkService } from '../../dynamic-link/services/dynamic-link.service';
+import { Listing } from '../interfaces/event.interface';
 
 @Injectable()
 export class EventService {
@@ -945,5 +947,105 @@ export class EventService {
         'This event has already started. RSVP is closed.',
       );
     }
+  }
+
+  async getListings(
+    userId: string,
+    dto: GetListingsDto,
+  ): Promise<{
+    listings: Listing[];
+    total: number;
+    page: number;
+    totalPages: number;
+  }> {
+    const { eventId, creatorId, search, page = 1, limit = 20 } = dto;
+    const offset = (page - 1) * limit;
+
+    const qb = this.eventRepository
+      .createQueryBuilder('event')
+      .leftJoinAndSelect('event.creator', 'creator')
+      .where('event.creatorId = :userId', { userId })
+      .andWhere('event.isPublished = true')
+      .andWhere('event.status = :status', { status: EventStatus.ACTIVE })
+      .andWhere(`JSON_LENGTH(event.purchasable_items) > 0`);
+
+    if (eventId) {
+      qb.andWhere('event.id = :eventId', { eventId });
+    }
+
+    if (creatorId) {
+      qb.andWhere('event.creatorId = :creatorId', { creatorId });
+    }
+
+    if (search) {
+      qb.andWhere(
+        `(event.name LIKE :search OR JSON_SEARCH(event.purchasable_items, 'one', :searchRaw) IS NOT NULL)`,
+        { search: `%${search}%`, searchRaw: `%${search}%` },
+      );
+    }
+
+    const events = await qb
+      .orderBy('event.startDateTime', 'ASC')
+      .skip(offset)
+      .take(limit)
+      .getMany();
+
+    const listings: Listing[] = events.flatMap((event) =>
+      (event.purchasableItems ?? []).map((item) => ({
+        eventId: event.id,
+        eventName: event.name,
+        eventStartDateTime: event.startDateTime,
+        eventStatus: event.status,
+        shareLink: event.shareLink,
+        creatorId: event.creatorId,
+        creatorName: event.creator
+          ? `${event.creator.firstName ?? ''} ${event.creator.lastName ?? ''}`.trim() ||
+            event.creator.email
+          : null,
+        item: {
+          name: item.name,
+          price: item.price,
+          images: item.images,
+          quantity: item.quantity,
+        },
+      })),
+    );
+
+    const total = await qb.getCount();
+
+    return {
+      listings,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getEventListings(eventId: string): Promise<Listing[]> {
+    const event = await this.eventRepository.findOne({
+      where: { id: eventId, isPublished: true },
+      relations: ['creator'],
+    });
+
+    if (!event) throw new NotFoundException('Event not found');
+
+    return (event.purchasableItems ?? []).map((item) => ({
+      eventId: event.id,
+      eventName: event.name,
+      eventStartDateTime: event.startDateTime,
+      eventStatus: event.status,
+      shareLink: event.shareLink,
+      creatorId: event.creatorId,
+      creatorName: event.creator
+        ? `${event.creator.firstName ?? ''} ${event.creator.lastName ?? ''}`.trim() ||
+          event.creator.email
+        : null,
+      item: {
+        name: item.name,
+        price: item.price,
+        images: item.images,
+        quantity: item.quantity,
+      },
+    }));
   }
 }

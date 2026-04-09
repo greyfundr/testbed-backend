@@ -29,6 +29,7 @@ import {
   GuestRsvpDto,
   UpdateRsvpDto,
   GetMyRsvpEventsDto,
+  GetListingsDto,
 } from '../dto/event.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { User } from '../../user/entities';
@@ -304,5 +305,32 @@ export class EventController {
   async deleteAll() {
     await this.eventService.deleteAllEvents();
     return { success: true, message: 'All events deleted' };
+  }
+
+  @ApiOperation({
+    summary: 'Get all purchasable item listings across my events',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Return all purchasable item listings.',
+  })
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  @Get('listings/all')
+  async getListings(@CurrentUser() user: User, @Query() dto: GetListingsDto) {
+    return this.eventService.getListings(user.id, dto);
+  }
+
+  @ApiOperation({ summary: 'Get all listings for a specific event' })
+  @ApiResponse({
+    status: 200,
+    description: 'Return all purchasable item listings for a specific event.',
+  })
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  @Get(':eventId/listings')
+  async getEventListings(@Param('eventId') eventId: string) {
+    const listings = await this.eventService.getEventListings(eventId);
+    return { success: true, data: listings };
   }
 }
