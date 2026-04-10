@@ -61,4 +61,45 @@ export class WithdrawDto {
   @IsNumber()
   @Min(100, { message: 'Minimum withdrawal is ₦100' })
   amount: number;
+
+  @IsString()
+  @IsNotEmpty()
+  transactionPin: string;
+}
+
+const PIN_REGEX = /^\d{4}$/;
+const PIN_MSG = 'PIN must be exactly 4 digits';
+
+export class SetTransactionPinDto {
+  @IsString()
+  @Length(4, 4)
+  @Matches(PIN_REGEX, { message: PIN_MSG })
+  pin: string;
+
+  @IsString()
+  @Length(4, 4)
+  @Matches(PIN_REGEX, { message: PIN_MSG })
+  confirmPin: string;
+}
+
+export class ChangeTransactionPinDto {
+  @IsString()
+  @IsNotEmpty()
+  currentPin: string;
+
+  @IsString()
+  @Length(4, 4)
+  @Matches(PIN_REGEX, { message: PIN_MSG })
+  newPin: string;
+
+  @IsString()
+  @Length(4, 4)
+  @Matches(PIN_REGEX, { message: PIN_MSG })
+  confirmPin: string;
+}
+
+export class VerifyTransactionPinDto {
+  @IsString()
+  @IsNotEmpty()
+  pin: string;
 }

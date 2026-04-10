@@ -17,6 +17,7 @@ import {
   IsIn,
   ArrayMinSize,
   IsNumber,
+  IsNotEmpty,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import {
@@ -338,6 +339,11 @@ export class PayBillShareDto {
   @IsNumber()
   @Min(0.01)
   amount: number;
+
+  @IsString()
+  // @IsNotEmpty()
+  @IsOptional()
+  transactionPin: string;
 }
 
 export class GuestPayBillShareDto {

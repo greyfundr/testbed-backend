@@ -10,6 +10,7 @@ import {
   Min,
   IsUrl,
   IsPositive,
+  IsNotEmpty,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -208,4 +209,9 @@ export class DonateDto {
   @IsString()
   @IsOptional()
   comment?: string;
+
+  @IsString()
+  // @IsNotEmpty()
+  @IsOptional()
+  transactionPin: string;
 }

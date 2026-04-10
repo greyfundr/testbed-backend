@@ -46,6 +46,11 @@ export class DonationService {
     donateDto: DonateDto,
     user: User,
   ): Promise<Donation> {
+    await this.walletService.verifyTransactionPin(
+      user.id,
+      donateDto.transactionPin,
+    );
+
     const campaign = await this.campaignRepository.findOne({
       where: { id: campaignId },
     });

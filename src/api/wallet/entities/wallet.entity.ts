@@ -100,4 +100,20 @@ export class Wallet extends AbstractEntity {
 
   @OneToMany(() => LedgerEntry, (le) => le.wallet)
   ledgerEntries: LedgerEntry[];
+
+  @Column({ type: 'varchar', nullable: true, name: 'transaction_pin' })
+  transactionPin: string | null;
+
+  @Column({ type: 'timestamp', nullable: true, name: 'transaction_pin_set_at' })
+  transactionPinSetAt: Date | null;
+
+  @Column({ type: 'int', default: 0, name: 'transaction_pin_failed_attempts' })
+  transactionPinFailedAttempts: number;
+
+  @Column({
+    type: 'timestamp',
+    nullable: true,
+    name: 'transaction_pin_locked_until',
+  })
+  transactionPinLockedUntil: Date | null;
 }

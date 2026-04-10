@@ -370,6 +370,11 @@ export class ContributeToEventDto {
   @ApiProperty()
   @IsOptional()
   details?: Record<string, any>;
+
+  @IsString()
+  @IsNotEmpty()
+  @IsOptional()
+  transactionPin?: string;
 }
 
 export class GetAllEventsDto {

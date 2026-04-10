@@ -10,12 +10,19 @@ import {
   HttpCode,
   HttpStatus,
   Query,
+  Patch,
 } from '@nestjs/common';
 import { WalletService } from '../services';
 import { TransactionService } from '../../transaction/services';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
-import { AddBankAccountDto, InitiateFundingDto, WithdrawDto } from '../dto';
+import {
+  AddBankAccountDto,
+  ChangeTransactionPinDto,
+  InitiateFundingDto,
+  SetTransactionPinDto,
+  WithdrawDto,
+} from '../dto';
 import { User } from '../../user/entities';
 import { ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { KycGuard } from '../../auth/guards/kyc.guard';
@@ -202,5 +209,39 @@ export class WalletController {
   @HttpCode(HttpStatus.ACCEPTED) // 202 — transfer is async, confirmed via webhook
   async withdraw(@CurrentUser() user: User, @Body() dto: WithdrawDto) {
     return this.walletService.requestWithdrawal(user.id, dto);
+  }
+
+  @ApiOperation({ summary: 'Set transaction PIN for the first time' })
+  @ApiBearerAuth('JWT-auth')
+  @Post('pin/set')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async setTransactionPin(
+    @CurrentUser() user: User,
+    @Body() dto: SetTransactionPinDto,
+  ) {
+    await this.walletService.setTransactionPin(user.id, dto);
+    return { success: true, message: 'Transaction PIN set successfully' };
+  }
+
+  @ApiOperation({ summary: 'Change existing transaction PIN' })
+  @Patch('pin/change')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async changeTransactionPin(
+    @CurrentUser() user: User,
+    @Body() dto: ChangeTransactionPinDto,
+  ) {
+    await this.walletService.changeTransactionPin(user.id, dto);
+    return { success: true, message: 'Transaction PIN changed successfully' };
+  }
+
+  @ApiOperation({ summary: 'Check if transaction PIN is set and lock status' })
+  @ApiBearerAuth('JWT-auth')
+  @Get('pin/status')
+  @UseGuards(JwtAuthGuard)
+  async getTransactionPinStatus(@CurrentUser() user: User) {
+    const status = await this.walletService.getTransactionPinStatus(user.id);
+    return { success: true, data: status };
   }
 }

@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { DataSource, QueryRunner, Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
@@ -31,7 +32,12 @@ import {
   LedgerAccountType,
 } from '../../transaction/enums/transaction.enum';
 import { User } from '../../user/entities';
-import { AddBankAccountDto, WithdrawDto } from '../dto';
+import {
+  AddBankAccountDto,
+  WithdrawDto,
+  SetTransactionPinDto,
+  ChangeTransactionPinDto,
+} from '../dto';
 import { UserRepository } from '../../user/repository';
 import {
   VirtualAccountRepository,
@@ -46,6 +52,7 @@ import {
 import { PaymentService } from '../../payment/services';
 import axios from 'axios';
 import { FundingAccountResponse, InitiateFundingResponse } from '../interfaces';
+import * as bcrypt from 'bcrypt';
 
 interface CreditParams {
   walletId: string;
@@ -83,6 +90,24 @@ export class WalletService {
 
   private readonly MIN_FUNDING_NAIRA = 100.0;
   private readonly MAX_FUNDING_NAIRA = 10_000_000.0;
+  private readonly TRIVIAL_PINS = new Set([
+    '0000',
+    '1111',
+    '2222',
+    '3333',
+    '4444',
+    '5555',
+    '6666',
+    '7777',
+    '8888',
+    '9999',
+    '1234',
+    '4321',
+    '0123',
+    '9876',
+  ]);
+  private readonly MAX_PIN_ATTEMPTS = 5;
+  private readonly PIN_LOCK_MINUTES = 15;
 
   constructor(
     private readonly userRepository: UserRepository,
@@ -1019,6 +1044,8 @@ export class WalletService {
     userId: string,
     dto: WithdrawDto,
   ): Promise<WithdrawalRequest> {
+    await this.verifyTransactionPin(userId, dto.transactionPin);
+
     const wallet = await this.getWalletByUserId(userId);
 
     if (wallet.status !== WalletStatus.ACTIVE) {
@@ -1174,5 +1201,180 @@ export class WalletService {
       status: WalletStatus.ACTIVE,
       freezeReason: null,
     });
+  }
+
+  async setTransactionPin(
+    userId: string,
+    dto: SetTransactionPinDto,
+  ): Promise<void> {
+    const wallet = await this.walletRepository.findOne({ where: { userId } });
+    if (!wallet) throw new NotFoundException('Wallet not found');
+
+    if (wallet.transactionPin) {
+      throw new BadRequestException(
+        'Transaction PIN already set. Use change PIN to update it.',
+      );
+    }
+
+    if (dto.pin !== dto.confirmPin) {
+      throw new BadRequestException('PINs do not match');
+    }
+
+    if (this.TRIVIAL_PINS.has(dto.pin)) {
+      throw new BadRequestException(
+        'PIN is too simple. Please choose a less predictable PIN.',
+      );
+    }
+
+    const hashed = await bcrypt.hash(dto.pin, 12);
+
+    await this.walletRepository.update(wallet.id, {
+      transactionPin: hashed,
+      transactionPinSetAt: new Date(),
+      transactionPinFailedAttempts: 0,
+      transactionPinLockedUntil: null,
+    });
+
+    this.logger.log(`[TransactionPin] PIN set for user ${userId}`);
+  }
+
+  async changeTransactionPin(
+    userId: string,
+    dto: ChangeTransactionPinDto,
+  ): Promise<void> {
+    const wallet = await this.walletRepository.findOne({ where: { userId } });
+    if (!wallet) throw new NotFoundException('Wallet not found');
+
+    if (!wallet.transactionPin) {
+      throw new BadRequestException(
+        'No transaction PIN set. Please set a PIN first.',
+      );
+    }
+
+    await this.assertPinNotLocked(wallet);
+
+    const isCurrentValid = await bcrypt.compare(
+      dto.currentPin,
+      wallet.transactionPin,
+    );
+    if (!isCurrentValid) {
+      await this.incrementPinFailedAttempts(wallet);
+      throw new UnauthorizedException('Current PIN is incorrect');
+    }
+
+    if (dto.newPin !== dto.confirmPin) {
+      throw new BadRequestException('New PINs do not match');
+    }
+
+    if (this.TRIVIAL_PINS.has(dto.newPin)) {
+      throw new BadRequestException('PIN is too simple.');
+    }
+
+    const isSame = await bcrypt.compare(dto.newPin, wallet.transactionPin);
+    if (isSame) {
+      throw new BadRequestException(
+        'New PIN cannot be the same as your current PIN',
+      );
+    }
+
+    const hashed = await bcrypt.hash(dto.newPin, 12);
+
+    await this.walletRepository.update(wallet.id, {
+      transactionPin: hashed,
+      transactionPinSetAt: new Date(),
+      transactionPinFailedAttempts: 0,
+      transactionPinLockedUntil: null,
+    });
+
+    this.logger.log(`[TransactionPin] PIN changed for user ${userId}`);
+  }
+
+  async verifyTransactionPin(userId: string, pin: string): Promise<void> {
+    const wallet = await this.walletRepository.findOne({ where: { userId } });
+    if (!wallet) throw new NotFoundException('Wallet not found');
+
+    if (!wallet.transactionPin) {
+      throw new BadRequestException(
+        'No transaction PIN set. Please set one before making payments.',
+      );
+    }
+
+    await this.assertPinNotLocked(wallet);
+
+    const isValid = await bcrypt.compare(pin, wallet.transactionPin);
+
+    if (!isValid) {
+      await this.incrementPinFailedAttempts(wallet);
+
+      const attempts = (wallet.transactionPinFailedAttempts || 0) + 1;
+      const remaining = this.MAX_PIN_ATTEMPTS - attempts;
+
+      throw new UnauthorizedException(
+        remaining > 0
+          ? `Incorrect PIN. ${remaining} attempt(s) remaining.`
+          : `Incorrect PIN. Your PIN is locked for ${this.PIN_LOCK_MINUTES} minutes.`,
+      );
+    }
+
+    if ((wallet.transactionPinFailedAttempts || 0) > 0) {
+      await this.walletRepository.update(wallet.id, {
+        transactionPinFailedAttempts: 0,
+        transactionPinLockedUntil: null,
+      });
+    }
+  }
+
+  async getTransactionPinStatus(userId: string): Promise<{
+    isSet: boolean;
+    isLocked: boolean;
+    lockedUntil: Date | null;
+    setAt: Date | null;
+  }> {
+    const wallet = await this.walletRepository.findOne({ where: { userId } });
+    if (!wallet) throw new NotFoundException('Wallet not found');
+
+    const isLocked =
+      !!wallet.transactionPinLockedUntil &&
+      wallet.transactionPinLockedUntil > new Date();
+
+    return {
+      isSet: !!wallet.transactionPin,
+      isLocked,
+      lockedUntil: isLocked ? wallet.transactionPinLockedUntil : null,
+      setAt: wallet.transactionPinSetAt,
+    };
+  }
+
+  private async assertPinNotLocked(wallet: Wallet): Promise<void> {
+    if (
+      wallet.transactionPinLockedUntil &&
+      wallet.transactionPinLockedUntil > new Date()
+    ) {
+      const minutesLeft = Math.ceil(
+        (wallet.transactionPinLockedUntil.getTime() - Date.now()) / 60000,
+      );
+      throw new UnauthorizedException(
+        `Transaction PIN is locked. Try again in ${minutesLeft} minute(s).`,
+      );
+    }
+  }
+
+  private async incrementPinFailedAttempts(wallet: Wallet): Promise<void> {
+    const newCount = (wallet.transactionPinFailedAttempts || 0) + 1;
+    const shouldLock = newCount >= this.MAX_PIN_ATTEMPTS;
+    const lockedUntil = shouldLock
+      ? new Date(Date.now() + this.PIN_LOCK_MINUTES * 60_000)
+      : null;
+
+    await this.walletRepository.update(wallet.id, {
+      transactionPinFailedAttempts: newCount,
+      ...(lockedUntil && { transactionPinLockedUntil: lockedUntil }),
+    });
+
+    if (shouldLock) {
+      this.logger.warn(
+        `[TransactionPin] PIN locked for wallet ${wallet.id} until ${lockedUntil?.toISOString()}`,
+      );
+    }
   }
 }

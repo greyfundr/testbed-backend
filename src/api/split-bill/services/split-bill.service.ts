@@ -916,6 +916,11 @@ export class SplitBillService {
     await qr.startTransaction();
 
     try {
+      await this.walletService.verifyTransactionPin(
+        payerId,
+        dto.transactionPin,
+      );
+
       // Lock both participant and bill atomically
       const participant = await qr.manager.findOne(SplitBillParticipant, {
         where: { id: participantId, splitBillId: billId },

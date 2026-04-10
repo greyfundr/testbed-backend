@@ -417,6 +417,18 @@ export class EventService {
       });
     }
 
+    if (contributeDto.paymentMethod !== EventPaymentMethod.PAYSTACK) {
+      if (!contributeDto.transactionPin) {
+        throw new BadRequestException(
+          'Transaction PIN is required for wallet payments',
+        );
+      }
+      await this.walletService.verifyTransactionPin(
+        user.id,
+        contributeDto.transactionPin,
+      );
+    }
+
     // Default Wallet Flow
     const wallet = await this.walletService.getWalletByUserId(user.id);
     if (wallet.availableBalance < amount) {
