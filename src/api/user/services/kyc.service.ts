@@ -263,7 +263,7 @@ export class KycService {
     if (type === 'passport') return KycVerificationType.PASSPORT;
     if (type === 'driving license' || type === 'id_card')
       return KycVerificationType.DRIVERS_LICENSE;
-    if ((type === 'identity card' || type === 'id_card') && state === 'ng')
+    if ((type === 'identity card' || type === 'id_card') && state === 'nga')
       return KycVerificationType.NIN;
     if (type === 'identity card') return KycVerificationType.NATIONAL_ID;
 
@@ -386,9 +386,7 @@ export class KycService {
 
     if (user.dateOfBirth) {
       const docDob = this.normaliseDob(date_of_birth);
-      const userDob = this.normaliseDob(
-        user.dateOfBirth.toISOString().substring(0, 10),
-      );
+      const userDob = this.normaliseDob(String(user.dateOfBirth));
 
       if (docDob !== userDob) {
         await this.updateLevel2Status(user.id, KycStatus.REJECTED, {

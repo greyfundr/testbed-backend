@@ -209,7 +209,7 @@ export class SplitBillService {
     userId: string,
     dto: GetUserBillsDto,
   ): Promise<{
-    bills: SplitBill[];
+    bills: any[];
     total: number;
     page: number;
     totalPages: number;
@@ -217,56 +217,60 @@ export class SplitBillService {
     const { status, role = 'all', page = 1, limit = 20 } = dto;
     const offset = (page - 1) * limit;
 
+    const buildBase = () =>
+      this.billRepo
+        .createQueryBuilder('bill')
+        .leftJoinAndSelect('bill.participants', 'p')
+        .leftJoinAndSelect('p.user', 'pUser')
+        .orderBy('bill.createdAt', 'DESC')
+        .skip(offset)
+        .take(limit);
+
+    let qb = buildBase();
+
     if (role === 'creator') {
-      const qb = this.billRepo
-        .createQueryBuilder('bill')
-        .leftJoinAndSelect('bill.participants', 'p')
-        .where('bill.creatorId = :userId', { userId })
-        .orderBy('bill.createdAt', 'DESC')
-        .skip(offset)
-        .take(limit);
-
-      if (status) qb.andWhere('bill.status = :status', { status });
-
-      const [bills, total] = await qb.getManyAndCount();
-      return { bills, total, page, totalPages: Math.ceil(total / limit) };
-    }
-
-    if (role === 'participant') {
-      const qb = this.billRepo
-        .createQueryBuilder('bill')
-        .leftJoinAndSelect('bill.participants', 'p')
-        .innerJoin('bill.participants', 'myPart', 'myPart.userId = :userId', {
-          userId,
-        })
-        .orderBy('bill.createdAt', 'DESC')
-        .skip(offset)
-        .take(limit);
-
-      if (status) qb.andWhere('bill.status = :status', { status });
-
-      const [bills, total] = await qb.getManyAndCount();
-      return { bills, total, page, totalPages: Math.ceil(total / limit) };
-    }
-
-    const qb = this.billRepo
-      .createQueryBuilder('bill')
-      .leftJoinAndSelect('bill.participants', 'p')
-      .where(
-        `bill.creatorId = :userId OR EXISTS (
-          SELECT 1 FROM split_bill_participants sp
-          WHERE sp.split_bill_id = bill.id AND sp.user_id = :userId AND sp.deleted_at IS NULL
-        )`,
+      qb.where('bill.creatorId = :userId', { userId });
+    } else if (role === 'participant') {
+      qb.where(
+        `EXISTS (
+        SELECT 1 FROM split_bill_participants sp
+        WHERE sp.split_bill_id = bill.id
+          AND sp.user_id = :userId
+          AND sp.deleted_at IS NULL
+      )`,
         { userId },
-      )
-      .orderBy('bill.createdAt', 'DESC')
-      .skip(offset)
-      .take(limit);
+      );
+    } else {
+      qb.where(
+        `bill.creatorId = :userId OR EXISTS (
+        SELECT 1 FROM split_bill_participants sp
+        WHERE sp.split_bill_id = bill.id
+          AND sp.user_id = :userId
+          AND sp.deleted_at IS NULL
+      )`,
+        { userId },
+      );
+    }
 
     if (status) qb.andWhere('bill.status = :status', { status });
 
     const [bills, total] = await qb.getManyAndCount();
-    return { bills, total, page, totalPages: Math.ceil(total / limit) };
+
+    const shaped = bills.map((bill) => ({
+      ...bill,
+      participants: bill.participants.map((p) => ({
+        ...p,
+        displayName:
+          p.guestName ??
+          (p.user
+            ? `${p.user.firstName ?? ''} ${p.user.lastName ?? ''}`.trim() ||
+              p.user.email
+            : null) ??
+          'Unknown',
+      })),
+    }));
+
+    return { bills: shaped, total, page, totalPages: Math.ceil(total / limit) };
   }
 
   async updateBill(
