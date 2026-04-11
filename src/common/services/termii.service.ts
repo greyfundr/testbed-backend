@@ -31,11 +31,10 @@ export class TermiiService {
       };
 
       const response = await this.axiosInstance.post('/api/sms/send', payload);
-      this.logger.log(`SMS sent to ${to}: ${JSON.stringify(response.data)}`);
       return response.data;
     } catch (error) {
-      this.logger.error(`Error sending SMS to ${to}`, error);
-      throw error;
+      this.logger.error(`Termii SMS Failed: ${error.message}`);
+      return null;
     }
   }
 }

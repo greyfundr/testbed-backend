@@ -100,6 +100,10 @@ export class SettingsService {
       settings.currency = updateDto.currency;
     }
 
+    if (updateDto.allowSplitBillInvites) {
+      settings.allowSplitBillInvites = updateDto.allowSplitBillInvites;
+    }
+
     return this.settingsRepository.save(settings);
   }
 

@@ -14,7 +14,7 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { User } from '../entities';
 import { ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { GetUsersFilterDto, UpdateProfileDto } from '../dtos';
+import { GetUsersFilterDto, SetFcmTokenDto, UpdateProfileDto } from '../dtos';
 
 @Controller('users')
 export class UserController {
@@ -58,5 +58,13 @@ export class UserController {
       success: true,
       message: 'Your account has been successfully deleted.',
     };
+  }
+
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  @Patch('profile')
+  @ApiOperation({ summary: 'Set fcm (push notifications) token' })
+  setFcmToken(@CurrentUser() user: User, @Body() dto: SetFcmTokenDto) {
+    return this.userService.updateFcmToken(user.id, dto.token);
   }
 }

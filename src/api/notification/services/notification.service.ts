@@ -6,6 +6,7 @@ import { SettingsService } from '../../settings';
 import { MailtrapService } from './mailtrap.service';
 import { FirebaseService } from './firebase.service';
 import { TermiiService } from '../../../common/services/termii.service';
+import { WhatsAppService } from '../../../common/services/whatsapp.service';
 import { NotificationPreferences } from '../../settings';
 
 @Injectable()
@@ -19,17 +20,13 @@ export class NotificationService {
     private readonly mailtrapService: MailtrapService,
     private readonly firebaseService: FirebaseService,
     private readonly smsService: TermiiService,
+    private readonly whatsAppService: WhatsAppService,
   ) {}
 
   async notify(
     userId: string,
     category: keyof NotificationPreferences,
-    options: {
-      title: string;
-      message: string;
-      type?: string;
-      metadata?: any;
-    },
+    options: { title: string; message: string; type?: string; metadata?: any },
   ) {
     const settings = await this.settingsService.getSettings(userId);
     if (!settings) return;
@@ -38,37 +35,52 @@ export class NotificationService {
     if (!prefs) return;
 
     const { title, message, type, metadata } = options;
-    const user = { uuid: userId } as any; // Minimal user object for relation
+    const user = { id: userId } as any;
 
-    // 1. In-App Notification (always saved if enabled in prefs, typically inApp is a boolean in our interface)
     if ((prefs as any).inApp) {
-      await this.notificationRepository.save({
-        user,
-        title,
-        message,
-        type,
-        metadata,
-      });
+      try {
+        await this.notificationRepository.save({
+          user,
+          title,
+          message,
+          type,
+          metadata,
+        });
+      } catch (e) {
+        this.logger.error('In-App Notification failed', e);
+      }
     }
 
-    // 2. Push Notification
     if (prefs.push && metadata?.pushToken) {
-      await this.firebaseService.sendPushNotification(
-        metadata.pushToken,
-        title,
-        message,
-        metadata,
-      );
+      try {
+        await this.firebaseService.sendPushNotification(
+          metadata.pushToken,
+          title,
+          message,
+          metadata,
+        );
+      } catch (e) {
+        this.logger.error('Push Notification failed', e);
+      }
     }
 
-    // 3. Email Notification
-    if (prefs.email && metadata?.email) {
-      await this.mailtrapService.sendEmail(metadata.email, title, message);
-    }
-
-    // 4. SMS Notification
     if ((prefs as any).sms && metadata?.phoneNumber) {
-      await this.smsService.sendSMS(metadata.phoneNumber, message);
+      try {
+        await this.smsService.sendSMS(metadata.phoneNumber, message);
+      } catch (e) {
+        this.logger.error(
+          `SMS failed for ${metadata.phoneNumber}: ${e.message}`,
+        );
+      }
+    }
+
+    if (metadata?.phoneNumber) {
+      try {
+        const waMessage = `*${title}*\n\n${message}`;
+        await this.whatsAppService.sendMessage(metadata.phoneNumber, waMessage);
+      } catch (e) {
+        this.logger.error('WhatsApp failed', e);
+      }
     }
   }
 
@@ -87,7 +99,12 @@ export class NotificationService {
   }
 
   async notifyAdmin(
-    admin: { id: string; email: string; firstName?: string | null },
+    admin: {
+      id: string;
+      email: string;
+      firstName?: string | null;
+      phoneNumber?: string;
+    },
     options: {
       title: string;
       message: string;
@@ -105,11 +122,21 @@ export class NotificationService {
       metadata,
     });
 
-    await this.mailtrapService.sendEmail(admin.email, title, message);
+    // await this.mailtrapService.sendEmail(admin.email, title, message);
+
+    if (admin.phoneNumber) {
+      const waMessage = `*Admin Alert: ${title}*\n\n${message}`;
+      await this.whatsAppService.sendMessage(admin.phoneNumber, waMessage);
+    }
   }
 
   async notifyAllAdmins(
-    admins: Array<{ id: string; email: string; firstName?: string | null }>,
+    admins: Array<{
+      id: string;
+      email: string;
+      firstName?: string | null;
+      phoneNumber?: string;
+    }>,
     options: {
       title: string;
       message: string;

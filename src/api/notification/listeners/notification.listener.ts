@@ -19,6 +19,7 @@ export class NotificationListener {
     userId: string;
     email: string;
     phoneNumber?: string;
+    pushToken?: string;
   }) {
     this.logger.log(`Handling user.created event for ${payload.userId}`);
     await this.notificationService.notify(payload.userId, 'securityAlerts', {
@@ -28,6 +29,7 @@ export class NotificationListener {
       metadata: {
         email: payload.email,
         phoneNumber: payload.phoneNumber,
+        pushToken: payload.pushToken,
       },
     });
   }
@@ -37,6 +39,8 @@ export class NotificationListener {
     userUuid: string;
     email: string;
     location?: string;
+    phoneNumber?: string;
+    pushToken?: string;
   }) {
     this.logger.log(`Handling security.login event for ${payload.userUuid}`);
     await this.notificationService.notify(payload.userUuid, 'securityAlerts', {
@@ -45,6 +49,8 @@ export class NotificationListener {
       type: 'security',
       metadata: {
         email: payload.email,
+        phoneNumber: payload.phoneNumber,
+        pushToken: payload.pushToken,
       },
     });
   }
@@ -54,6 +60,8 @@ export class NotificationListener {
     userUuid: string;
     campaignName: string;
     email: string;
+    phoneNumber?: string;
+    pushToken?: string;
   }) {
     this.logger.log(`Handling campaign.live event for ${payload.userUuid}`);
     await this.notificationService.notify(payload.userUuid, 'campaignUpdates', {
@@ -62,6 +70,8 @@ export class NotificationListener {
       type: 'campaign',
       metadata: {
         email: payload.email,
+        phoneNumber: payload.phoneNumber,
+        pushToken: payload.pushToken,
       },
     });
   }
@@ -72,6 +82,8 @@ export class NotificationListener {
     email: string;
     campaignName: string;
     amount: number;
+    phoneNumber?: string;
+    pushToken?: string;
   }) {
     this.logger.log(`Handling donation.receipt event for ${payload.donorId}`);
     await this.notificationService.notify(
@@ -83,6 +95,8 @@ export class NotificationListener {
         type: 'transaction',
         metadata: {
           email: payload.email,
+          phoneNumber: payload.phoneNumber,
+          pushToken: payload.pushToken,
         },
       },
     );
@@ -94,6 +108,8 @@ export class NotificationListener {
     campaignName: string;
     amount: number;
     donorName: string;
+    phoneNumber?: string;
+    pushToken?: string;
   }) {
     this.logger.log(
       `Handling donation.received event for creator ${payload.creatorId}`,
@@ -105,6 +121,10 @@ export class NotificationListener {
         title: 'New Donation Received!',
         message: `"${payload.campaignName}" just received a donation of ₦${payload.amount} from ${payload.donorName}.`,
         type: 'campaign',
+        metadata: {
+          phoneNumber: payload.phoneNumber,
+          pushToken: payload.pushToken,
+        },
       },
     );
   }
@@ -114,6 +134,8 @@ export class NotificationListener {
     creatorId: string;
     campaignName: string;
     percentage: number;
+    phoneNumber?: string;
+    pushToken?: string;
   }) {
     this.logger.log(
       `Handling campaign.milestone event for creator ${payload.creatorId}`,
@@ -130,6 +152,10 @@ export class NotificationListener {
         title: `Campaign Milestone: ${payload.percentage}%`,
         message,
         type: 'campaign',
+        metadata: {
+          phoneNumber: payload.phoneNumber,
+          pushToken: payload.pushToken,
+        },
       },
     );
   }
@@ -182,6 +208,7 @@ export class NotificationListener {
     userId: string;
     email: string;
     phoneNumber?: string;
+    pushToken?: string;
     changedAt: Date;
   }) {
     this.logger.log(
@@ -201,61 +228,222 @@ export class NotificationListener {
       metadata: {
         email: payload.email,
         phoneNumber: payload.phoneNumber,
+        pushToken: payload.pushToken,
       },
     });
   }
 
   @OnEvent('kyc.approved')
-  async handleKycApproved(payload: { userId: string; email: string }) {
+  async handleKycApproved(payload: {
+    userId: string;
+    email: string;
+    phoneNumber?: string;
+    pushToken?: string;
+  }) {
     await this.notificationService.notify(payload.userId, 'securityAlerts', {
       title: '✅ Identity Verified!',
       message:
         'Your identity has been successfully verified. You now have full access to GreyFundr.',
       type: 'kyc',
-      metadata: { email: payload.email },
+      metadata: {
+        email: payload.email,
+        phoneNumber: payload.phoneNumber,
+        pushToken: payload.pushToken,
+      },
     });
   }
 
   @OnEvent('kyc.declined')
-  async handleKycDeclined(payload: { userId: string; email: string }) {
+  async handleKycDeclined(payload: {
+    userId: string;
+    email: string;
+    phoneNumber?: string;
+    pushToken?: string;
+  }) {
     await this.notificationService.notify(payload.userId, 'securityAlerts', {
       title: 'Verification Declined',
       message:
         'Your identity verification was declined. Please contact support via live chat for assistance.',
       type: 'kyc',
-      metadata: { email: payload.email },
+      metadata: {
+        email: payload.email,
+        phoneNumber: payload.phoneNumber,
+        pushToken: payload.pushToken,
+      },
     });
   }
 
   @OnEvent('kyc.in_review')
-  async handleKycInReview(payload: { userId: string; email: string }) {
+  async handleKycInReview(payload: {
+    userId: string;
+    email: string;
+    phoneNumber?: string;
+    pushToken?: string;
+  }) {
     await this.notificationService.notify(payload.userId, 'securityAlerts', {
       title: 'Verification In Review',
       message:
         'Your identity verification is currently under review. We will notify you once complete.',
       type: 'kyc',
-      metadata: { email: payload.email },
+      metadata: {
+        email: payload.email,
+        phoneNumber: payload.phoneNumber,
+        pushToken: payload.pushToken,
+      },
     });
   }
 
   @OnEvent('kyc.name_mismatch')
-  async handleKycNameMismatch(payload: { userId: string }) {
+  async handleKycNameMismatch(payload: {
+    userId: string;
+    phoneNumber?: string;
+    pushToken?: string;
+  }) {
     await this.notificationService.notify(payload.userId, 'securityAlerts', {
       title: 'Verification Failed — Name Mismatch',
       message:
         'The name on your document does not match your registered name. Please contact support.',
       type: 'kyc',
+      metadata: {
+        phoneNumber: payload.phoneNumber,
+        pushToken: payload.pushToken,
+      },
     });
   }
 
   @OnEvent('kyc.dob_mismatch')
-  async handleKycDobMismatch(payload: { userId: string }) {
+  async handleKycDobMismatch(payload: {
+    userId: string;
+    phoneNumber?: string;
+    pushToken?: string;
+  }) {
     await this.notificationService.notify(payload.userId, 'securityAlerts', {
       title: 'Verification Failed — Date of Birth Mismatch',
       message:
         'The date of birth on your document does not match your profile. ' +
         'Please update your date of birth and retry verification.',
       type: 'kyc',
+      metadata: {
+        phoneNumber: payload.phoneNumber,
+        pushToken: payload.pushToken,
+      },
     });
+  }
+
+  @OnEvent('split_bill.participant_added')
+  async handleParticipantAdded(payload: {
+    userId: string;
+    email: string;
+    billTitle: string;
+    billId: string;
+    participantId: string;
+    amountOwed: number;
+    currency: string;
+    creatorName: string;
+    phoneNumber?: string;
+    pushToken?: string;
+  }) {
+    await this.notificationService.notify(
+      payload.userId,
+      'paymentConfirmations',
+      {
+        title: "You've been added to a split bill",
+        message:
+          `${payload.creatorName} added you to "${payload.billTitle}". ` +
+          `Your share is ${payload.currency} ${payload.amountOwed.toLocaleString()}. ` +
+          `Accept or decline in the app.`,
+        type: 'split_bill',
+        metadata: {
+          email: payload.email,
+          billId: payload.billId,
+          participantId: payload.participantId,
+          phoneNumber: payload.phoneNumber,
+          pushToken: payload.pushToken,
+        },
+      },
+    );
+  }
+
+  @OnEvent('split_bill.participant_accepted')
+  async handleParticipantAccepted(payload: {
+    creatorId: string;
+    participantName: string;
+    billTitle: string;
+    billId: string;
+    phoneNumber?: string;
+    pushToken?: string;
+  }) {
+    await this.notificationService.notify(
+      payload.creatorId,
+      'paymentConfirmations',
+      {
+        title: 'Split bill invite accepted',
+        message: `${payload.participantName} accepted their invite to "${payload.billTitle}".`,
+        type: 'split_bill',
+        metadata: {
+          billId: payload.billId,
+          phoneNumber: payload.phoneNumber,
+          pushToken: payload.pushToken,
+        },
+      },
+    );
+  }
+
+  @OnEvent('split_bill.participant_declined')
+  async handleParticipantDeclined(payload: {
+    creatorId: string;
+    participantName: string;
+    billTitle: string;
+    billId: string;
+    phoneNumber?: string;
+    pushToken?: string;
+  }) {
+    await this.notificationService.notify(
+      payload.creatorId,
+      'paymentConfirmations',
+      {
+        title: 'Split bill invite declined',
+        message: `${payload.participantName} declined their invite to "${payload.billTitle}".`,
+        type: 'split_bill',
+        metadata: {
+          billId: payload.billId,
+          phoneNumber: payload.phoneNumber,
+          pushToken: payload.pushToken,
+        },
+      },
+    );
+  }
+
+  @OnEvent('split_bill.payment_received')
+  async handleBillPaymentReceived(payload: {
+    creatorId: string;
+    participantName: string;
+    billTitle: string;
+    billId: string;
+    amount: number;
+    currency: string;
+    totalCollected: number;
+    totalAmount: number;
+    phoneNumber?: string;
+    pushToken?: string;
+  }) {
+    await this.notificationService.notify(
+      payload.creatorId,
+      'paymentConfirmations',
+      {
+        title: 'Payment received on your split bill',
+        message:
+          `${payload.participantName} paid ${payload.currency} ${payload.amount.toLocaleString()} ` +
+          `on "${payload.billTitle}". ` +
+          `Total collected: ${payload.currency} ${payload.totalCollected.toLocaleString()} ` +
+          `of ${payload.currency} ${payload.totalAmount.toLocaleString()}.`,
+        type: 'split_bill',
+        metadata: {
+          billId: payload.billId,
+          phoneNumber: payload.phoneNumber,
+          pushToken: payload.pushToken,
+        },
+      },
+    );
   }
 }

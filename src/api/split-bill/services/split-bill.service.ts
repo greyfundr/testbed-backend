@@ -50,6 +50,8 @@ import {
 import { UserRepository } from '../../user/repository';
 import { TransactionRepository } from '../../transaction/repository';
 import { PaymentService } from '../../payment/services';
+import { Settings } from 'src/api/settings/entities';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Injectable()
 export class SplitBillService {
@@ -67,6 +69,7 @@ export class SplitBillService {
     private readonly walletService: WalletService,
     private readonly paymentService: PaymentService,
     private readonly dataSource: DataSource,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async createBill(
@@ -115,9 +118,6 @@ export class SplitBillService {
             | 'request'
             | 'manual') ?? null,
         sourceBillId: dto.sourceBillId ?? null,
-        visibility:
-          (dto.visibility as 'public' | 'private' | 'semi_private') ??
-          'private',
         recipientUserId: dto.recipientUserId ?? creatorId,
         isFinalized: false,
       });
@@ -149,7 +149,7 @@ export class SplitBillService {
         }),
       );
 
-      await qr.manager.save(participantRows);
+      const savedParticipants = await qr.manager.save(participantRows);
 
       await this.computeAndSaveShares(bill.id, validated, dto.splitMethod, qr);
 
@@ -167,6 +167,43 @@ export class SplitBillService {
       });
 
       await qr.commitTransaction();
+
+      const creator = await this.userRepo.findOne({
+        where: { id: creatorId },
+        select: ['firstName', 'lastName'],
+      });
+      const creatorName =
+        `${creator?.firstName ?? ''} ${creator?.lastName ?? ''}`.trim() ||
+        'Someone';
+
+      const userParticipants = savedParticipants.filter(
+        (p) => p.userId && p.userId !== creatorId,
+      );
+
+      if (userParticipants.length > 0) {
+        const userDetails = await this.userRepo.findAll({
+          where: { id: In(userParticipants.map((p) => p.userId)) },
+          select: ['id', 'email', 'phoneNumber', 'fcmToken'],
+        });
+
+        for (const pRow of userParticipants) {
+          const u = userDetails.find((detail) => detail.id === pRow.userId);
+          if (!u) continue;
+
+          this.eventEmitter.emit('split_bill.participant_added', {
+            userId: u.id,
+            email: u.email,
+            billTitle: bill.title,
+            billId: bill.id,
+            participantId: pRow.id,
+            amountOwed: pRow.amountOwed,
+            currency: bill.currency,
+            creatorName: creatorName,
+            phoneNumber: u.phoneNumber,
+            pushToken: u.fcmToken,
+          });
+        }
+      }
 
       this.logger.log(`Split bill created: ${bill.id} by ${creatorId}`);
 
@@ -197,9 +234,9 @@ export class SplitBillService {
         bill.creatorId === requestingUserId ||
         bill.participants.some((p) => p.userId === requestingUserId);
 
-      if (!hasAccess && bill.visibility === 'private') {
-        throw new ForbiddenException('You do not have access to this bill');
-      }
+      // if (!hasAccess && bill.visibility === 'private') {
+      //   throw new ForbiddenException('You do not have access to this bill');
+      // }
     }
 
     return bill;
@@ -379,8 +416,6 @@ export class SplitBillService {
         updateData.billReceipt = dto.billReceipt;
       if (dto.allowPartialPayment !== undefined)
         updateData.allowPartialPayment = dto.allowPartialPayment;
-      if (dto.visibility !== undefined)
-        updateData.visibility = dto.visibility as any;
       if (dto.recipientUserId !== undefined)
         updateData.recipientUserId = dto.recipientUserId;
 
@@ -571,7 +606,6 @@ export class SplitBillService {
         );
       }
 
-      // ── Validate the new participant ──────────────────────────────────────
       if (dto.type === 'USER') {
         if (!dto.userId)
           throw new BadRequestException(
@@ -581,8 +615,15 @@ export class SplitBillService {
         const user = await this.userRepo.findOne({
           where: { id: dto.userId },
           select: ['id'],
+          relations: ['settings'],
         });
         if (!user) throw new NotFoundException(`User ${dto.userId} not found`);
+
+        if (user.settings && !user.settings.allowSplitBillInvites) {
+          throw new ForbiddenException(
+            'This user has disabled split bill invites. You cannot add them.',
+          );
+        }
 
         const alreadyIn = bill.participants.some(
           (p) => p.userId === dto.userId,
@@ -759,6 +800,34 @@ export class SplitBillService {
       });
 
       await qr.commitTransaction();
+
+      if (dto.type === 'USER' && dto.userId) {
+        const targetUser = await this.userRepo.findOne({
+          where: { id: dto.userId },
+          select: ['id', 'email', 'firstName', 'lastName'],
+        });
+
+        const creator = await this.userRepo.findOne({
+          where: { id: actorId },
+          select: ['firstName', 'lastName', 'email'],
+        });
+
+        if (targetUser) {
+          this.eventEmitter.emit('split_bill.participant_added', {
+            userId: targetUser.id,
+            email: targetUser.email,
+            billTitle: bill.title,
+            billId: bill.id,
+            participantId: newParticipant.id,
+            amountOwed: newParticipantAmount,
+            currency: bill.currency,
+            creatorName: creator
+              ? `${creator.firstName ?? ''} ${creator.lastName ?? ''}`.trim() ||
+                creator.email
+              : 'Someone',
+          });
+        }
+      }
 
       return { participant: newParticipant, adjustments };
     } catch (err) {
@@ -1097,6 +1166,32 @@ export class SplitBillService {
         `Bill payment: ₦${dto.amount} by ${payerId} for bill ${billId} (participant ${participantId})`,
       );
 
+      const payerUser = await this.userRepo.findOne({
+        where: { id: payerId },
+        select: ['firstName', 'lastName', 'email'],
+      });
+
+      const creatorUser = await this.userRepo.findOne({
+        where: { id: bill.creatorId },
+        select: ['phoneNumber', 'fcmToken'],
+      });
+
+      this.eventEmitter.emit('split_bill.payment_received', {
+        creatorId: bill.creatorId,
+        participantName: payerUser
+          ? `${payerUser.firstName ?? ''} ${payerUser.lastName ?? ''}`.trim() ||
+            payerUser.email
+          : 'A participant',
+        billTitle: bill.title,
+        billId: bill.id,
+        amount: dto.amount,
+        currency: bill.currency,
+        totalCollected: newTotalCollected,
+        totalAmount: bill.totalAmount,
+        phoneNumber: creatorUser?.phoneNumber,
+        pushToken: creatorUser?.fcmToken,
+      });
+
       return { participantFullyPaid, billFullyFunded };
     } catch (err) {
       await qr.rollbackTransaction();
@@ -1422,6 +1517,28 @@ export class SplitBillService {
       throw new NotFoundException('Participant not found after update');
     }
 
+    const bill = await this.billRepo.findOne({
+      where: { id: participant.splitBillId },
+      select: ['id', 'title', 'creatorId'],
+    });
+
+    const acceptingUser = await this.userRepo.findOne({
+      where: { id: userId },
+      select: ['firstName', 'lastName', 'email'],
+    });
+
+    if (bill) {
+      this.eventEmitter.emit('split_bill.participant_accepted', {
+        creatorId: bill.creatorId,
+        participantName: acceptingUser
+          ? `${acceptingUser.firstName ?? ''} ${acceptingUser.lastName ?? ''}`.trim() ||
+            acceptingUser.email
+          : 'A participant',
+        billTitle: bill.title,
+        billId: bill.id,
+      });
+    }
+
     return updatedParticipant;
   }
 
@@ -1447,6 +1564,28 @@ export class SplitBillService {
       participantId: participant.id,
       description: 'Participant declined invite',
     });
+
+    const bill = await this.billRepo.findOne({
+      where: { id: participant.splitBillId },
+      select: ['id', 'title', 'creatorId'],
+    });
+
+    const decliningUser = await this.userRepo.findOne({
+      where: { id: userId },
+      select: ['firstName', 'lastName', 'email'],
+    });
+
+    if (bill) {
+      this.eventEmitter.emit('split_bill.participant_declined', {
+        creatorId: bill.creatorId,
+        participantName: decliningUser
+          ? `${decliningUser.firstName ?? ''} ${decliningUser.lastName ?? ''}`.trim() ||
+            decliningUser.email
+          : 'A participant',
+        billTitle: bill.title,
+        billId: bill.id,
+      });
+    }
   }
 
   async getParticipantStatus(participantId: string, requestingUserId: string) {
@@ -1691,7 +1830,6 @@ export class SplitBillService {
           ? `${bill.creator.firstName ?? ''} ${bill.creator.lastName ?? ''}`.trim() ||
             bill.creator.email
           : null,
-        visibility: bill.visibility,
         createdAt: bill.createdAt,
         myShare,
       };
@@ -2009,6 +2147,23 @@ export class SplitBillService {
           amount: p.amount,
           percentage: p.percentage,
         });
+
+        const settingsRepo = this.dataSource.getRepository(Settings);
+        const settingsList = await settingsRepo.find({
+          where: { user: { id: In(userIdsToValidate) } },
+          select: ['allowSplitBillInvites'],
+          relations: ['user'],
+        });
+
+        const blockedUsers = settingsList
+          .filter((s) => !s.allowSplitBillInvites)
+          .map((s) => `${s.user.firstName} ${s.user.lastName}`);
+
+        if (blockedUsers.length > 0) {
+          throw new BadRequestException(
+            `These users have disabled split bill invites: ${blockedUsers.join(', ')}`,
+          );
+        }
       } else if (p.type === 'GUEST') {
         if (!p.name || p.name.trim().length < 2) {
           throw new BadRequestException(`Invalid guest name: "${p.name}"`);

@@ -5,6 +5,7 @@ import { Settings } from '../../settings';
 import { Notification } from '../../notification/entities/notification.entity';
 import { Profile } from './profile.entity';
 import { Kyc } from './kyc.entity';
+import { Exclude } from 'class-transformer';
 
 @Entity('users')
 export class User extends AbstractEntity {
@@ -14,6 +15,7 @@ export class User extends AbstractEntity {
   @Column({ unique: true, name: 'phone_number' })
   phoneNumber: string;
 
+  @Exclude()
   @Column()
   password: string;
 
@@ -29,9 +31,11 @@ export class User extends AbstractEntity {
   @Column({ type: 'varchar', name: 'account_type' })
   accountType: AccountType;
 
+  @Exclude()
   @Column({ nullable: true, name: 'email_otp' })
   emailOtp: string;
 
+  @Exclude()
   @Column({ nullable: true, name: 'phone_otp' })
   phoneOtp: string;
 
@@ -62,9 +66,11 @@ export class User extends AbstractEntity {
   @OneToOne(() => Settings, (settings) => settings.user, { cascade: true })
   settings: Settings;
 
+  @Exclude()
   @Column({ type: 'varchar', nullable: true, name: 'refresh_token' })
   refreshToken: string | null;
 
+  @Exclude()
   @Column({ type: 'varchar', nullable: true, name: 'pin' })
   pin: string | null;
 
@@ -77,6 +83,7 @@ export class User extends AbstractEntity {
   @OneToMany(() => Kyc, (kyc) => kyc.user, { cascade: true })
   kycs: Kyc[];
 
+  @Exclude()
   @Column({
     type: 'varchar',
     length: 64,
@@ -97,4 +104,24 @@ export class User extends AbstractEntity {
 
   @Column({ type: 'varchar', length: 11, nullable: true, name: 'bvn' })
   bvn: string | null;
+
+  @Column({ type: 'text', nullable: true, name: 'fcm_token' })
+  fcmToken: string | null;
 }
+
+export const USER_SAFE_FIELDS: (keyof User)[] = [
+  'id',
+  'email',
+  'phoneNumber',
+  'firstName',
+  'lastName',
+  'username',
+  'accountType',
+  'hasVerifiedPhone',
+  'hasSubmittedBasicInfo',
+  'hasCompletedKyc',
+  'companyName',
+  'dateOfBirth',
+  'createdAt',
+  'fcmToken',
+];

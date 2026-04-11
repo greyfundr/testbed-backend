@@ -138,3 +138,10 @@ export class SubmitBvnDto {
   @Matches(/^[0-9]+$/, { message: 'BVN must contain only numbers' })
   bvn: string;
 }
+
+export class SetFcmTokenDto {
+  @ApiProperty({ description: 'FCM (firebase) toekn for push notification' })
+  @IsNotEmpty()
+  @IsString()
+  token: string;
+}

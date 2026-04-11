@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { UpdateUserDto, UpdateProfileDto, GetUsersFilterDto } from '../dtos';
-import { User, Profile, Kyc } from '../entities';
+import { User, Profile, Kyc, USER_SAFE_FIELDS } from '../entities';
 import { UserRepository, ProfileRepository } from '../repository';
 import { DataSource, MoreThan } from 'typeorm';
 import { Campaign, Donation } from 'src/api/campaign/entities';
@@ -28,6 +28,7 @@ export class UserService {
   async findOneById(id: string) {
     return this.userRepository.findOne({
       where: { id },
+      select: USER_SAFE_FIELDS,
     });
   }
 
@@ -35,6 +36,14 @@ export class UserService {
     return this.userRepository.findOne({
       where: { id: userId },
       relations: ['profile', 'kycs'],
+      select: {
+        ...USER_SAFE_FIELDS.reduce(
+          (obj, field) => ({ ...obj, [field]: true }),
+          {},
+        ),
+        profile: true,
+        kycs: true,
+      },
     });
   }
 
@@ -43,6 +52,15 @@ export class UserService {
 
     const query = this.userRepository
       .createQueryBuilder('user')
+      .select([
+        'user.id',
+        'user.email',
+        'user.phoneNumber',
+        'user.firstName',
+        'user.lastName',
+        'user.username',
+        'user.accountType',
+      ])
       .leftJoinAndSelect('user.profile', 'profile')
       .leftJoinAndSelect('user.kycs', 'kycs');
 
@@ -82,6 +100,11 @@ export class UserService {
 
   remove(id: number) {
     return this.userRepository.remove(id);
+  }
+
+  async updateFcmToken(userId: string, token: string) {
+    await this.userRepository.update(userId, { fcmToken: token });
+    return { success: true };
   }
 
   async updateProfile(user: User, updateProfileDto: UpdateProfileDto) {
@@ -257,12 +280,13 @@ export class UserService {
       await manager.update(User, userId, {
         email: `deleted_${userId}@deleted.greyfundr.com`,
         phoneNumber: `deleted_${userId}`,
-        firstName: null,
-        lastName: null,
+        firstName: 'Deleted',
+        lastName: 'User',
         username: null,
         password: '',
         pin: null,
         refreshToken: null,
+        fcmToken: null,
         passwordResetToken: null,
       });
 

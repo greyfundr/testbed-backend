@@ -197,6 +197,10 @@ export class UpdateSettingsDto {
   @IsOptional()
   @IsString()
   currency?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  allowSplitBillInvites?: boolean;
 }
 
 // export class Enable2FADto {

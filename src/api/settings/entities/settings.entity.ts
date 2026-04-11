@@ -32,4 +32,7 @@ export class Settings extends AbstractEntity {
 
   @Column({ default: false, name: 'phone_verified' })
   phoneVerified: boolean;
+
+  @Column({ default: true, name: 'allow_split_bill_invites' })
+  allowSplitBillInvites: boolean;
 }

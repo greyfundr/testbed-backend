@@ -183,10 +183,6 @@ export class CreateSplitBillDto {
   sourceBillId?: string;
 
   @IsOptional()
-  @IsIn(['public', 'private', 'semi_private'])
-  visibility?: string;
-
-  @IsOptional()
   @IsUUID()
   recipientUserId?: string;
 }
@@ -254,10 +250,6 @@ export class UpdateSplitBillDto {
   @IsOptional()
   @IsBoolean()
   allowPartialPayment?: boolean;
-
-  @IsOptional()
-  @IsIn(['public', 'private', 'semi_private'])
-  visibility?: string;
 
   @IsOptional()
   @IsUUID()
@@ -445,7 +437,6 @@ export class MyBillItem {
   totalPaidParticipants: number;
   isFinalized: boolean;
   creatorId: string;
-  visibility: string;
   createdAt: Date;
   myShare: MyParticipantSlice;
 }
