@@ -221,7 +221,16 @@ export class SplitBillService {
       this.billRepo
         .createQueryBuilder('bill')
         .leftJoinAndSelect('bill.participants', 'p')
-        .leftJoinAndSelect('p.user', 'pUser')
+        .leftJoin('p.user', 'pUser')
+        .addSelect([
+          'pUser.id',
+          'pUser.firstName',
+          'pUser.lastName',
+          'pUser.email',
+          'pUser.username',
+          'pUser.accountType',
+          'pUser.hasCompletedKyc',
+        ])
         .orderBy('bill.createdAt', 'DESC')
         .skip(offset)
         .take(limit);
