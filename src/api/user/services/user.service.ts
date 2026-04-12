@@ -41,6 +41,7 @@ export class UserService {
           (obj, field) => ({ ...obj, [field]: true }),
           {},
         ),
+        pin: true,
         profile: true,
         kycs: true,
       },

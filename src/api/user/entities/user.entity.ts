@@ -5,7 +5,7 @@ import { Settings } from '../../settings';
 import { Notification } from '../../notification/entities/notification.entity';
 import { Profile } from './profile.entity';
 import { Kyc } from './kyc.entity';
-import { Exclude } from 'class-transformer';
+import { Exclude, Expose } from 'class-transformer';
 
 @Entity('users')
 export class User extends AbstractEntity {
@@ -107,6 +107,11 @@ export class User extends AbstractEntity {
 
   @Column({ type: 'text', nullable: true, name: 'fcm_token' })
   fcmToken: string | null;
+
+  @Expose()
+  get isPinSet(): boolean {
+    return !!this.pin;
+  }
 }
 
 export const USER_SAFE_FIELDS: (keyof User)[] = [
