@@ -44,8 +44,7 @@ import {
   GetUserBillsDto,
   CancelBillDto,
   GetMyBillsDto,
-  MyBillItem,
-  MyParticipantSlice,
+  GetMyInvitesDto,
 } from '../dto/split-bill.dto';
 import { UserRepository } from '../../user/repository';
 import { TransactionRepository } from '../../transaction/repository';
@@ -124,18 +123,21 @@ export class SplitBillService {
 
       const bill = await qr.manager.save(newBill);
 
-      const participantRows = validated.map((p) =>
-        qr.manager.create(SplitBillParticipant, {
+      const participantRows = validated.map((p) => {
+        const isCreator = p.userId === creatorId;
+
+        return qr.manager.create(SplitBillParticipant, {
           splitBillId: bill.id,
           userId: p.userId ?? null,
           guestName: p.guestName ?? null,
           guestPhone: p.guestPhone ?? null,
           guestEmail: p.guestEmail ?? null,
-          role:
-            p.userId === creatorId
-              ? ParticipantRole.CREATOR
-              : ParticipantRole.PARTICIPANT,
-          status: ParticipantStatus.INVITED,
+          role: isCreator
+            ? ParticipantRole.CREATOR
+            : ParticipantRole.PARTICIPANT,
+          status: isCreator
+            ? ParticipantStatus.UNPAID
+            : ParticipantStatus.INVITED,
           amountOwed: 0,
           amountPaid: 0,
           amountRemaining: 0,
@@ -146,8 +148,8 @@ export class SplitBillService {
           invitedAt: new Date(),
           paymentMethod: null,
           walletId: null,
-        }),
-      );
+        });
+      });
 
       const savedParticipants = await qr.manager.save(participantRows);
 
@@ -565,6 +567,319 @@ export class SplitBillService {
     } finally {
       await qr.release();
     }
+  }
+
+  async getMyInvites(
+    userId: string,
+    dto: GetMyInvitesDto,
+  ): Promise<{
+    invites: any[];
+    total: number;
+    page: number;
+    totalPages: number;
+  }> {
+    const { page = 1, limit = 20 } = dto;
+    const offset = (page - 1) * limit;
+
+    const [participants, total] = await this.participantRepo
+      .createQueryBuilder('p')
+      .leftJoinAndSelect('p.splitBill', 'bill')
+      .leftJoin('bill.creator', 'creator')
+      .addSelect([
+        'creator.id',
+        'creator.firstName',
+        'creator.lastName',
+        'creator.email',
+        'creator.username',
+      ])
+      .where('p.userId = :userId', { userId })
+      .andWhere('p.status = :status', { status: ParticipantStatus.INVITED })
+      .andWhere('p.deletedAt IS NULL')
+      .andWhere('(p.inviteExpiresAt IS NULL OR p.inviteExpiresAt > :now)', {
+        now: new Date(),
+      })
+      .andWhere('bill.status NOT IN (:...excludedStatuses)', {
+        excludedStatuses: [SplitBillStatus.CANCELLED, SplitBillStatus.SETTLED],
+      })
+      .orderBy('p.invitedAt', 'DESC')
+      .skip(offset)
+      .take(limit)
+      .getManyAndCount();
+
+    const invites = participants.map((p) => ({
+      participantId: p.id,
+      inviteCode: p.inviteCode,
+      inviteExpiresAt: p.inviteExpiresAt,
+      invitedAt: p.invitedAt,
+      amountOwed: p.amountOwed,
+      percentage: p.percentage,
+      currency: p.splitBill.currency,
+      splitMethod: p.splitBill.splitMethod,
+      bill: {
+        id: p.splitBill.id,
+        title: p.splitBill.title,
+        description: p.splitBill.description,
+        imageUrl: p.splitBill.imageUrl,
+        totalAmount: p.splitBill.totalAmount,
+        totalParticipants: p.splitBill.totalParticipants,
+        currency: p.splitBill.currency,
+        splitMethod: p.splitBill.splitMethod,
+        status: p.splitBill.status,
+        dueDate: p.splitBill.dueDate,
+        shareLink: p.splitBill.shareLink,
+        createdAt: p.splitBill.createdAt,
+      },
+      createdBy: p.splitBill.creator
+        ? {
+            id: p.splitBill.creator.id,
+            name:
+              `${p.splitBill.creator.firstName ?? ''} ${p.splitBill.creator.lastName ?? ''}`.trim() ||
+              p.splitBill.creator.email,
+            username: p.splitBill.creator.username,
+          }
+        : null,
+    }));
+
+    return { invites, total, page, totalPages: Math.ceil(total / limit) };
+  }
+
+  async getMyActiveBills(
+    userId: string,
+    dto: GetMyBillsDto,
+  ): Promise<{
+    bills: any[];
+    total: number;
+    page: number;
+    totalPages: number;
+  }> {
+    const { status, role, page = 1, limit = 20 } = dto;
+    const offset = (page - 1) * limit;
+
+    const qb = this.billRepo
+      .createQueryBuilder('bill')
+      .leftJoinAndSelect(
+        'bill.participants',
+        'myPart',
+        'myPart.userId = :userId AND myPart.deletedAt IS NULL',
+        { userId },
+      )
+      .leftJoinAndSelect('bill.creator', 'creator')
+      .where(
+        `(bill.creatorId = :userId OR (
+          myPart.userId = :userId AND 
+          myPart.status NOT IN (:...ignoredStatuses)
+        ))`,
+        {
+          userId,
+          ignoredStatuses: [
+            ParticipantStatus.DECLINED,
+            ParticipantStatus.INVITED,
+          ],
+        },
+      );
+
+    if (status) {
+      qb.andWhere('bill.status = :status', { status });
+    }
+
+    if (role === MyBillsRole.CREATOR) {
+      qb.andWhere('bill.creatorId = :userId', { userId });
+    } else if (role === MyBillsRole.PARTICIPANT) {
+      qb.andWhere('bill.creatorId != :userId', { userId });
+    }
+
+    const [bills, total] = await qb
+      .orderBy('bill.createdAt', 'DESC')
+      .skip(offset)
+      .take(limit)
+      .getManyAndCount();
+
+    const shaped = bills.map((bill) => {
+      const isCreator = bill.creatorId === userId;
+      const myParticipant = bill.participants?.[0] ?? null;
+
+      return {
+        id: bill.id,
+        title: bill.title,
+        description: bill.description,
+        imageUrl: bill.imageUrl,
+        billReceipt: bill.billReceipt,
+        totalAmount: bill.totalAmount,
+        totalCollected: bill.totalCollected,
+        remainingAmount: bill.totalAmount - bill.totalCollected,
+        fundingPercentage:
+          bill.totalAmount > 0
+            ? Math.floor((bill.totalCollected / bill.totalAmount) * 100)
+            : 0,
+        currency: bill.currency,
+        splitMethod: bill.splitMethod,
+        status: bill.status,
+        dueDate: bill.dueDate,
+        totalParticipants: bill.totalParticipants,
+        totalPaidParticipants: bill.totalPaidParticipants,
+        isFinalized: bill.isFinalized,
+        shareLink: bill.shareLink,
+        createdAt: bill.createdAt,
+        createdBy: bill.creator
+          ? {
+              id: bill.creator.id,
+              name:
+                `${bill.creator.firstName ?? ''} ${bill.creator.lastName ?? ''}`.trim() ||
+                bill.creator.email,
+              username: bill.creator.username,
+            }
+          : null,
+        myRole: isCreator ? 'creator' : 'participant',
+        myShare:
+          !isCreator && myParticipant
+            ? {
+                participantId: myParticipant.id,
+                role: myParticipant.role,
+                status: myParticipant.status,
+                amountOwed: myParticipant.amountOwed,
+                amountPaid: myParticipant.amountPaid,
+                amountRemaining: myParticipant.amountRemaining,
+                percentage: myParticipant.percentage,
+                inviteCode: myParticipant.inviteCode,
+                paymentLink: myParticipant.paymentLink,
+                acceptedAt: myParticipant.acceptedAt,
+                fullyPaidAt: myParticipant.fullyPaidAt,
+              }
+            : null,
+      };
+    });
+
+    return {
+      bills: shaped,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async acceptBillInvite(billId: string, userId: string): Promise<void> {
+    const participant = await this.participantRepo.findOne({
+      where: {
+        splitBillId: billId,
+        userId,
+      },
+      relations: ['splitBill'],
+    });
+
+    if (!participant) {
+      throw new NotFoundException('You have not been invited to this bill');
+    }
+
+    if (participant.status === ParticipantStatus.ACCEPTED) {
+      throw new BadRequestException('You have already accepted this invite');
+    }
+
+    if (participant.status === ParticipantStatus.DECLINED) {
+      throw new BadRequestException(
+        'You have already declined this invite. Contact the creator to be re-invited.',
+      );
+    }
+
+    if (participant.status !== ParticipantStatus.INVITED) {
+      throw new BadRequestException('This invite is no longer pending');
+    }
+
+    if (
+      participant.inviteExpiresAt &&
+      participant.inviteExpiresAt < new Date()
+    ) {
+      throw new BadRequestException(
+        'This invite has expired. Ask the bill creator to re-invite you.',
+      );
+    }
+
+    await this.participantRepo.update(participant.id, {
+      status: ParticipantStatus.ACCEPTED,
+      acceptedAt: new Date(),
+    });
+
+    await this.activityRepo.save({
+      splitBillId: billId,
+      actorId: userId,
+      actionType: ActivityActionType.PARTICIPANT_ACCEPTED,
+      participantId: participant.id,
+      description: 'Participant accepted invite',
+      billStatusAtTime: participant.splitBill.status,
+    });
+
+    const acceptingUser = await this.userRepo.findOne({
+      where: { id: userId },
+      select: ['id', 'firstName', 'lastName', 'email'],
+    });
+
+    this.eventEmitter.emit('split_bill.participant_accepted', {
+      creatorId: participant.splitBill.creatorId,
+      participantName: acceptingUser
+        ? `${acceptingUser.firstName ?? ''} ${acceptingUser.lastName ?? ''}`.trim() ||
+          acceptingUser.email
+        : 'A participant',
+      billTitle: participant.splitBill.title,
+      billId,
+    });
+  }
+
+  async declineBillInvite(billId: string, userId: string): Promise<void> {
+    const participant = await this.participantRepo.findOne({
+      where: {
+        splitBillId: billId,
+        userId,
+      },
+      relations: ['splitBill'],
+    });
+
+    if (!participant) {
+      throw new NotFoundException('You have not been invited to this bill');
+    }
+
+    if (participant.status === ParticipantStatus.DECLINED) {
+      throw new BadRequestException('You have already declined this invite');
+    }
+
+    if (participant.status === ParticipantStatus.ACCEPTED) {
+      throw new BadRequestException(
+        'You have already accepted this invite. Contact the creator if you wish to be removed.',
+      );
+    }
+
+    if (participant.amountPaid > 0) {
+      throw new BadRequestException(
+        'Cannot decline after making a payment. Contact the creator.',
+      );
+    }
+
+    await this.participantRepo.update(participant.id, {
+      status: ParticipantStatus.DECLINED,
+      declinedAt: new Date(),
+    });
+
+    await this.activityRepo.save({
+      splitBillId: billId,
+      actorId: userId,
+      actionType: ActivityActionType.PARTICIPANT_DECLINED,
+      participantId: participant.id,
+      description: 'Participant declined invite',
+      billStatusAtTime: participant.splitBill.status,
+    });
+
+    const decliningUser = await this.userRepo.findOne({
+      where: { id: userId },
+      select: ['id', 'firstName', 'lastName', 'email'],
+    });
+
+    this.eventEmitter.emit('split_bill.participant_declined', {
+      creatorId: participant.splitBill.creatorId,
+      participantName: decliningUser
+        ? `${decliningUser.firstName ?? ''} ${decliningUser.lastName ?? ''}`.trim() ||
+          decliningUser.email
+        : 'A participant',
+      billTitle: participant.splitBill.title,
+      billId,
+    });
   }
 
   async addParticipant(
@@ -1739,120 +2054,6 @@ export class SplitBillService {
     return { activities, total, page, totalPages: Math.ceil(total / limit) };
   }
 
-  async getMyBills(
-    userId: string,
-    dto: GetMyBillsDto,
-  ): Promise<{
-    bills: MyBillItem[];
-    total: number;
-    page: number;
-    totalPages: number;
-  }> {
-    const {
-      status,
-      participantStatus,
-      role = MyBillsRole.ALL,
-      page = 1,
-      limit = 20,
-    } = dto;
-    const offset = (page - 1) * limit;
-
-    const qb = this.billRepo
-      .createQueryBuilder('bill')
-      .leftJoinAndSelect(
-        'bill.participants',
-        'myPart',
-        'myPart.userId = :userId AND myPart.deletedAt IS NULL',
-        { userId },
-      )
-      .leftJoinAndSelect('bill.creator', 'creator')
-      .where(
-        `bill.creatorId = :userId OR EXISTS (
-      SELECT 1 FROM split_bill_participants sp
-      WHERE sp.split_bill_id = bill.id
-        AND sp.user_id = :userId
-        AND sp.deleted_at IS NULL
-    )`,
-        { userId },
-      )
-      .orderBy('bill.createdAt', 'DESC')
-      .skip(offset)
-      .take(limit);
-
-    if (status) {
-      qb.andWhere('bill.status = :status', { status });
-    }
-
-    if (participantStatus) {
-      qb.andWhere('myPart.status = :participantStatus', { participantStatus });
-    }
-
-    if (role === MyBillsRole.CREATOR) {
-      qb.andWhere('bill.creatorId = :userId', { userId });
-    } else if (role === MyBillsRole.PARTICIPANT) {
-      qb.andWhere('bill.creatorId != :userId', { userId });
-    }
-
-    const [bills, total] = await qb.getManyAndCount();
-
-    const shaped: MyBillItem[] = bills.map((bill) => {
-      const myParticipant = bill.participants?.[0] ?? null;
-
-      const myShare: MyParticipantSlice = myParticipant
-        ? {
-            participantId: myParticipant.id,
-            role: myParticipant.role,
-            amountOwed: myParticipant.amountOwed,
-            amountPaid: myParticipant.amountPaid,
-            amountRemaining: myParticipant.amountRemaining,
-            status: myParticipant.status,
-            inviteCode: myParticipant.inviteCode,
-            paymentLink: myParticipant.paymentLink,
-          }
-        : {
-            participantId: '',
-            role: 'creator',
-            amountOwed: 0,
-            amountPaid: 0,
-            amountRemaining: 0,
-            status: 'n/a',
-            inviteCode: null,
-            paymentLink: null,
-          };
-
-      return {
-        id: bill.id,
-        title: bill.title,
-        description: bill.description,
-        imageUrl: bill.imageUrl,
-        billReceipt: bill.billReceipt,
-        totalAmount: bill.totalAmount,
-        totalCollected: bill.totalCollected,
-        currency: bill.currency,
-        splitMethod: bill.splitMethod,
-        status: bill.status,
-        dueDate: bill.dueDate,
-        totalParticipants: bill.totalParticipants,
-        totalPaidParticipants: bill.totalPaidParticipants,
-        isFinalized: bill.isFinalized,
-        creatorId: bill.creatorId,
-        creatorName: bill.creator
-          ? `${bill.creator.firstName ?? ''} ${bill.creator.lastName ?? ''}`.trim() ||
-            bill.creator.email
-          : null,
-        createdAt: bill.createdAt,
-        myShare,
-      };
-    });
-
-    return {
-      bills: shaped,
-      total,
-      page,
-      totalPages: Math.ceil(total / limit),
-    };
-  }
-
   // ─── Private: Compute and Save Shares ────────────────────────────────────────
 
   /**
@@ -1887,7 +2088,6 @@ export class SplitBillService {
     const totalAmount = Number(overrideTotalAmount ?? Number(bill.totalAmount));
     const count = participants.length;
 
-    // Load current DB participant rows in deterministic order
     const dbRows = await qr.manager.find(SplitBillParticipant, {
       where: { splitBillId: billId },
       order: { createdAt: 'ASC', id: 'ASC' },
@@ -1973,7 +2173,6 @@ export class SplitBillService {
         );
     }
 
-    // ── Write shares to DB and collect adjustments ────────────────────────
     const adjustments: ShareAdjustment[] = [];
 
     for (let i = 0; i < dbRows.length; i++) {
@@ -1987,46 +2186,51 @@ export class SplitBillService {
 
       let newStatus = row.status;
 
-      if (paid >= effectiveOwed && effectiveOwed > 0) {
-        newStatus = ParticipantStatus.PAID;
-        if (paid > effectiveOwed) {
-          adjustments.push({
-            participantId: row.id,
-            participantName: row.guestName ?? row.userId ?? 'Unknown',
-            oldOwed,
-            newOwed,
-            amountPaid: paid,
-            action: 'REFUND_REQUIRED',
-            overAmount: paid - effectiveOwed,
-            message: `Participant overpaid by ${paid - effectiveOwed} kobo. Refund required.`,
-          });
-        }
-      } else if (paid > 0 && paid < effectiveOwed) {
-        newStatus = ParticipantStatus.PARTIAL;
-        if (newOwed > oldOwed) {
-          adjustments.push({
-            participantId: row.id,
-            participantName: row.guestName ?? row.userId ?? 'Unknown',
-            oldOwed,
-            newOwed,
-            amountPaid: paid,
-            action: 'ADDITIONAL_PAYMENT_REQUIRED',
-            additionalOwed: effectiveOwed - paid,
-            message: `Additional ${effectiveOwed - paid} kobo required after amount change.`,
-          });
-        }
-      } else if (paid === 0) {
-        newStatus = ParticipantStatus.UNPAID;
-        if (newOwed !== oldOwed) {
-          adjustments.push({
-            participantId: row.id,
-            participantName: row.guestName ?? row.userId ?? 'Unknown',
-            oldOwed,
-            newOwed,
-            amountPaid: 0,
-            action: 'AMOUNT_ADJUSTED',
-            message: `Amount changed from ₦${oldOwed} to ₦${newOwed}.`,
-          });
+      if (
+        row.status !== ParticipantStatus.INVITED &&
+        row.status !== ParticipantStatus.DECLINED
+      ) {
+        if (paid >= effectiveOwed && effectiveOwed > 0) {
+          newStatus = ParticipantStatus.PAID;
+          if (paid > effectiveOwed) {
+            adjustments.push({
+              participantId: row.id,
+              participantName: row.guestName ?? row.userId ?? 'Unknown',
+              oldOwed,
+              newOwed,
+              amountPaid: paid,
+              action: 'REFUND_REQUIRED',
+              overAmount: paid - effectiveOwed,
+              message: `Participant overpaid by ${paid - effectiveOwed} kobo. Refund required.`,
+            });
+          }
+        } else if (paid > 0 && paid < effectiveOwed) {
+          newStatus = ParticipantStatus.PARTIAL;
+          if (newOwed > oldOwed) {
+            adjustments.push({
+              participantId: row.id,
+              participantName: row.guestName ?? row.userId ?? 'Unknown',
+              oldOwed,
+              newOwed,
+              amountPaid: paid,
+              action: 'ADDITIONAL_PAYMENT_REQUIRED',
+              additionalOwed: effectiveOwed - paid,
+              message: `Additional ${effectiveOwed - paid} kobo required after amount change.`,
+            });
+          }
+        } else if (paid === 0) {
+          newStatus = ParticipantStatus.UNPAID;
+          if (newOwed !== oldOwed) {
+            adjustments.push({
+              participantId: row.id,
+              participantName: row.guestName ?? row.userId ?? 'Unknown',
+              oldOwed,
+              newOwed,
+              amountPaid: 0,
+              action: 'AMOUNT_ADJUSTED',
+              message: `Amount changed from ₦${oldOwed} to ₦${newOwed}.`,
+            });
+          }
         }
       }
 

@@ -25,10 +25,11 @@ import {
   CancelBillDto,
   GetUserBillsDto,
   GetMyBillsDto,
+  GetMyInvitesDto,
 } from '../dto';
 import { ShareAdjustment } from '../interfaces';
 import { User } from 'src/api/user/entities';
-import { ApiOperation } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 
 @Controller('split-bills')
 @UseGuards(JwtAuthGuard, KycGuard)
@@ -66,16 +67,28 @@ export class SplitBillController {
     };
   }
 
-  @ApiOperation({ summary: 'Get bills user is appeared as participant' })
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Get all pending split bill invites for the current user',
+  })
+  @Get('invites')
+  @UseGuards(JwtAuthGuard)
+  async getMyInvites(@CurrentUser() user: User, @Query() dto: GetMyInvitesDto) {
+    return this.splitBillService.getMyInvites(user.id, dto);
+  }
+
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary:
+      'Get my split bills — bills I created and bills I accepted as participant',
+  })
   @Get('my-bills')
   @UseGuards(JwtAuthGuard)
-  async getMyBills(@CurrentUser() user: User, @Query() dto: GetMyBillsDto) {
-    const result = await this.splitBillService.getMyBills(user.id, dto);
-    return {
-      success: true,
-      message: 'Bills retrieved successfully',
-      data: result,
-    };
+  async getMyActiveBills(
+    @CurrentUser() user: User,
+    @Query() dto: GetMyBillsDto,
+  ) {
+    return this.splitBillService.getMyActiveBills(user.id, dto);
   }
 
   @ApiOperation({ summary: 'Get a specific split bill by ID' })
@@ -105,6 +118,35 @@ export class SplitBillController {
       message: 'Bill updated successfully',
       data: bill,
     };
+  }
+
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Accept a split bill invite' })
+  @Patch(':billId/accept')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async acceptBillInvite(
+    @Param('billId') billId: string,
+    @CurrentUser() user: User,
+  ) {
+    await this.splitBillService.acceptBillInvite(billId, user.id);
+    return {
+      success: true,
+      message: 'Invite accepted. You are now an active participant.',
+    };
+  }
+
+  @ApiBearerAuth('JWT-auth')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Decline a split bill invite' })
+  @Patch(':billId/decline')
+  @UseGuards(JwtAuthGuard)
+  async declineBillInvite(
+    @Param('billId') billId: string,
+    @CurrentUser() user: User,
+  ) {
+    await this.splitBillService.declineBillInvite(billId, user.id);
+    return { success: true, message: 'Invite declined.' };
   }
 
   @ApiOperation({ summary: 'Finalize a split bill' })
