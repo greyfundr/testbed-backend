@@ -24,6 +24,7 @@ import {
   SplitMethod,
   SplitBillStatus,
   MyBillsRole,
+  ParticipantStatus,
 } from '../enums/split-bill.enum';
 
 // export class UserParticipantDto {
@@ -394,6 +395,10 @@ export class GetMyBillsDto {
   @IsOptional()
   @IsEnum(MyBillsRole)
   role?: MyBillsRole = MyBillsRole.ALL;
+
+  @IsOptional()
+  @IsEnum(ParticipantStatus)
+  participantStatus?: ParticipantStatus;
 
   @IsOptional()
   @Type(() => Number)

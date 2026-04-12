@@ -1748,7 +1748,13 @@ export class SplitBillService {
     page: number;
     totalPages: number;
   }> {
-    const { status, role = MyBillsRole.ALL, page = 1, limit = 20 } = dto;
+    const {
+      status,
+      participantStatus,
+      role = MyBillsRole.ALL,
+      page = 1,
+      limit = 20,
+    } = dto;
     const offset = (page - 1) * limit;
 
     const qb = this.billRepo
@@ -1775,6 +1781,10 @@ export class SplitBillService {
 
     if (status) {
       qb.andWhere('bill.status = :status', { status });
+    }
+
+    if (participantStatus) {
+      qb.andWhere('myPart.status = :participantStatus', { participantStatus });
     }
 
     if (role === MyBillsRole.CREATOR) {
