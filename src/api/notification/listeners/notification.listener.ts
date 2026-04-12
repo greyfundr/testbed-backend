@@ -446,4 +446,63 @@ export class NotificationListener {
       },
     );
   }
+
+  @OnEvent('wallet.funded')
+  async handleWalletFunded(payload: {
+    userId: string;
+    amount: number;
+    channel: string;
+    phoneNumber?: string;
+    pushToken?: string;
+  }) {
+    await this.notificationService.notify(
+      payload.userId,
+      'paymentConfirmations',
+      {
+        title: 'Wallet Top-up Successful',
+        message: `Your wallet has been credited with ₦${payload.amount.toLocaleString()} via ${payload.channel}.`,
+        type: 'transaction',
+        metadata: {
+          amount: payload.amount,
+          channel: payload.channel,
+        },
+      },
+    );
+  }
+
+  @OnEvent('withdrawal.completed')
+  async handleWithdrawalCompleted(payload: {
+    userId: string;
+    amount: number;
+    transferCode: string;
+    phoneNumber?: string;
+    pushToken?: string;
+  }) {
+    await this.notificationService.notify(
+      payload.userId,
+      'paymentConfirmations',
+      {
+        title: 'Withdrawal Successful',
+        message: `Your withdrawal of ₦${payload.amount.toLocaleString()} has been processed successfully.`,
+        type: 'transaction',
+        metadata: { transferCode: payload.transferCode },
+      },
+    );
+  }
+
+  @OnEvent('withdrawal.failed')
+  async handleWithdrawalFailed(payload: {
+    userId: string;
+    amount: number;
+    reason: string;
+    phoneNumber?: string;
+    pushToken?: string;
+  }) {
+    await this.notificationService.notify(payload.userId, 'securityAlerts', {
+      title: 'Withdrawal Failed',
+      message: `Your withdrawal of ₦${payload.amount.toLocaleString()} failed: ${payload.reason}. The funds have been returned to your wallet.`,
+      type: 'transaction',
+      metadata: { amount: payload.amount, reason: payload.reason },
+    });
+  }
 }

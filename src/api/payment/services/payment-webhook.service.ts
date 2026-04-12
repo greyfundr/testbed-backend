@@ -27,6 +27,7 @@ import {
 } from '../../transaction/repository';
 import {
   VirtualAccountRepository,
+  WalletRepository,
   WithdrawalRequestRepository,
 } from '../../wallet/repository';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -38,6 +39,7 @@ import {
   EventPaymentMethod,
 } from '../../event/enums/event.enum';
 import { Event, EventContribution } from 'src/api/event/entities';
+import { UserRepository } from 'src/api/user/repository';
 
 @Injectable()
 export class PaymentWebhookService {
@@ -48,6 +50,8 @@ export class PaymentWebhookService {
     private readonly transactionRepo: TransactionRepository,
     private readonly withdrawalRepo: WithdrawalRequestRepository,
     private readonly virtualAccountRepo: VirtualAccountRepository,
+    private readonly walletRepository: WalletRepository,
+    private readonly userRepository: UserRepository,
 
     @Inject(forwardRef(() => WalletService))
     private readonly walletService: WalletService,
@@ -243,6 +247,21 @@ export class PaymentWebhookService {
       });
 
       await qr.commitTransaction();
+
+      this.eventEmitter.emit('split_bill.payment_received', {
+        creatorId: bill.creatorId,
+        participantName: participant.guestName || 'A guest',
+        billTitle: bill.title,
+        billId: bill.id,
+        amount: amountKobo / 100,
+        currency: bill.currency,
+        totalCollected: newTotalCollected,
+        totalAmount: bill.totalAmount,
+      });
+
+      this.logger.log(
+        `Guest payment webhook processed successfully for ref: ${reference}`,
+      );
       this.logger.log(
         `Guest payment webhook processed successfully for ref: ${reference}`,
       );
@@ -393,7 +412,7 @@ export class PaymentWebhookService {
         ],
       });
 
-      let walletId: string | null;
+      let walletId: string;
       let transactionId: string;
       let amountNaira: number = amount / 100;
 
@@ -430,7 +449,7 @@ export class PaymentWebhookService {
           return;
         }
 
-        walletId = existingTx.walletId;
+        walletId = existingTx.walletId as string;
         transactionId = existingTx.id;
         amountNaira = existingTx.amount;
       } else {
@@ -497,6 +516,20 @@ export class PaymentWebhookService {
 
       await qr.commitTransaction();
 
+      const wallet = await this.walletRepository.findOne({
+        where: { id: walletId },
+        relations: ['user'],
+      });
+
+      if (wallet?.user) {
+        this.eventEmitter.emit('wallet.funded', {
+          userId: wallet.user.id,
+          amount: amountNaira,
+          channel: this.channelLabel(channel),
+          pushToken: wallet.user.fcmToken,
+        });
+      }
+
       this.logger.log(
         `Wallet credited: ₦${amountNaira} → wallet ${walletId} (ref: ${reference}, path: ${existingTx ? 'card' : 'dva'})`,
       );
@@ -515,7 +548,7 @@ export class PaymentWebhookService {
 
     const withdrawal = await this.withdrawalRepo.findOne({
       where: { paymentTransferCode: transfer_code },
-      relations: ['transaction'],
+      relations: ['transaction', 'wallet'],
     });
 
     if (!withdrawal) {
@@ -544,6 +577,16 @@ export class PaymentWebhookService {
       });
     }
 
+    const user = await this.userRepository.findOne({
+      where: { id: withdrawal.wallet.userId },
+    });
+
+    this.eventEmitter.emit('withdrawal.completed', {
+      userId: withdrawal.wallet.userId,
+      amount: withdrawal.amount,
+      transferCode: transfer_code,
+    });
+
     this.logger.log(
       `Withdrawal ${withdrawal.id} completed. Transfer code: ${transfer_code}`,
     );
@@ -556,7 +599,7 @@ export class PaymentWebhookService {
 
     const withdrawal = await this.withdrawalRepo.findOne({
       where: { paymentTransferCode: transfer_code },
-      relations: ['transaction'],
+      relations: ['transaction', 'wallet'],
     });
 
     if (!withdrawal) {
@@ -620,6 +663,16 @@ export class PaymentWebhookService {
       }
 
       await qr.commitTransaction();
+
+      const user = await this.userRepository.findOne({
+        where: { id: withdrawal.wallet.userId },
+      });
+
+      this.eventEmitter.emit('withdrawal.failed', {
+        userId: withdrawal.wallet.userId,
+        amount: withdrawal.amount,
+        reason: data.reason || 'Gateway rejection',
+      });
 
       this.logger.warn(
         `Withdrawal ${withdrawal.id} failed. ₦${withdrawal.amount} returned to wallet ${withdrawal.walletId}`,
