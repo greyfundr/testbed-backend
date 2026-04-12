@@ -6,6 +6,7 @@ import { Notification } from '../../notification/entities/notification.entity';
 import { Profile } from './profile.entity';
 import { Kyc } from './kyc.entity';
 import { Exclude, Expose } from 'class-transformer';
+import { Wallet } from 'src/api/wallet/entities';
 
 @Entity('users')
 export class User extends AbstractEntity {
@@ -107,6 +108,9 @@ export class User extends AbstractEntity {
 
   @Column({ type: 'text', nullable: true, name: 'fcm_token' })
   fcmToken: string | null;
+
+  @OneToOne(() => Wallet, (wallet) => wallet.user)
+  wallet: Wallet;
 
   @Expose()
   get isPinSet(): boolean {

@@ -13,6 +13,7 @@ import { VirtualAccount } from './virtual-account.entity';
 import { Transaction, LedgerEntry } from '../../transaction/entities';
 import { WalletStatus, WalletCurrency } from '../enums/wallet.enum';
 import { ColumnNumericTransformer } from '../../../common/transformers/column-numeric.transformer';
+import { Exclude, Expose } from 'class-transformer';
 
 @Entity('wallets')
 @Index(['userId'], { unique: true })
@@ -101,6 +102,7 @@ export class Wallet extends AbstractEntity {
   @OneToMany(() => LedgerEntry, (le) => le.wallet)
   ledgerEntries: LedgerEntry[];
 
+  @Exclude()
   @Column({ type: 'varchar', nullable: true, name: 'transaction_pin' })
   transactionPin: string | null;
 
@@ -116,4 +118,9 @@ export class Wallet extends AbstractEntity {
     name: 'transaction_pin_locked_until',
   })
   transactionPinLockedUntil: Date | null;
+
+  @Expose()
+  get isTransactionPinSet(): boolean {
+    return !!this.transactionPin;
+  }
 }

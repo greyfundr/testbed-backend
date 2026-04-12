@@ -35,7 +35,7 @@ export class UserService {
   async getUserProfile(userId: string) {
     return this.userRepository.findOne({
       where: { id: userId },
-      relations: ['profile', 'kycs'],
+      relations: ['profile', 'kycs', 'wallet'],
       select: {
         ...USER_SAFE_FIELDS.reduce(
           (obj, field) => ({ ...obj, [field]: true }),
@@ -44,6 +44,13 @@ export class UserService {
         pin: true,
         profile: true,
         kycs: true,
+        wallet: {
+          id: true,
+          transactionPin: true,
+          availableBalance: true,
+          currency: true,
+          status: true,
+        },
       },
     });
   }
