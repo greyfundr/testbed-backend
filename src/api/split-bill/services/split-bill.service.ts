@@ -45,12 +45,14 @@ import {
   CancelBillDto,
   GetMyBillsDto,
   GetMyInvitesDto,
+  BillPaymentMethod,
 } from '../dto/split-bill.dto';
 import { UserRepository } from '../../user/repository';
 import { TransactionRepository } from '../../transaction/repository';
 import { PaymentService } from '../../payment/services';
 import { Settings } from 'src/api/settings/entities';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { DynamicLinkService } from 'src/api/dynamic-link/services/dynamic-link.service';
 
 @Injectable()
 export class SplitBillService {
@@ -69,6 +71,7 @@ export class SplitBillService {
     private readonly paymentService: PaymentService,
     private readonly dataSource: DataSource,
     private readonly eventEmitter: EventEmitter2,
+    private readonly dynamicLinkService: DynamicLinkService,
   ) {}
 
   async createBill(
@@ -170,6 +173,10 @@ export class SplitBillService {
 
       await qr.commitTransaction();
 
+      const updatedParticipants = await this.participantRepo.find({
+        where: { splitBillId: bill.id },
+      });
+
       const creator = await this.userRepo.findOne({
         where: { id: creatorId },
         select: ['firstName', 'lastName'],
@@ -178,19 +185,29 @@ export class SplitBillService {
         `${creator?.firstName ?? ''} ${creator?.lastName ?? ''}`.trim() ||
         'Someone';
 
-      const userParticipants = savedParticipants.filter(
-        (p) => p.userId && p.userId !== creatorId,
-      );
+      const userIds = updatedParticipants
+        .filter((p) => p.userId && p.userId !== creatorId)
+        .map((p) => p.userId);
 
-      if (userParticipants.length > 0) {
-        const userDetails = await this.userRepo.findAll({
-          where: { id: In(userParticipants.map((p) => p.userId)) },
-          select: ['id', 'email', 'phoneNumber', 'fcmToken'],
-        });
+      const userDetails =
+        userIds.length > 0
+          ? await this.userRepo.findAll({
+              where: { id: In(userIds) },
+              select: ['id', 'email', 'phoneNumber', 'fcmToken'],
+            })
+          : [];
 
-        for (const pRow of userParticipants) {
+      for (const pRow of updatedParticipants) {
+        if (pRow.userId === creatorId) continue;
+
+        if (pRow.userId) {
           const u = userDetails.find((detail) => detail.id === pRow.userId);
           if (!u) continue;
+
+          const { shortUrl } = await this.dynamicLinkService.forSplitBill(
+            bill.id,
+            bill.title,
+          );
 
           this.eventEmitter.emit('split_bill.participant_added', {
             userId: u.id,
@@ -203,12 +220,28 @@ export class SplitBillService {
             creatorName: creatorName,
             phoneNumber: u.phoneNumber,
             pushToken: u.fcmToken,
+            paymentLink: shortUrl,
+          });
+        } else if (pRow.guestPhone) {
+          const { shortUrl } = await this.dynamicLinkService.forSplitBillInvite(
+            bill.id,
+            pRow.inviteCode as string,
+            bill.title,
+          );
+
+          this.eventEmitter.emit('split_bill.guest_invited', {
+            guestName: pRow.guestName || 'Friend',
+            guestPhone: pRow.guestPhone,
+            billTitle: bill.title,
+            amountOwed: pRow.amountOwed,
+            currency: bill.currency,
+            creatorName: creatorName,
+            paymentLink: shortUrl,
           });
         }
       }
 
       this.logger.log(`Split bill created: ${bill.id} by ${creatorId}`);
-
       return this.getBillById(bill.id, creatorId);
     } catch (err) {
       await qr.rollbackTransaction();
@@ -1307,20 +1340,15 @@ export class SplitBillService {
     participantId: string,
     payerId: string,
     dto: PayBillShareDto,
-  ): Promise<{ participantFullyPaid: boolean; billFullyFunded: boolean }> {
+  ): Promise<any> {
     const qr = this.dataSource.createQueryRunner();
     await qr.connect();
     await qr.startTransaction();
 
     try {
-      // await this.walletService.verifyTransactionPin(
-      //   payerId,
-      //   dto.transactionPin,
-      // );
-
-      // Lock both participant and bill atomically
       const participant = await qr.manager.findOne(SplitBillParticipant, {
         where: { id: participantId, splitBillId: billId },
+        relations: ['user'],
         lock: { mode: 'pessimistic_write' },
       });
 
@@ -1360,160 +1388,218 @@ export class SplitBillService {
           `This bill requires full payment. You owe ₦${remaining}.`,
         );
       }
-
       if (bill.minPaymentAmount && dto.amount < bill.minPaymentAmount) {
         throw new BadRequestException(
           `Minimum payment is ₦${bill.minPaymentAmount}.`,
         );
       }
-
       if (dto.amount > remaining) {
         throw new BadRequestException(
           `Payment of ₦${dto.amount} exceeds remaining balance of ₦${remaining}.`,
         );
       }
 
-      // ── Get payer's wallet ────────────────────────────────────────────────
-      const wallet = await this.walletService.getWalletByUserId(payerId);
+      if (dto.paymentMethod === BillPaymentMethod.WALLET) {
+        if (!dto.transactionPin) {
+          throw new BadRequestException(
+            'Transaction PIN is required for wallet payments',
+          );
+        }
+        await this.walletService.verifyTransactionPin(
+          payerId,
+          dto.transactionPin,
+        );
 
-      // ── Create transaction record ─────────────────────────────────────────
-      const txReference = `SB-${uuidv4().replace(/-/g, '').substring(0, 20).toUpperCase()}`;
+        const wallet = await this.walletService.getWalletByUserId(payerId);
+        const txReference = `SB-${uuidv4().replace(/-/g, '').substring(0, 20).toUpperCase()}`;
 
-      const tx = await qr.manager.save(Transaction, {
-        walletId: wallet.id,
-        amount: dto.amount,
-        currency: bill.currency,
-        type: TransactionType.SPLIT_BILL_PAYMENT,
-        direction: TransactionDirection.DEBIT,
-        status: TransactionStatus.PROCESSING,
-        reference: txReference,
-        paymentGateway: 'internal',
-        description: `Split bill payment — ${bill.title}`,
-        sourceRef: {
-          entity: 'split_bill',
-          id: billId,
-          participantId: participant.id,
-        },
-        metadata: {
-          billTitle: bill.title,
-          billId,
-          participantId: participant.id,
-        },
-      });
+        const tx = await qr.manager.save(Transaction, {
+          walletId: wallet.id,
+          amount: dto.amount,
+          currency: bill.currency,
+          type: TransactionType.SPLIT_BILL_PAYMENT,
+          direction: TransactionDirection.DEBIT,
+          status: TransactionStatus.PROCESSING,
+          reference: txReference,
+          paymentGateway: 'internal',
+          description: `Split bill payment — ${bill.title}`,
+          sourceRef: {
+            entity: 'split_bill',
+            id: billId,
+            participantId: participant.id,
+          },
+          metadata: {
+            billTitle: bill.title,
+            billId,
+            participantId: participant.id,
+          },
+        });
 
-      // ── Debit wallet into escrow ──────────────────────────────────────────
-      await this.walletService.lockIntoEscrow({
-        walletId: wallet.id,
-        amount: dto.amount,
-        transactionId: tx.id,
-        entityType: 'split_bill',
-        entityId: billId,
-        description: `Escrow for split bill "${bill.title}"`,
-        qr,
-      });
+        await this.walletService.lockIntoEscrow({
+          walletId: wallet.id,
+          amount: dto.amount,
+          transactionId: tx.id,
+          entityType: 'split_bill',
+          entityId: billId,
+          description: `Escrow for split bill "${bill.title}"`,
+          qr,
+        });
 
-      // ── Update transaction to completed ───────────────────────────────────
-      await qr.manager.update(Transaction, tx.id, {
-        status: TransactionStatus.COMPLETED,
-        confirmedAt: new Date(),
-      });
+        await qr.manager.update(Transaction, tx.id, {
+          status: TransactionStatus.COMPLETED,
+          confirmedAt: new Date(),
+        });
 
-      // ── Update participant ────────────────────────────────────────────────
-      const newAmountPaid = participant.amountPaid + dto.amount;
-      const newAmountRemaining = Math.max(0, effectiveOwed - newAmountPaid);
-      const participantFullyPaid = newAmountRemaining === 0;
+        const newAmountPaid = participant.amountPaid + dto.amount;
+        const newAmountRemaining = Math.max(0, effectiveOwed - newAmountPaid);
+        const participantFullyPaid = newAmountRemaining === 0;
 
-      await qr.manager.update(SplitBillParticipant, participantId, {
-        amountPaid: newAmountPaid,
-        amountRemaining: newAmountRemaining,
-        status: participantFullyPaid
-          ? ParticipantStatus.PAID
-          : ParticipantStatus.PARTIAL,
-        walletId: wallet.id,
-        paymentMethod: 'wallet',
-        firstPaidAt: participant.firstPaidAt ?? new Date(),
-        fullyPaidAt: participantFullyPaid ? new Date() : null,
-      });
+        await qr.manager.update(SplitBillParticipant, participantId, {
+          amountPaid: newAmountPaid,
+          amountRemaining: newAmountRemaining,
+          status: participantFullyPaid
+            ? ParticipantStatus.PAID
+            : ParticipantStatus.PARTIAL,
+          walletId: wallet.id,
+          paymentMethod: 'wallet',
+          firstPaidAt: participant.firstPaidAt ?? new Date(),
+          fullyPaidAt: participantFullyPaid ? new Date() : null,
+        });
 
-      // ── Update bill totals ────────────────────────────────────────────────
-      const newTotalCollected = bill.totalCollected + dto.amount;
-      const billFullyFunded = newTotalCollected >= bill.totalAmount;
+        const newTotalCollected = bill.totalCollected + dto.amount;
+        const billFullyFunded = newTotalCollected >= bill.totalAmount;
 
-      await qr.manager.update(SplitBill, billId, {
-        totalCollected: newTotalCollected,
-        ...(participantFullyPaid && {
-          totalPaidParticipants: () => 'total_paid_participants + 1',
-        }),
-        status: billFullyFunded
-          ? SplitBillStatus.FUNDED
-          : SplitBillStatus.PARTIALLY_PAID,
-      });
+        await qr.manager.update(SplitBill, billId, {
+          totalCollected: newTotalCollected,
+          ...(participantFullyPaid && {
+            totalPaidParticipants: () => 'total_paid_participants + 1',
+          }),
+          status: billFullyFunded
+            ? SplitBillStatus.FUNDED
+            : SplitBillStatus.PARTIALLY_PAID,
+        });
 
-      // ── Activity logs ──────────────────────────────────────────────────────
-      await this.logActivity(qr, {
-        splitBillId: billId,
-        actorId: payerId,
-        actionType: ActivityActionType.PAYMENT_MADE,
-        participantId,
-        description: `Payment of ₦${dto.amount} made`,
-        amountBefore: participant.amountPaid,
-        amountAfter: newAmountPaid,
-        amountDifference: dto.amount,
-        billStatusAtTime: bill.status,
-        transactionId: tx.id,
-        metadata: { participantFullyPaid, billFullyFunded },
-      });
-
-      if (billFullyFunded) {
         await this.logActivity(qr, {
           splitBillId: billId,
-          actorId: null,
-          actionType: ActivityActionType.BILL_FUNDED,
-          description: 'Bill fully funded — all participants have paid',
-          billStatusAtTime: SplitBillStatus.FUNDED,
-          metadata: { totalCollected: newTotalCollected },
+          actorId: payerId,
+          actionType: ActivityActionType.PAYMENT_MADE,
+          participantId,
+          description: `Payment of ₦${dto.amount} made`,
+          amountBefore: participant.amountPaid,
+          amountAfter: newAmountPaid,
+          amountDifference: dto.amount,
+          billStatusAtTime: bill.status,
+          transactionId: tx.id,
+          metadata: { participantFullyPaid, billFullyFunded },
         });
+
+        if (billFullyFunded) {
+          await this.logActivity(qr, {
+            splitBillId: billId,
+            actorId: null,
+            actionType: ActivityActionType.BILL_FUNDED,
+            description: 'Bill fully funded — all participants have paid',
+            billStatusAtTime: SplitBillStatus.FUNDED,
+            metadata: { totalCollected: newTotalCollected },
+          });
+        }
+
+        await qr.commitTransaction();
+
+        this.emitPaymentReceivedEvent(
+          bill,
+          payerId,
+          dto.amount,
+          newTotalCollected,
+        );
+
+        return {
+          status: 'success',
+          participantFullyPaid,
+          billFullyFunded,
+          paymentMethod: 'wallet',
+        };
+      } else if (dto.paymentMethod === BillPaymentMethod.PAYSTACK) {
+        const txReference = `SBP-${uuidv4().replace(/-/g, '').substring(0, 16).toUpperCase()}`;
+
+        const paystackRes = await this.paymentService.initiateTransactions({
+          amount: dto.amount * 100,
+          email: participant?.user?.email as string,
+          reference: txReference,
+          metadata: {
+            type: 'USER_BILL_PAYMENT',
+            split_bill_id: billId,
+            participant_id: participantId,
+            user_id: payerId,
+          },
+        });
+
+        await qr.manager.save(Transaction, {
+          walletId: null,
+          amount: dto.amount,
+          currency: bill.currency,
+          type: TransactionType.SPLIT_BILL_PAYMENT,
+          direction: TransactionDirection.CREDIT,
+          status: TransactionStatus.PENDING,
+          reference: txReference,
+          gatewayReference: txReference,
+          paymentGateway: 'paystack',
+          description: `Split bill payment via Paystack — ${bill.title}`,
+          sourceRef: {
+            entity: 'split_bill',
+            id: billId,
+            participantId: participant.id,
+          },
+          metadata: { participantId: participant.id, userId: payerId },
+        });
+
+        await qr.commitTransaction();
+
+        return {
+          status: 'pending',
+          paymentMethod: 'paystack',
+          authorizationUrl: paystackRes.data.authorization_url,
+          reference: txReference,
+        };
       }
-
-      await qr.commitTransaction();
-
-      this.logger.log(
-        `Bill payment: ₦${dto.amount} by ${payerId} for bill ${billId} (participant ${participantId})`,
-      );
-
-      const payerUser = await this.userRepo.findOne({
-        where: { id: payerId },
-        select: ['firstName', 'lastName', 'email'],
-      });
-
-      const creatorUser = await this.userRepo.findOne({
-        where: { id: bill.creatorId },
-        select: ['phoneNumber', 'fcmToken'],
-      });
-
-      this.eventEmitter.emit('split_bill.payment_received', {
-        creatorId: bill.creatorId,
-        participantName: payerUser
-          ? `${payerUser.firstName ?? ''} ${payerUser.lastName ?? ''}`.trim() ||
-            payerUser.email
-          : 'A participant',
-        billTitle: bill.title,
-        billId: bill.id,
-        amount: dto.amount,
-        currency: bill.currency,
-        totalCollected: newTotalCollected,
-        totalAmount: bill.totalAmount,
-        phoneNumber: creatorUser?.phoneNumber,
-        pushToken: creatorUser?.fcmToken,
-      });
-
-      return { participantFullyPaid, billFullyFunded };
     } catch (err) {
       await qr.rollbackTransaction();
       throw err;
     } finally {
       await qr.release();
     }
+  }
+
+  private async emitPaymentReceivedEvent(
+    bill: SplitBill,
+    payerId: string,
+    amount: number,
+    newTotalCollected: number,
+  ) {
+    const payerUser = await this.userRepo.findOne({
+      where: { id: payerId },
+      select: ['firstName', 'lastName', 'email'],
+    });
+    const creatorUser = await this.userRepo.findOne({
+      where: { id: bill.creatorId },
+      select: ['phoneNumber', 'fcmToken'],
+    });
+
+    this.eventEmitter.emit('split_bill.payment_received', {
+      creatorId: bill.creatorId,
+      participantName: payerUser
+        ? `${payerUser.firstName ?? ''} ${payerUser.lastName ?? ''}`.trim() ||
+          payerUser.email
+        : 'A participant',
+      billTitle: bill.title,
+      billId: bill.id,
+      amount: amount,
+      currency: bill.currency,
+      totalCollected: newTotalCollected,
+      totalAmount: bill.totalAmount,
+      phoneNumber: creatorUser?.phoneNumber,
+      pushToken: creatorUser?.fcmToken,
+    });
   }
 
   async guestPayBillShare(

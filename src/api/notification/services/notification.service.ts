@@ -160,4 +160,32 @@ export class NotificationService {
       );
     }
   }
+
+  async notifyGuest(options: {
+    title: string;
+    message: string;
+    type?: string;
+    metadata?: any;
+  }) {
+    const { title, message, metadata } = options;
+
+    if (metadata?.phoneNumber) {
+      try {
+        await this.smsService.sendSMS(metadata.phoneNumber, message);
+      } catch (e) {
+        this.logger.error(
+          `SMS failed for ${metadata.phoneNumber}: ${e.message}`,
+        );
+      }
+    }
+
+    if (metadata?.phoneNumber) {
+      try {
+        const waMessage = `*${title}*\n\n${message}`;
+        await this.whatsAppService.sendMessage(metadata.phoneNumber, waMessage);
+      } catch (e) {
+        this.logger.error('WhatsApp failed', e);
+      }
+    }
+  }
 }

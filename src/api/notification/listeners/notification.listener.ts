@@ -342,16 +342,14 @@ export class NotificationListener {
     creatorName: string;
     phoneNumber?: string;
     pushToken?: string;
+    paymentLink: string;
   }) {
     await this.notificationService.notify(
       payload.userId,
       'paymentConfirmations',
       {
         title: "You've been added to a split bill",
-        message:
-          `${payload.creatorName} added you to "${payload.billTitle}". ` +
-          `Your share is ${payload.currency} ${payload.amountOwed.toLocaleString()}. ` +
-          `Accept or decline in the app.`,
+        message: `${payload.creatorName} added you to "${payload.billTitle}". Your share is ${payload.currency} ${payload.amountOwed.toLocaleString()}. Tap to view and pay: ${payload.paymentLink}`,
         type: 'split_bill',
         metadata: {
           email: payload.email,
@@ -359,9 +357,37 @@ export class NotificationListener {
           participantId: payload.participantId,
           phoneNumber: payload.phoneNumber,
           pushToken: payload.pushToken,
+          link: payload.paymentLink,
         },
       },
     );
+  }
+
+  @OnEvent('split_bill.guest_invited')
+  async handleGuestInvited(payload: {
+    guestName: string;
+    guestPhone: string;
+    billTitle: string;
+    amountOwed: number;
+    currency: string;
+    creatorName: string;
+    paymentLink: string;
+  }) {
+    this.logger.log(
+      `Handling split_bill.guest_invited event for phone: ${payload.guestPhone}`,
+    );
+
+    const message = `Hi ${payload.guestName}, ${payload.creatorName} requested ${payload.currency} ${payload.amountOwed.toLocaleString()} for "${payload.billTitle}". Tap to pay your share securely on GreyFundr: ${payload.paymentLink}`;
+
+    await this.notificationService.notifyGuest({
+      title: "You've been added to a split bill",
+      message,
+      type: 'split_bill',
+      metadata: {
+        phoneNumber: payload.guestPhone,
+        link: payload.paymentLink,
+      },
+    });
   }
 
   @OnEvent('split_bill.participant_accepted')

@@ -121,9 +121,6 @@ export class SplitBill extends AbstractEntity {
   @Column({ type: 'varchar', nullable: true, name: 'source_bill_id' })
   sourceBillId: string | null;
 
-  // @Column({ type: 'varchar', default: 'private' })
-  // visibility: 'public' | 'private' | 'semi_private';
-
   @Column({ type: 'int', default: 0, name: 'reminder_sent_count' })
   reminderSentCount: number;
 

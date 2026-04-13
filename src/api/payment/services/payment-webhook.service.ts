@@ -137,6 +137,10 @@ export class PaymentWebhookService {
         this.logger.log(`Routing webhook to guest bill payment: ${reference}`);
         await this.processGuestBillPaymentWebhook(data);
         break;
+      case 'USER_BILL_PAYMENT':
+        this.logger.log(`Routing webhook to bill payment: ${reference}`);
+        await this.processBillPaymentWebhook(data);
+        break;
 
       case 'EVENT_CONTRIBUTION':
         this.logger.log(`Routing webhook to event contribution: ${reference}`);
@@ -148,6 +152,135 @@ export class PaymentWebhookService {
         this.logger.log(`Routing webhook to wallet funding: ${reference}`);
         await this.processWalletFundingWebhook(data);
         break;
+    }
+  }
+
+  private async processBillPaymentWebhook(
+    data: PaystackChargeSuccessData,
+  ): Promise<void> {
+    const { reference, amount: amountKobo, metadata, channel } = data;
+    const billId = metadata.split_bill_id;
+    const participantId = metadata.participant_id;
+
+    if (!billId || !participantId) {
+      this.logger.error(
+        `Missing metadata for bill payment webhook: ${reference}`,
+      );
+      return;
+    }
+
+    const qr = this.dataSource.createQueryRunner();
+    await qr.connect();
+    await qr.startTransaction();
+
+    try {
+      const existingTx = await qr.manager.findOne(Transaction, {
+        where: { gatewayReference: reference },
+      });
+
+      if (existingTx && existingTx.status === TransactionStatus.COMPLETED) {
+        this.logger.warn(
+          `Webhook ignored: Payment ${reference} already processed.`,
+        );
+        await qr.rollbackTransaction();
+        return;
+      }
+
+      const participant = await qr.manager.findOne(SplitBillParticipant, {
+        where: { id: participantId, splitBillId: billId },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      const bill = await qr.manager.findOne(SplitBill, {
+        where: { id: billId },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!participant || !bill) {
+        throw new Error('Participant or Bill not found for webhook processing');
+      }
+
+      if (existingTx) {
+        await qr.manager.update(Transaction, existingTx.id, {
+          status: TransactionStatus.COMPLETED,
+          confirmedAt: new Date(data.paid_at),
+          gatewayResponse: data as Record<string, any>,
+        });
+      } else {
+        await qr.manager.save(Transaction, {
+          walletId: null,
+          amount: amountKobo / 100,
+          currency: bill.currency,
+          type: TransactionType.SPLIT_BILL_PAYMENT,
+          direction: TransactionDirection.CREDIT,
+          status: TransactionStatus.COMPLETED,
+          reference: reference,
+          gatewayReference: reference,
+          paymentGateway: 'paystack',
+          description: `Bill payment (Webhook) — ${bill.title}`,
+          sourceRef: { entity: 'split_bill', id: billId },
+          confirmedAt: new Date(data.paid_at),
+          gatewayResponse: data as Record<string, any>,
+          metadata: { participantId: participant.id, channel: channel },
+        });
+      }
+
+      const effectiveOwed =
+        participant.amountOwed + participant.balanceAdjustment;
+      const newAmountPaid = participant.amountPaid + amountKobo / 100;
+      const newAmountRemaining = Math.max(0, effectiveOwed - newAmountPaid);
+      const participantFullyPaid = newAmountRemaining === 0;
+
+      await qr.manager.update(SplitBillParticipant, participantId, {
+        amountPaid: newAmountPaid,
+        amountRemaining: newAmountRemaining,
+        status: participantFullyPaid
+          ? ParticipantStatus.PAID
+          : ParticipantStatus.PARTIAL,
+        paymentMethod: channel === 'card' ? 'card' : 'bank_transfer',
+        firstPaidAt: participant.firstPaidAt ?? new Date(),
+        fullyPaidAt: participantFullyPaid ? new Date() : null,
+      });
+
+      const newTotalCollected = bill.totalCollected + amountKobo / 100;
+      const billFullyFunded = newTotalCollected >= bill.totalAmount;
+
+      await qr.manager.update(SplitBill, billId, {
+        totalCollected: newTotalCollected,
+        ...(participantFullyPaid && {
+          totalPaidParticipants: () => 'total_paid_participants + 1',
+        }),
+        status: billFullyFunded
+          ? SplitBillStatus.FUNDED
+          : SplitBillStatus.PARTIALLY_PAID,
+      });
+
+      await qr.commitTransaction();
+
+      this.eventEmitter.emit('split_bill.payment_received', {
+        creatorId: bill.creatorId,
+        participantName:
+          participant.guestName || metadata.user_id || 'A participant',
+        billTitle: bill.title,
+        billId: bill.id,
+        amount: amountKobo / 100,
+        currency: bill.currency,
+        totalCollected: newTotalCollected,
+        totalAmount: bill.totalAmount,
+      });
+
+      this.logger.log(
+        `Bill payment webhook processed successfully for ref: ${reference}`,
+      );
+    } catch (err) {
+      await qr.rollbackTransaction();
+      this.logger.error(
+        `Failed to process bill payment webhook: ${err.message}`,
+        err.stack,
+      );
+      throw err;
+    } finally {
+      await qr.release();
     }
   }
 

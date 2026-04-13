@@ -18,6 +18,7 @@ import {
   ArrayMinSize,
   IsNumber,
   IsNotEmpty,
+  ValidateIf,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import {
@@ -78,13 +79,12 @@ export abstract class BaseParticipantDto {
   @IsIn(['USER', 'GUEST'])
   type: 'USER' | 'GUEST';
 
+  @IsNumber()
   @IsOptional()
-  @IsInt()
-  @Min(1)
   amount?: number;
 
   @IsOptional()
-  @IsInt()
+  @IsNumber()
   @Min(1)
   @Max(100)
   percentage?: number;
@@ -98,7 +98,6 @@ export class UserParticipantDto extends BaseParticipantDto {
 export class GuestParticipantDto extends BaseParticipantDto {
   @IsString()
   @MinLength(2)
-  @MaxLength(100)
   name: string;
 
   @Matches(/^\+?[0-9]{10,15}$/)
@@ -129,8 +128,8 @@ export class CreateSplitBillDto {
   @MaxLength(2000)
   description?: string;
 
-  @IsInt()
-  @Min(100)
+  @IsNumber()
+  @Min(0)
   amount: number;
 
   @IsOptional()
@@ -171,8 +170,8 @@ export class CreateSplitBillDto {
   allowPartialPayment?: boolean;
 
   @IsOptional()
-  @IsInt()
-  @Min(100)
+  @IsNumber()
+  @Min(0)
   minPaymentAmount?: number;
 
   @IsOptional()
@@ -322,21 +321,22 @@ export class RemoveParticipantDto {
   redistribution?: RedistributionItemDto[];
 }
 
-// ─── Pay Bill Share ───────────────────────────────────────────────────────────
+export enum BillPaymentMethod {
+  WALLET = 'wallet',
+  PAYSTACK = 'paystack',
+}
 
 export class PayBillShareDto {
-  /**
-   * Amount to pay in Naira. Must not exceed amountRemaining on the participant.
-   * If allowPartialPayment=false, must equal the full amountRemaining.
-   */
   @IsNumber()
   @Min(0.01)
   amount: number;
 
+  @IsEnum(BillPaymentMethod)
+  paymentMethod: BillPaymentMethod;
+
+  @ValidateIf((o) => o.paymentMethod === BillPaymentMethod.WALLET)
   @IsString()
-  // @IsNotEmpty()
-  @IsOptional()
-  transactionPin: string;
+  transactionPin?: string;
 }
 
 export class GuestPayBillShareDto {
