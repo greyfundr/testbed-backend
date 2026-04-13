@@ -187,28 +187,28 @@ export class CreateSplitBillDto {
   recipientUserId?: string;
 }
 
-// ─── Update Bill ──────────────────────────────────────────────────────────────
-
 export class UpdateParticipantDto {
+  @IsOptional()
+  @IsEnum(['USER', 'GUEST'])
+  type?: 'USER' | 'GUEST';
+
   @IsOptional()
   @IsUUID()
   userId?: string;
 
   @IsOptional()
   @IsString()
-  guestName?: string;
+  name?: string;
 
   @IsOptional()
   @IsString()
-  guestPhone?: string;
+  phone?: string;
 
-  // Required when splitMethod is MANUAL — the exact amount this participant owes
   @IsOptional()
-  @IsInt()
+  @IsNumber()
   @Min(0)
-  amountOwed?: number;
+  amount?: number;
 
-  // Required when splitMethod is PERCENTAGE
   @IsOptional()
   @IsNumber()
   @Min(0)
@@ -227,8 +227,8 @@ export class UpdateSplitBillDto {
   description?: string;
 
   @IsOptional()
-  @IsInt()
-  @Min(100)
+  @IsNumber()
+  @Min(0)
   amount?: number;
 
   @IsOptional()
@@ -252,6 +252,11 @@ export class UpdateSplitBillDto {
   allowPartialPayment?: boolean;
 
   @IsOptional()
+  @IsNumber()
+  @Min(0)
+  minPaymentAmount?: number;
+
+  @IsOptional()
   @IsUUID()
   recipientUserId?: string;
 
@@ -261,8 +266,6 @@ export class UpdateSplitBillDto {
   @Type(() => UpdateParticipantDto)
   participants?: UpdateParticipantDto[];
 }
-
-// ─── Add Participant ──────────────────────────────────────────────────────────
 
 export class AddParticipantDto {
   @IsIn(['USER', 'GUEST'])

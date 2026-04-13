@@ -395,19 +395,13 @@ export class SplitBillService {
       const paidParticipants = bill.participants.filter(
         (p) => p.amountPaid > 0,
       );
-      const paidUserIds = new Set(
-        paidParticipants.map((p) => p.userId).filter(Boolean),
-      );
-      const paidGuestPhones = new Set(
-        paidParticipants.map((p) => p.guestPhone).filter(Boolean),
-      );
 
       if (participantsChanging) {
         const incomingUserIds = new Set(
           dto.participants!.map((p) => p.userId).filter(Boolean),
         );
         const incomingPhones = new Set(
-          dto.participants!.map((p) => p.guestPhone).filter(Boolean),
+          dto.participants!.map((p) => p.phone).filter(Boolean),
         );
 
         for (const p of paidParticipants) {
@@ -417,8 +411,7 @@ export class SplitBillService {
 
           if (!stillPresent) {
             throw new BadRequestException(
-              `Cannot remove participant ${p.userId ?? p.guestPhone} — ` +
-                `they have already made a payment of ₦${p.amountPaid}.`,
+              `Cannot remove participant ${p.userId ?? p.guestPhone} — they have already made a payment of ₦${p.amountPaid}.`,
             );
           }
         }
@@ -428,7 +421,7 @@ export class SplitBillService {
         const isManualReassignment =
           effectiveMethod === SplitMethod.MANUAL &&
           participantsChanging &&
-          dto.participants!.every((p) => p.amountOwed !== undefined);
+          dto.participants!.every((p) => p.amount !== undefined);
 
         if (!isManualReassignment) {
           throw new BadRequestException(
@@ -451,10 +444,14 @@ export class SplitBillService {
         updateData.billReceipt = dto.billReceipt;
       if (dto.allowPartialPayment !== undefined)
         updateData.allowPartialPayment = dto.allowPartialPayment;
+      if (dto.minPaymentAmount !== undefined)
+        updateData.minPaymentAmount = dto.minPaymentAmount;
       if (dto.recipientUserId !== undefined)
         updateData.recipientUserId = dto.recipientUserId;
 
-      await qr.manager.update(SplitBill, billId, updateData);
+      if (Object.keys(updateData).length > 0) {
+        await qr.manager.update(SplitBill, billId, updateData);
+      }
 
       if (participantsChanging) {
         const currentParticipants = await qr.manager.find(
@@ -466,7 +463,7 @@ export class SplitBillService {
 
         const incomingKeys = new Set(
           dto.participants!.map((p) =>
-            p.userId ? `user:${p.userId}` : `guest:${p.guestPhone}`,
+            p.userId ? `user:${p.userId}` : `guest:${p.phone}`,
           ),
         );
 
@@ -480,12 +477,12 @@ export class SplitBillService {
         }
 
         const mappedParticipants = dto.participants!.map((p) => ({
-          type: p.userId ? 'USER' : 'GUEST',
+          type: p.type ?? (p.userId ? 'USER' : 'GUEST'),
           userId: p.userId,
-          name: p.guestName,
-          phone: p.guestPhone,
+          name: p.name,
+          phone: p.phone,
           percentage: p.percentage,
-          amount: p.amountOwed,
+          amount: p.amount,
         }));
 
         const validatedParticipants = await this.validateParticipants(
@@ -495,26 +492,22 @@ export class SplitBillService {
 
         if (effectiveMethod === SplitMethod.MANUAL) {
           const totalAssigned = dto.participants!.reduce(
-            (sum, p) => sum + (p.amountOwed ?? 0),
+            (sum, p) => sum + (p.amount ?? 0),
             0,
           );
 
           if (totalAssigned !== effectiveAmount) {
             throw new BadRequestException(
-              `Manual split amounts must sum to the total bill amount. ` +
-                `Got ₦${totalAssigned}, expected ₦${effectiveAmount}.`,
+              `Manual split amounts must sum to the total bill amount. Got ₦${totalAssigned}, expected ₦${effectiveAmount}.`,
             );
           }
 
           for (const p of dto.participants!) {
-            const key = p.userId ? `user:${p.userId}` : `guest:${p.guestPhone}`;
             const existing = currentParticipants.find((cp) =>
-              p.userId
-                ? cp.userId === p.userId
-                : cp.guestPhone === p.guestPhone,
+              p.userId ? cp.userId === p.userId : cp.guestPhone === p.phone,
             );
 
-            const amountOwed = p.amountOwed!;
+            const amountOwed = p.amount!;
             const alreadyPaid = existing?.amountPaid ?? 0;
             const amountDue = Math.max(0, amountOwed - alreadyPaid);
 
@@ -524,11 +517,11 @@ export class SplitBillService {
                 ...(existing ?? {}),
                 splitBillId: billId,
                 userId: p.userId ?? null,
-                guestName: p.guestName ?? null,
-                guestPhone: p.guestPhone ?? null,
+                guestName: p.name ?? null,
+                guestPhone: p.phone ?? null,
                 percentage: null,
                 amountOwed,
-                amountPaid: existing?.amountPaid ?? 0,
+                amountPaid: alreadyPaid,
                 amountRemaining: amountDue,
               },
               p.userId
@@ -548,8 +541,7 @@ export class SplitBillService {
       } else if (amountChanging || methodChanging) {
         if (effectiveMethod === SplitMethod.MANUAL) {
           throw new BadRequestException(
-            'Cannot auto-recalculate a MANUAL split when changing amount or method. ' +
-              'Provide an explicit participants list with amountOwed for each.',
+            'Cannot auto-recalculate a MANUAL split when changing amount or method. Provide an explicit participants list with amounts.',
           );
         }
 
@@ -560,18 +552,17 @@ export class SplitBillService {
           },
         );
 
-        const participantInputs: ValidatedParticipant[] =
-          currentParticipants.map((p) => ({
-            type: p.userId ? 'USER' : 'GUEST',
-            userId: p.userId ?? undefined,
-            guestName: p.guestName ?? undefined,
-            guestPhone: p.guestPhone ?? undefined,
-            percentage: p.percentage ?? undefined,
-          }));
+        const participantInputs = currentParticipants.map((p) => ({
+          type: p.userId ? 'USER' : 'GUEST',
+          userId: p.userId ?? undefined,
+          guestName: p.guestName ?? undefined,
+          guestPhone: p.guestPhone ?? undefined,
+          percentage: p.percentage ?? undefined,
+        }));
 
         await this.computeAndSaveShares(
           billId,
-          participantInputs,
+          participantInputs as any,
           effectiveMethod,
           qr,
           effectiveAmount,
