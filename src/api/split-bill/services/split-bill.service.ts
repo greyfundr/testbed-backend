@@ -763,6 +763,8 @@ export class SplitBillService {
             }
           : null,
         myRole: isCreator ? 'creator' : 'participant',
+        allowPartialPayment: bill.allowPartialPayment,
+        minPaymentAmount: bill.minPaymentAmount,
         myShare:
           !isCreator && myParticipant
             ? {
