@@ -475,14 +475,13 @@ export class SplitBillService {
         if (toRemove.length) {
           await qr.manager.remove(SplitBillParticipant, toRemove);
         }
-
         const mappedParticipants = dto.participants!.map((p) => ({
           type: p.type ?? (p.userId ? 'USER' : 'GUEST'),
           userId: p.userId,
-          name: p.name,
-          phone: p.phone,
+          guestName: p.name,
+          guestPhone: p.phone,
           percentage: p.percentage,
-          amount: p.amount,
+          amountOwed: p.amount,
         }));
 
         const validatedParticipants = await this.validateParticipants(
