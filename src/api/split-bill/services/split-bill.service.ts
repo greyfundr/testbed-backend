@@ -473,8 +473,12 @@ export class SplitBillService {
         });
 
         if (toRemove.length) {
-          await qr.manager.remove(SplitBillParticipant, toRemove);
+          await qr.manager.softDelete(
+            SplitBillParticipant,
+            toRemove.map((p) => p.id),
+          );
         }
+
         const mappedParticipants = dto.participants!.map((p) => ({
           type: p.type ?? (p.userId ? 'USER' : 'GUEST'),
           userId: p.userId,
@@ -489,21 +493,15 @@ export class SplitBillService {
           effectiveMethod,
         );
 
-        console.log(
-          'validated users',
-          validatedParticipants?.length,
-          validatedParticipants,
-        );
-
         if (effectiveMethod === SplitMethod.MANUAL) {
           const totalAssigned = dto.participants!.reduce(
             (sum, p) => sum + (p.amount ?? 0),
             0,
           );
 
-          if (totalAssigned !== effectiveAmount) {
+          if (Math.abs(totalAssigned - effectiveAmount) > 0.001) {
             throw new BadRequestException(
-              `Manual split amounts must sum to the total bill amount. Got ₦${totalAssigned}, expected ₦${effectiveAmount}.`,
+              `Manual split amounts must sum to ₦${effectiveAmount}. Got ₦${totalAssigned}.`,
             );
           }
 
@@ -525,9 +523,17 @@ export class SplitBillService {
                 guestName: p.name ?? null,
                 guestPhone: p.phone ?? null,
                 percentage: null,
+                role: existing?.role ?? ParticipantRole.PARTICIPANT,
+                status: existing?.status ?? ParticipantStatus.INVITED,
                 amountOwed,
                 amountPaid: alreadyPaid,
                 amountRemaining: amountDue,
+                balanceAdjustment: existing?.balanceAdjustment ?? 0,
+                inviteCode: existing?.inviteCode ?? this.generateInviteCode(),
+                inviteExpiresAt:
+                  existing?.inviteExpiresAt ??
+                  new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+                invitedAt: existing?.invitedAt ?? new Date(),
               },
               p.userId
                 ? ['splitBillId', 'userId']
@@ -535,6 +541,54 @@ export class SplitBillService {
             );
           }
         } else {
+          for (const p of validatedParticipants) {
+            const existingRow = currentParticipants.find((cp) =>
+              p.userId
+                ? cp.userId === p.userId
+                : cp.guestPhone === p.guestPhone,
+            );
+
+            if (!existingRow) {
+              await qr.manager.save(
+                qr.manager.create(SplitBillParticipant, {
+                  splitBillId: billId,
+                  userId: p.userId ?? null,
+                  guestName: p.guestName ?? null,
+                  guestPhone: p.guestPhone ?? null,
+                  guestEmail: p.guestEmail ?? null,
+                  role: ParticipantRole.PARTICIPANT,
+                  status: p.userId
+                    ? ParticipantStatus.INVITED
+                    : ParticipantStatus.INVITED,
+                  amountOwed: 0,
+                  amountPaid: 0,
+                  amountRemaining: 0,
+                  balanceAdjustment: 0,
+                  percentage: p.percentage ?? null,
+                  inviteCode: this.generateInviteCode(),
+                  inviteExpiresAt: new Date(
+                    Date.now() + 7 * 24 * 60 * 60 * 1000,
+                  ),
+                  invitedAt: new Date(),
+                  paymentMethod: null,
+                  walletId: null,
+                }),
+              );
+            } else if (
+              p.percentage !== undefined &&
+              effectiveMethod === SplitMethod.PERCENTAGE
+            ) {
+              await qr.manager.update(SplitBillParticipant, existingRow.id, {
+                percentage: p.percentage,
+              });
+            }
+          }
+
+          const newCount = validatedParticipants.length;
+          await qr.manager.update(SplitBill, billId, {
+            totalParticipants: newCount,
+          });
+
           await this.computeAndSaveShares(
             billId,
             validatedParticipants,
@@ -542,6 +596,53 @@ export class SplitBillService {
             qr,
             effectiveAmount,
           );
+
+          const updatedParticipants = await qr.manager.find(
+            SplitBillParticipant,
+            {
+              where: { splitBillId: billId },
+            },
+          );
+
+          const newUserIds = validatedParticipants
+            .filter(
+              (p) =>
+                p.userId &&
+                !currentParticipants.some((cp) => cp.userId === p.userId),
+            )
+            .map((p) => p.userId!);
+
+          if (newUserIds.length > 0) {
+            const newUserDetails = await this.userRepo.findAll({
+              where: { id: In(newUserIds) },
+              select: ['id', 'email', 'firstName', 'lastName'],
+            });
+
+            const creator = await this.userRepo.findOne({
+              where: { id: actorId },
+              select: ['firstName', 'lastName', 'email'],
+            });
+            const creatorName = creator
+              ? `${creator.firstName ?? ''} ${creator.lastName ?? ''}`.trim() ||
+                creator.email
+              : 'Someone';
+
+            for (const u of newUserDetails) {
+              const pRow = updatedParticipants.find((p) => p.userId === u.id);
+              if (!pRow) continue;
+
+              this.eventEmitter.emit('split_bill.participant_added', {
+                userId: u.id,
+                email: u.email,
+                billTitle: bill.title,
+                billId: bill.id,
+                participantId: pRow.id,
+                amountOwed: pRow.amountOwed,
+                currency: bill.currency,
+                creatorName,
+              });
+            }
+          }
         }
       } else if (amountChanging || methodChanging) {
         if (effectiveMethod === SplitMethod.MANUAL) {
