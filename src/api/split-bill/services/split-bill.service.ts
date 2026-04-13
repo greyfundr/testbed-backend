@@ -154,7 +154,7 @@ export class SplitBillService {
         });
       });
 
-      const savedParticipants = await qr.manager.save(participantRows);
+      await qr.manager.save(participantRows);
 
       await this.computeAndSaveShares(bill.id, validated, dto.splitMethod, qr);
 
@@ -478,15 +478,21 @@ export class SplitBillService {
         const mappedParticipants = dto.participants!.map((p) => ({
           type: p.type ?? (p.userId ? 'USER' : 'GUEST'),
           userId: p.userId,
-          guestName: p.name,
-          guestPhone: p.phone,
+          name: p.name,
+          phone: p.phone,
           percentage: p.percentage,
-          amountOwed: p.amount,
+          amount: p.amount,
         }));
 
         const validatedParticipants = await this.validateParticipants(
           mappedParticipants,
           effectiveMethod,
+        );
+
+        console.log(
+          'validated users',
+          validatedParticipants?.length,
+          validatedParticipants,
         );
 
         if (effectiveMethod === SplitMethod.MANUAL) {
@@ -585,6 +591,7 @@ export class SplitBillService {
       await qr.commitTransaction();
       return this.getBillById(billId, actorId);
     } catch (err) {
+      console.log('error', err);
       await qr.rollbackTransaction();
       throw err;
     } finally {
@@ -2497,6 +2504,8 @@ export class SplitBillService {
         );
       }
     }
+
+    console.log('users to validate', userIdsToValidate);
 
     return result;
   }
