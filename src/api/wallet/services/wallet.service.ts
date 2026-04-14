@@ -4,7 +4,6 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { DataSource, QueryRunner, Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
@@ -1259,7 +1258,7 @@ export class WalletService {
     );
     if (!isCurrentValid) {
       await this.incrementPinFailedAttempts(wallet);
-      throw new UnauthorizedException('Current PIN is incorrect');
+      throw new BadRequestException('Current PIN is incorrect');
     }
 
     if (dto.newPin !== dto.confirmPin) {
@@ -1309,7 +1308,7 @@ export class WalletService {
       const attempts = (wallet.transactionPinFailedAttempts || 0) + 1;
       const remaining = this.MAX_PIN_ATTEMPTS - attempts;
 
-      throw new UnauthorizedException(
+      throw new BadRequestException(
         remaining > 0
           ? `Incorrect PIN. ${remaining} attempt(s) remaining.`
           : `Incorrect PIN. Your PIN is locked for ${this.PIN_LOCK_MINUTES} minutes.`,
@@ -1353,7 +1352,7 @@ export class WalletService {
       const minutesLeft = Math.ceil(
         (wallet.transactionPinLockedUntil.getTime() - Date.now()) / 60000,
       );
-      throw new UnauthorizedException(
+      throw new BadRequestException(
         `Transaction PIN is locked. Try again in ${minutesLeft} minute(s).`,
       );
     }
