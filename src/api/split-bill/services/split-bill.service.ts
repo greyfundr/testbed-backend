@@ -1488,11 +1488,22 @@ export class SplitBillService {
           `This bill requires full payment. You owe ₦${remaining}.`,
         );
       }
-      if (bill.minPaymentAmount && dto.amount < bill.minPaymentAmount) {
-        throw new BadRequestException(
-          `Minimum payment is ₦${bill.minPaymentAmount}.`,
-        );
+
+      const isFirstPayment = (participant.amountPaid || 0) === 0;
+      if (
+        bill.minPaymentAmount &&
+        isFirstPayment &&
+        dto.amount < bill.minPaymentAmount
+      ) {
+        const requiredMin = Math.min(bill.minPaymentAmount, remaining);
+
+        if (dto.amount < requiredMin) {
+          throw new BadRequestException(
+            `The initial payment for this bill must be at least ₦${requiredMin}.`,
+          );
+        }
       }
+
       if (dto.amount > remaining) {
         throw new BadRequestException(
           `Payment of ₦${dto.amount} exceeds remaining balance of ₦${remaining}.`,
