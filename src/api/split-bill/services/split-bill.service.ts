@@ -53,6 +53,7 @@ import { PaymentService } from '../../payment/services';
 import { Settings } from 'src/api/settings/entities';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DynamicLinkService } from 'src/api/dynamic-link/services/dynamic-link.service';
+import { User, USER_SAFE_FIELDS } from 'src/api/user/entities';
 
 @Injectable()
 export class SplitBillService {
@@ -257,21 +258,36 @@ export class SplitBillService {
   ): Promise<SplitBill> {
     const bill = await this.billRepo.findOne({
       where: { id: billId },
-      relations: ['participants', 'participants.user'],
+      relations: [
+        'participants',
+        'participants.user',
+        'participants.user.profile',
+        'creator',
+        'creator.profile',
+      ],
     });
 
-    if (!bill) {
-      throw new NotFoundException('Bill not found');
+    if (!bill) throw new NotFoundException('Bill not found');
+
+    const sanitizeUser = (user: User | null) => {
+      if (!user) return null;
+      const safeUser = {};
+      USER_SAFE_FIELDS.forEach((field) => {
+        safeUser[field] = user[field];
+      });
+      safeUser['profile'] = user.profile;
+      return safeUser as User;
+    };
+
+    if (bill.creator) {
+      bill.creator = sanitizeUser(bill.creator) as User;
     }
 
-    if (requestingUserId) {
-      const hasAccess =
-        bill.creatorId === requestingUserId ||
-        bill.participants.some((p) => p.userId === requestingUserId);
-
-      // if (!hasAccess && bill.visibility === 'private') {
-      //   throw new ForbiddenException('You do not have access to this bill');
-      // }
+    if (bill.participants) {
+      bill.participants = bill.participants.map((p) => ({
+        ...p,
+        user: sanitizeUser(p.user),
+      })) as SplitBillParticipant[];
     }
 
     return bill;
