@@ -275,7 +275,7 @@ export class SplitBillService {
       USER_SAFE_FIELDS.forEach((field) => {
         safeUser[field] = user[field];
       });
-      safeUser['profile'] = user.profile;
+      safeUser['image'] = user.profile?.image;
       return safeUser as User;
     };
 
@@ -2190,7 +2190,7 @@ export class SplitBillService {
   ): Promise<{ count: number }> {
     const bill = await this.billRepo.findOne({
       where: { id: billId },
-      relations: ['participants'],
+      relations: ['participants', 'participants.user'],
     });
 
     if (!bill) throw new NotFoundException('Bill not found');
@@ -2209,8 +2209,17 @@ export class SplitBillService {
       (p) => p.status !== ParticipantStatus.PAID,
     );
 
-    // TODO: plug into NotificationService here
-    // await this.notificationService.sendBillReminders(bill, unpaidParticipants);
+    if (unpaidParticipants.length === 0) {
+      return { count: 0 };
+    }
+
+    const creator = await this.userRepo.findOne({
+      where: { id: actorId },
+      select: ['firstName', 'lastName'],
+    });
+    const creatorName =
+      `${creator?.firstName ?? ''} ${creator?.lastName ?? ''}`.trim() ||
+      'Someone';
 
     await this.billRepo.update(billId, {
       reminderSentCount: () => 'reminder_sent_count + 1',
@@ -2222,6 +2231,41 @@ export class SplitBillService {
         reminderCount: () => 'reminder_count + 1',
         lastRemindedAt: new Date(),
       });
+
+      if (p.userId && p.user) {
+        const { shortUrl } = await this.dynamicLinkService.forSplitBill(
+          bill.id,
+          bill.title,
+        );
+
+        this.eventEmitter.emit('split_bill.reminder.user', {
+          userId: p.userId,
+          email: p.user.email,
+          phoneNumber: p.user.phoneNumber,
+          pushToken: p.user.fcmToken,
+          billTitle: bill.title,
+          amountRemaining: p.amountRemaining,
+          currency: bill.currency || 'NGN',
+          creatorName,
+          paymentLink: shortUrl,
+        });
+      } else if (p.guestPhone) {
+        const { shortUrl } = await this.dynamicLinkService.forSplitBillInvite(
+          bill.id,
+          p.inviteCode as string,
+          bill.title,
+        );
+
+        this.eventEmitter.emit('split_bill.reminder.guest', {
+          guestName: p.guestName || 'Friend',
+          guestPhone: p.guestPhone,
+          billTitle: bill.title,
+          amountRemaining: p.amountRemaining,
+          currency: bill.currency || 'NGN',
+          creatorName,
+          paymentLink: shortUrl,
+        });
+      }
     }
 
     await this.activityRepo.save({

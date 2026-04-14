@@ -473,6 +473,64 @@ export class NotificationListener {
     );
   }
 
+  @OnEvent('split_bill.reminder.user')
+  async handleSplitBillReminderUser(payload: {
+    userId: string;
+    email: string;
+    phoneNumber?: string;
+    pushToken?: string;
+    billTitle: string;
+    amountRemaining: number;
+    currency: string;
+    creatorName: string;
+    paymentLink: string;
+  }) {
+    this.logger.log(`Handling split_bill.reminder.user for ${payload.userId}`);
+
+    await this.notificationService.notify(
+      payload.userId,
+      'paymentConfirmations',
+      {
+        title: 'Split Bill Reminder',
+        message: `Friendly reminder from ${payload.creatorName}: You have a pending balance of ${payload.currency} ${payload.amountRemaining.toLocaleString()} for "${payload.billTitle}". Tap to settle your share securely: ${payload.paymentLink}`,
+        type: 'split_bill',
+        metadata: {
+          email: payload.email,
+          phoneNumber: payload.phoneNumber,
+          pushToken: payload.pushToken,
+          link: payload.paymentLink,
+        },
+      },
+    );
+  }
+
+  @OnEvent('split_bill.reminder.guest')
+  async handleSplitBillReminderGuest(payload: {
+    guestName: string;
+    guestPhone: string;
+    billTitle: string;
+    amountRemaining: number;
+    currency: string;
+    creatorName: string;
+    paymentLink: string;
+  }) {
+    this.logger.log(
+      `Handling split_bill.reminder.guest for phone: ${payload.guestPhone}`,
+    );
+
+    const message = `Hi ${payload.guestName}, friendly reminder from ${payload.creatorName}: You have a pending balance of ${payload.currency} ${payload.amountRemaining.toLocaleString()} for "${payload.billTitle}". Tap to pay securely on GreyFundr: ${payload.paymentLink}`;
+
+    await this.notificationService.notifyGuest({
+      title: 'Split Bill Reminder',
+      message,
+      type: 'split_bill',
+      metadata: {
+        phoneNumber: payload.guestPhone,
+        link: payload.paymentLink,
+      },
+    });
+  }
+
   @OnEvent('wallet.funded')
   async handleWalletFunded(payload: {
     userId: string;
