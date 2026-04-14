@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import {
   ClassSerializerInterceptor,
   Logger,
+  RequestMethod,
   ValidationPipe,
   VersioningType,
 } from '@nestjs/common';
@@ -32,9 +33,12 @@ async function bootstrap() {
     // Global prefix should be set before versioning and CORS
     app.setGlobalPrefix('api', {
       exclude: [
-        'l/:shortCode',
-        '.well-known/apple-app-site-association',
-        '.well-known/assetlinks.json',
+        { path: 'l/:shortCode', method: RequestMethod.GET },
+        {
+          path: '.well-known/apple-app-site-association',
+          method: RequestMethod.GET,
+        },
+        { path: '.well-known/assetlinks.json', method: RequestMethod.GET },
       ],
     });
 

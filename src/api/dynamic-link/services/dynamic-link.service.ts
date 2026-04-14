@@ -5,7 +5,7 @@ import {
   NotFoundException,
   OnModuleInit,
 } from '@nestjs/common';
-import { nanoid } from 'nanoid';
+import { customAlphabet } from 'nanoid';
 import { DynamicLink, DynamicLinkType, DynamicLinkProject } from '../entities';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -30,6 +30,11 @@ export interface GeneratedLink {
   shortUrl: string;
   shortCode: string;
 }
+
+const generateShortCode = customAlphabet(
+  'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789',
+  10,
+);
 
 @Injectable()
 export class DynamicLinkService implements OnModuleInit {
@@ -163,7 +168,7 @@ export class DynamicLinkService implements OnModuleInit {
         };
       }
 
-      const shortCode = nanoid(10);
+      const shortCode = generateShortCode();
 
       const link = await this.linkRepo.save(
         await this.linkRepo.create({
@@ -239,12 +244,12 @@ export class DynamicLinkService implements OnModuleInit {
   ): Promise<GeneratedLink> {
     return this.generate({
       type: 'invite',
-      resourceId: billId,
-      metadata: { inviteCode },
+      resourceId: inviteCode,
+      metadata: { billId, inviteCode },
       ogTitle: billTitle
         ? `Pay your share: ${billTitle}`
         : 'Your share is waiting',
-      ogDescription: 'Open GreyFundr to complete your payment.',
+      ogDescription: 'Open GreyFundr to view and pay your share.',
     });
   }
 
@@ -263,8 +268,16 @@ export class DynamicLinkService implements OnModuleInit {
     return { link, project: link.project };
   }
 
+  async incrementClicks(linkId: string): Promise<void> {
+    const link = await this.linkRepo.findOne({ where: { id: linkId } });
+    if (link) {
+      link.clicks = (link.clicks || 0) + 1;
+      await this.linkRepo.save(link);
+    }
+  }
+
   private buildShortUrl(shortCode: string): string {
-    const baseUrl = this.config.getOrThrow<string>('API_BASE_URL');
+    const baseUrl = this.config.getOrThrow<string>('APP_BASE_URL');
     return `${baseUrl}/l/${shortCode}`;
   }
 }

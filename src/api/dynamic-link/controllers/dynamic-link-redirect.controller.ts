@@ -10,12 +10,14 @@ import { Response } from 'express';
 import { DynamicLinkService } from '../services/dynamic-link.service';
 import { DynamicLinkProjectRepository } from '../repository';
 import { DynamicLink, DynamicLinkProject } from '../entities';
+import { ConfigService } from '@nestjs/config';
 
-@Controller({ version: VERSION_NEUTRAL })
+@Controller({ path: '', version: VERSION_NEUTRAL })
 export class DynamicLinkRedirectController {
   constructor(
     private readonly dynamicLinkService: DynamicLinkService,
     private readonly projectRepo: DynamicLinkProjectRepository,
+    private readonly config: ConfigService,
   ) {}
 
   @Get('l/:shortCode')
@@ -23,22 +25,39 @@ export class DynamicLinkRedirectController {
     @Param('shortCode') shortCode: string,
     @Res() res: Response,
   ): Promise<void> {
+    if (!/^[A-Za-z0-9]{8,12}$/.test(shortCode)) {
+      res.status(HttpStatus.NOT_FOUND).type('html').send(`
+        <!DOCTYPE html>
+        <html>
+        <head><title>Invalid Link</title></head>
+        <body style="font-family:sans-serif;text-align:center;padding:60px">
+          <h2>This link is invalid or has expired.</h2>
+          <p><a href="https://greyfundr.com">Visit GreyFundr</a></p>
+        </body>
+        </html>
+      `);
+      return;
+    }
+
     try {
       const { link, project } =
         await this.dynamicLinkService.resolveAndTrack(shortCode);
+
+      this.dynamicLinkService.incrementClicks(link.id).catch(() => null);
+
       const html = this.buildRedirectHtml(link, project);
       res.status(HttpStatus.OK).type('html').send(html);
     } catch {
       res.status(HttpStatus.NOT_FOUND).type('html').send(`
-          <!DOCTYPE html>
-          <html>
-          <head><title>Link Not Found</title></head>
-          <body style="font-family:sans-serif;text-align:center;padding:60px">
-            <h2>This link has expired or does not exist.</h2>
-            <p><a href="https://greyfundr.com">Visit GreyFundr</a></p>
-          </body>
-          </html>
-        `);
+        <!DOCTYPE html>
+        <html>
+        <head><title>Link Not Found</title></head>
+        <body style="font-family:sans-serif;text-align:center;padding:60px">
+          <h2>This link has expired or does not exist.</h2>
+          <p><a href="https://greyfundr.com">Visit GreyFundr</a></p>
+        </body>
+        </html>
+      `);
     }
   }
 
@@ -105,74 +124,40 @@ export class DynamicLinkRedirectController {
     );
     const ogImage = link.customOgImage ?? '';
 
+    const isInvite = link.type === 'invite';
+    const inviteCode = link.metadata?.inviteCode ?? '';
+    const billId = link.metadata?.billId ?? link.resourceId;
+
+    const guestWebUrl = isInvite
+      ? `${this.config.get('WEB_BASE_URL')}/pay/split-bill/${billId}?inviteCode=${inviteCode}`
+      : null;
+
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>${ogTitle}</title>
-
-  <!-- Open Graph for rich previews in WhatsApp, iMessage, etc. -->
   <meta property="og:title"       content="${ogTitle}"/>
   <meta property="og:description" content="${ogDescription}"/>
   ${ogImage ? `<meta property="og:image" content="${ogImage}"/>` : ''}
-  <meta property="og:type"        content="website"/>
-
-  <!-- iOS Universal Links & Smart App Banner -->
-  <meta name="apple-itunes-app" content="app-id=${project.ios?.bundleId ?? ''}"/>
-
+  <meta property="og:type" content="website"/>
+  <meta name="apple-itunes-app"   content="app-id=${project.ios?.bundleId ?? ''}"/>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #f7f7fb;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-    }
-    .card {
-      background: #fff;
-      border-radius: 20px;
-      padding: 40px 32px;
-      text-align: center;
-      max-width: 380px;
-      width: 90%;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
-    }
-    .logo { font-size: 28px; font-weight: 800; color: #6C63FF; margin-bottom: 8px; }
-    h2 { font-size: 20px; color: #1a1a2e; margin-bottom: 8px; }
-    p  { font-size: 14px; color: #666; margin-bottom: 24px; }
-    .loader {
-      border: 3px solid #f0f0f0;
-      border-top: 3px solid #6C63FF;
-      border-radius: 50%;
-      width: 36px; height: 36px;
-      animation: spin 0.8s linear infinite;
-      margin: 0 auto 24px;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .store-btns { display: none; flex-direction: column; gap: 12px; }
-    .btn {
-      display: block;
-      padding: 14px;
-      border-radius: 10px;
-      text-decoration: none;
-      font-weight: 600;
-      font-size: 15px;
-    }
-    .btn-ios     { background: #000; color: #fff; }
-    .btn-android { background: #3DDC84; color: #000; }
-    .btn-open    {
-      background: #6C63FF; color: #fff;
-      margin-bottom: 16px;
-      display: block;
-      padding: 14px;
-      border-radius: 10px;
-      text-decoration: none;
-      font-weight: 600;
-      font-size: 15px;
-    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f7f7fb;display:flex;align-items:center;justify-content:center;min-height:100vh}
+    .card{background:#fff;border-radius:20px;padding:40px 32px;text-align:center;max-width:380px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,.08)}
+    .logo{font-size:28px;font-weight:800;color:#6C63FF;margin-bottom:8px}
+    h2{font-size:20px;color:#1a1a2e;margin-bottom:8px}
+    p{font-size:14px;color:#666;margin-bottom:24px}
+    .loader{border:3px solid #f0f0f0;border-top:3px solid #6C63FF;border-radius:50%;width:36px;height:36px;animation:spin .8s linear infinite;margin:0 auto 24px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .btn{display:block;padding:14px;border-radius:10px;text-decoration:none;font-weight:600;font-size:15px;margin-bottom:12px;cursor:pointer;border:none}
+    .btn-primary{background:#6C63FF;color:#fff}
+    .btn-ios{background:#000;color:#fff}
+    .btn-android{background:#3DDC84;color:#000}
+    .btn-guest{background:#f0f0f0;color:#333;font-size:13px}
+    .actions{display:none;flex-direction:column;gap:8px}
   </style>
 </head>
 <body>
@@ -181,41 +166,46 @@ export class DynamicLinkRedirectController {
   <h2>${ogTitle}</h2>
   <p>${ogDescription}</p>
   <div class="loader" id="loader"></div>
-  <a class="btn-open" href="${this.escapeHtml(deepLink)}" id="openBtn" style="display:none">
-    Open in GreyFundr
-  </a>
-  <div class="store-btns" id="storeBtns">
-    <p>Get the app to continue:</p>
+  <div class="actions" id="actions">
+    <a class="btn btn-primary" href="${this.escapeHtml(deepLink)}" id="openBtn">
+      Open in GreyFundr
+    </a>
     <a class="btn btn-ios"     href="${this.escapeHtml(iosStore)}">Download on App Store</a>
     <a class="btn btn-android" href="${this.escapeHtml(androidStore)}">Get it on Google Play</a>
+    ${
+      guestWebUrl
+        ? `<a class="btn btn-guest" href="${this.escapeHtml(guestWebUrl)}" id="guestBtn">
+           Continue in browser instead
+         </a>`
+        : ''
+    }
   </div>
 </div>
-
 <script>
 (function () {
-  var deepLink    = ${JSON.stringify(deepLink)};
-  var loader      = document.getElementById('loader');
-  var openBtn     = document.getElementById('openBtn');
-  var storeBtns   = document.getElementById('storeBtns');
+  var deepLink = ${JSON.stringify(deepLink)};
+  var loader   = document.getElementById('loader');
+  var actions  = document.getElementById('actions');
+  var appLaunched = false;
 
-  // Attempt to open the app immediately
   window.location.href = deepLink;
 
-  // After 2.5s, if still here, show store buttons
   var fallback = setTimeout(function () {
-    loader.style.display    = 'none';
-    openBtn.style.display   = 'block';
-    storeBtns.style.display = 'flex';
+    if (!appLaunched) {
+      loader.style.display  = 'none';
+      actions.style.display = 'flex';
+    }
   }, 2500);
 
-  // If the page blurs (app launched), cancel fallback
   window.addEventListener('blur', function () {
+    appLaunched = true;
     clearTimeout(fallback);
     loader.style.display = 'none';
   });
 
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) {
+      appLaunched = true;
       clearTimeout(fallback);
       loader.style.display = 'none';
     }
