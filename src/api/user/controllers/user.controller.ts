@@ -68,6 +68,6 @@ export class UserController {
   @Patch('profile')
   @ApiOperation({ summary: 'Set fcm (push notifications) token' })
   setFcmToken(@CurrentUser() user: User, @Body() dto: SetFcmTokenDto) {
-    return this.userService.updateFcmToken(user.id, dto.token);
+    return this.userService.updateFcmToken(user.id, dto.fcmToken);
   }
 }

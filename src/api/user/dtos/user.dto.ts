@@ -140,8 +140,8 @@ export class SubmitBvnDto {
 }
 
 export class SetFcmTokenDto {
-  @ApiProperty({ description: 'FCM (firebase) toekn for push notification' })
+  @ApiProperty({ description: 'FCM (firebase) token for push notification' })
   @IsNotEmpty()
   @IsString()
-  token: string;
+  fcmToken: string;
 }

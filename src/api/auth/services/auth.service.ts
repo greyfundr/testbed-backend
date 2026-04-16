@@ -181,10 +181,11 @@ export class AuthService {
       };
     }
 
-    // await this.whatsAppService.sendMessage(
-    //   '+2349027647320',
-    //   `User ${user.email} logged in at ${new Date().toISOString()}`,
-    // );
+    // this.eventEmitter.emit('security.login', {
+    //   userId: user.id,
+    //   email: user.email,
+    //   phoneNumber: user.phoneNumber,
+    // });
 
     const tokens = await this.generateTokens(user.id);
     await this.updateRefreshToken(user.id, tokens.refreshToken);

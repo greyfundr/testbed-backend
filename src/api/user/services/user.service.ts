@@ -110,8 +110,8 @@ export class UserService {
     return this.userRepository.remove(id);
   }
 
-  async updateFcmToken(userId: string, token: string) {
-    await this.userRepository.update(userId, { fcmToken: token });
+  async updateFcmToken(userId: string, fcmToken: string) {
+    await this.userRepository.update(userId, { fcmToken });
     return { success: true };
   }
 

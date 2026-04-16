@@ -76,8 +76,12 @@ export class NotificationService {
 
     if (metadata?.phoneNumber) {
       try {
-        const waMessage = `*${title}*\n\n${message}`;
-        await this.whatsAppService.sendMessage(metadata.phoneNumber, waMessage);
+        await this.whatsAppService.sendTemplate(
+          metadata.phoneNumber,
+          options.title,
+          options.message,
+          metadata.billId || metadata.campaignId || '',
+        );
       } catch (e) {
         this.logger.error('WhatsApp failed', e);
       }
@@ -181,10 +185,14 @@ export class NotificationService {
 
     if (metadata?.phoneNumber) {
       try {
-        const waMessage = `*${title}*\n\n${message}`;
-        await this.whatsAppService.sendMessage(metadata.phoneNumber, waMessage);
+        await this.whatsAppService.sendTemplate(
+          metadata.phoneNumber,
+          title,
+          message,
+          metadata.link ? 'invite' : '',
+        );
       } catch (e) {
-        this.logger.error('WhatsApp failed', e);
+        this.logger.error(`WhatsApp Guest Notification failed: ${e.message}`);
       }
     }
   }
