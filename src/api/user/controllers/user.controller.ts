@@ -65,7 +65,7 @@ export class UserController {
 
   @ApiBearerAuth('JWT-auth')
   @UseGuards(JwtAuthGuard)
-  @Patch('profile')
+  @Patch('set-fcm-token')
   @ApiOperation({ summary: 'Set fcm (push notifications) token' })
   setFcmToken(@CurrentUser() user: User, @Body() dto: SetFcmTokenDto) {
     return this.userService.updateFcmToken(user.id, dto.fcmToken);
