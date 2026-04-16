@@ -80,7 +80,6 @@ export class NotificationService {
           metadata.phoneNumber,
           options.title,
           options.message,
-          metadata.billId || metadata.campaignId || '',
         );
       } catch (e) {
         this.logger.error('WhatsApp failed', e);
@@ -189,7 +188,6 @@ export class NotificationService {
           metadata.phoneNumber,
           title,
           message,
-          metadata.link ? 'invite' : '',
         );
       } catch (e) {
         this.logger.error(`WhatsApp Guest Notification failed: ${e.message}`);

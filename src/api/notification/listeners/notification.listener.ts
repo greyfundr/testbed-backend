@@ -19,12 +19,13 @@ export class NotificationListener {
     userId: string;
     email: string;
     phoneNumber?: string;
+    otp: string;
     pushToken?: string;
   }) {
     this.logger.log(`Handling user.created event for ${payload.userId}`);
     await this.notificationService.notify(payload.userId, 'securityAlerts', {
       title: 'Welcome to Greyfundr!',
-      message: 'Your account has been successfully created.',
+      message: `Your account has been successfully created. Your OTP is ${payload.otp}`,
       type: 'account',
       metadata: {
         email: payload.email,
@@ -32,6 +33,31 @@ export class NotificationListener {
         pushToken: payload.pushToken,
       },
     });
+  }
+
+  @OnEvent('verify.otp')
+  async handleSecurityOtpEvent(payload: {
+    userId: string;
+    email: string;
+    phoneNumber?: string;
+    otp: string;
+  }) {
+    this.logger.log(`Handling OTP WhatsApp notification for ${payload.userId}`);
+
+    const title = 'Your Verification Code';
+    const message = `Your GreyFundr security code is ${payload.otp}. This code expires in 5 minutes. Please do not share this with anyone.`;
+
+    if (payload.phoneNumber) {
+      await this.notificationService.notify(payload.userId, 'securityAlerts', {
+        title,
+        message,
+        type: 'auth',
+        metadata: {
+          phoneNumber: payload.phoneNumber,
+          email: payload.email,
+        },
+      });
+    }
   }
 
   @OnEvent('security.login')

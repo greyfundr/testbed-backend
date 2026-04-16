@@ -111,7 +111,12 @@ export class AuthService {
         phoneNumber: user.phoneNumber,
       });
 
-      await this.smsService.sendSMS(phoneNumber, `Your OTP is ${otp}`);
+      this.eventEmitter.emit('user.created', {
+        userId: user.id,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        otp,
+      });
 
       return { message: 'Account created. Please verify your phone number.' };
     } catch (error) {
@@ -180,12 +185,6 @@ export class AuthService {
         refreshToken: null,
       };
     }
-
-    // this.eventEmitter.emit('security.login', {
-    //   userId: user.id,
-    //   email: user.email,
-    //   phoneNumber: user.phoneNumber,
-    // });
 
     const tokens = await this.generateTokens(user.id);
     await this.updateRefreshToken(user.id, tokens.refreshToken);
@@ -258,6 +257,13 @@ export class AuthService {
       await this.userRepository.save(user);
 
       await this.smsService.sendSMS(user.phoneNumber, otp);
+
+      this.eventEmitter.emit('verify.otp', {
+        userId: user.id,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        otp,
+      });
 
       return { message: 'OTP sent successfully. It expires in 5 minutes.' };
     } catch (error) {
