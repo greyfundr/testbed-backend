@@ -8,6 +8,7 @@ import { WalletModule } from '../wallet/wallet.module';
 import { TransactionModule } from '../transaction/transaction.module';
 import { UserModule } from '../user/user.module';
 import { CampaignCategoryRepository } from './repository/campaign-category.repository';
+import { PaymentService } from '../payment/services';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { CampaignCategoryRepository } from './repository/campaign-category.repos
     CampaignRepository,
     DonationRepository,
     CampaignCategoryRepository,
+    PaymentService
   ],
   exports: [
     CampaignService,

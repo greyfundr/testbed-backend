@@ -11,6 +11,7 @@ import {
   IsUrl,
   IsPositive,
   IsNotEmpty,
+  ValidateIf,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -148,6 +149,11 @@ class ExternalPersonDto {
   phoneNumber: string;
 }
 
+export enum PaymentMethod {
+  WALLET = 'wallet',
+  PAYSTACK = 'paystack',
+}
+
 export class DonateDto {
   @ApiProperty({
     description: 'Amount to donate in Naira',
@@ -211,10 +217,16 @@ export class DonateDto {
   @IsOptional()
   comment?: string;
 
+  @IsEnum(PaymentMethod)
+  paymentMethod: PaymentMethod;
+
+  @ApiPropertyOptional({
+    description: 'Transaction PIN (Required if paymentMethod is wallet)',
+  })
+  @ValidateIf((o) => o.paymentMethod === PaymentMethod.WALLET)
   @IsString()
-  // @IsNotEmpty()
-  @IsOptional()
-  transactionPin: string;
+  @IsNotEmpty({ message: 'Transaction PIN is required for wallet payments' })
+  transactionPin?: string;
 }
 
 export class CampaignFilterDto extends PaginationDto {

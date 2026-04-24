@@ -40,6 +40,8 @@ import {
 } from '../../event/enums/event.enum';
 import { Event, EventContribution } from 'src/api/event/entities';
 import { UserRepository } from 'src/api/user/repository';
+import { Campaign, Donation } from 'src/api/campaign/entities';
+import { DonationOnBehalfOf } from 'src/api/campaign/enums/campaign.enum';
 
 @Injectable()
 export class PaymentWebhookService {
@@ -133,10 +135,16 @@ export class PaymentWebhookService {
     const paymentType = data.metadata?.type || data.metadata?.purpose;
 
     switch (paymentType) {
+      case 'CAMPAIGN_DONATION':
+        this.logger.log(`Routing webhook to campaign donation: ${reference}`);
+        await this.processCampaignDonationWebhook(data);
+        break;
+
       case 'GUEST_BILL_PAYMENT':
         this.logger.log(`Routing webhook to guest bill payment: ${reference}`);
         await this.processGuestBillPaymentWebhook(data);
         break;
+
       case 'USER_BILL_PAYMENT':
         this.logger.log(`Routing webhook to bill payment: ${reference}`);
         await this.processBillPaymentWebhook(data);
@@ -152,6 +160,126 @@ export class PaymentWebhookService {
         this.logger.log(`Routing webhook to wallet funding: ${reference}`);
         await this.processWalletFundingWebhook(data);
         break;
+    }
+  }
+
+  private triggerDonationEvents(
+    campaign: Campaign,
+    donation: Donation,
+    user: User,
+    amount: number,
+    isAnonymous: boolean,
+    customUsername: string,
+  ) {
+    this.eventEmitter.emit('donation.receipt', {
+      donorId: user.id,
+      email: user.email,
+      campaignName: campaign.title,
+      amount,
+    });
+
+    this.eventEmitter.emit('donation.received', {
+      creatorId: campaign.creatorId,
+      campaignName: campaign.title,
+      amount,
+      donorName: isAnonymous ? 'Anonymous' : customUsername || user.firstName,
+    });
+
+    const newCurrentAmount = Number(campaign.currentAmount) + amount;
+    const targetAmount = Number(campaign.target);
+
+    if (targetAmount > 0) {
+      const previousAmount = Number(campaign.currentAmount);
+      const hit50 =
+        previousAmount < targetAmount / 2 &&
+        newCurrentAmount >= targetAmount / 2;
+      const hit100 =
+        previousAmount < targetAmount && newCurrentAmount >= targetAmount;
+
+      if (hit50 || hit100) {
+        this.eventEmitter.emit('campaign.milestone', {
+          creatorId: campaign.creatorId,
+          campaignName: campaign.title,
+          percentage: hit100 ? 100 : 50,
+        });
+      }
+    }
+  }
+
+  private async processCampaignDonationWebhook(
+    data: PaystackChargeSuccessData,
+  ): Promise<void> {
+    const { reference, metadata, amount: amountInKobo } = data;
+    const campaignId = metadata?.campaignId;
+    const userId = metadata?.user_id;
+
+    const amount = amountInKobo / 100;
+
+    const qr = this.dataSource.createQueryRunner();
+    await qr.connect();
+    await qr.startTransaction();
+
+    try {
+      const transaction = await qr.manager.findOne(Transaction, {
+        where: { reference, status: TransactionStatus.PENDING },
+      });
+
+      if (!transaction) {
+        this.logger.warn(
+          `Transaction not found or already processed: ${reference}`,
+        );
+        return;
+      }
+
+      transaction.status = TransactionStatus.COMPLETED;
+      await qr.manager.save(transaction);
+
+      const campaign = await qr.manager.findOne(Campaign, {
+        where: { id: campaignId },
+      });
+      const user = await qr.manager.findOne(User, { where: { id: userId } });
+
+      if (!campaign || !user) {
+        throw new Error('Campaign or User not found during webhook processing');
+      }
+
+      const donation = qr.manager.create(Donation, {
+        amount,
+        donorId: user.id,
+        campaignId: campaign.id,
+        transactionId: transaction.id,
+        isAnonymous: false,
+        onBehalfOf: DonationOnBehalfOf.SELF,
+        comment: 'Donation via Paystack',
+      });
+
+      const savedDonation = await qr.manager.save(donation);
+
+      await qr.manager.update(Campaign, campaign.id, {
+        currentAmount: () => `current_amount + ${amount}`,
+      });
+
+      await qr.commitTransaction();
+
+      this.triggerDonationEvents(
+        campaign,
+        savedDonation,
+        user,
+        amount,
+        false,
+        `${user.firstName} ${user.lastName}`,
+      );
+
+      this.logger.log(`Successfully finalized Paystack donation: ${reference}`);
+    } catch (err) {
+      await qr.rollbackTransaction();
+      this.logger.error(
+        `Webhook processing failed for reference: ${reference}`,
+        err,
+      );
+      throw err;
+    } finally {
+      await qr.release();
     }
   }
 

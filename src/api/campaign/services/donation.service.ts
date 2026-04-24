@@ -9,7 +9,7 @@ import { DataSource } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { DonationRepository } from '../repository/donation.repository';
 import { CampaignRepository } from '../repository/campaign.repository';
-import { DonateDto } from '../dto/campaign.dto';
+import { DonateDto, PaymentMethod } from '../dto/campaign.dto';
 import { User } from '../../user/entities/user.entity';
 import { WalletService } from '../../wallet/services/wallet.service';
 import { Transaction } from '../../transaction/entities';
@@ -27,6 +27,7 @@ import {
   PaginationHelper,
 } from '../../../common/helpers/pagination.helper';
 import { DonationResponseDto, DonorDto } from '../dto/donation-response.dto';
+import { PaymentService } from 'src/api/payment/services';
 
 @Injectable()
 export class DonationService {
@@ -37,6 +38,7 @@ export class DonationService {
     private readonly campaignRepository: CampaignRepository,
     private readonly donationRepository: DonationRepository,
     private readonly transactionRepository: TransactionRepository,
+    private readonly paymentService: PaymentService,
     private readonly walletService: WalletService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
@@ -45,36 +47,29 @@ export class DonationService {
     campaignId: string,
     donateDto: DonateDto,
     user: User,
-  ): Promise<Donation> {
-    await this.walletService.verifyTransactionPin(
-      user.id,
-      donateDto.transactionPin,
-    );
+  ): Promise<any> {
+    const {
+      amount,
+      isAnonymous,
+      username,
+      onBehalfOf,
+      onBehalfOfExternal,
+      onBehalfOfUserId,
+      paymentMethod,
+      transactionPin,
+    } = donateDto;
 
     const campaign = await this.campaignRepository.findOne({
       where: { id: campaignId },
     });
 
-    if (!campaign) {
-      throw new NotFoundException('Campaign not found');
-    }
+    if (!campaign) throw new NotFoundException('Campaign not found');
 
     if (campaign.status !== CampaignStatus.ACTIVE) {
       throw new BadRequestException('Campaign is not active for donations');
     }
 
-    const {
-      amount,
-      isAnonymous,
-      username: customUsername,
-      onBehalfOf,
-      onBehalfOfUserId,
-      onBehalfOfExternal,
-      comment,
-    } = donateDto;
-
-    // A user can either be anonymous or pass a username. It can't be both
-    if (isAnonymous && customUsername) {
+    if (isAnonymous && username) {
       throw new BadRequestException(
         'A donation cannot be both anonymous and have a custom username',
       );
@@ -94,11 +89,48 @@ export class DonationService {
       );
     }
 
-    const wallet = await this.walletService.getWalletByUserId(user.id);
+    if (paymentMethod === PaymentMethod.WALLET) {
+      if (!transactionPin) {
+        throw new BadRequestException(
+          'Transaction PIN is required for wallet payments',
+        );
+      }
 
-    if (wallet.availableBalance < amount) {
-      throw new BadRequestException('Insufficient wallet balance');
+      await this.walletService.verifyTransactionPin(user.id, transactionPin);
+
+      const wallet = await this.walletService.getWalletByUserId(user.id);
+      if (wallet.availableBalance < amount) {
+        throw new BadRequestException('Insufficient wallet balance');
+      }
+
+      return await this.executeWalletDonation(
+        campaign,
+        donateDto,
+        user,
+        wallet,
+      );
     }
+
+    if (paymentMethod === PaymentMethod.PAYSTACK) {
+      return this.initializePaystackDonation(campaign, donateDto, user);
+    }
+  }
+
+  private async executeWalletDonation(
+    campaign: Campaign,
+    donateDto: DonateDto,
+    user: User,
+    wallet: any,
+  ) {
+    const {
+      amount,
+      isAnonymous,
+      username: customUsername,
+      onBehalfOf,
+      onBehalfOfUserId,
+      onBehalfOfExternal,
+      comment,
+    } = donateDto;
 
     const qr = this.dataSource.createQueryRunner();
     await qr.connect();
@@ -110,18 +142,17 @@ export class DonationService {
       const transaction = await qr.manager.save(
         qr.manager.create(Transaction, {
           walletId: wallet.id,
-          amount: amount, // Naira
+          amount,
           currency: 'NGN',
           type: TransactionType.CAMPAIGN_DONATION,
           direction: TransactionDirection.DEBIT,
           status: TransactionStatus.COMPLETED,
           reference,
           description: `Donation to campaign: ${campaign.title}`,
-          metadata: { campaignId, donorId: user.id },
+          metadata: { campaignId: campaign.id, donorId: user.id },
         }),
       );
 
-      // Lock funds into campaign escrow
       await this.walletService.lockIntoEscrow({
         walletId: wallet.id,
         amount,
@@ -133,7 +164,7 @@ export class DonationService {
       });
 
       const donation = qr.manager.create(Donation, {
-        amount: amount, // Naira
+        amount,
         donorId: user.id,
         campaignId: campaign.id,
         transactionId: transaction.id,
@@ -155,72 +186,128 @@ export class DonationService {
 
       const savedDonation = await qr.manager.save(donation);
 
-      // Update campaign current amount
-      // Raw SQL update - bypasses transformer 'to', so we use kobo directly
       await qr.manager.update(Campaign, campaign.id, {
         currentAmount: () => `current_amount + ${amount}`,
       });
 
       await qr.commitTransaction();
 
-      this.logger.log(
-        `Donation of ₦${amount} completed by user ${user.id} for campaign ${campaign.id}`,
+      this.triggerDonationEvents(
+        campaign,
+        savedDonation,
+        user,
+        amount,
+        isAnonymous as boolean,
+        customUsername as string,
       );
-
-      // --- Notifications ---
-      const trueDonationAmount = amount;
-
-      // 1. Send receipt to donor
-      this.eventEmitter.emit('donation.receipt', {
-        donorId: user.id,
-        email: user.email,
-        campaignName: campaign.title,
-        amount: trueDonationAmount,
-      });
-
-      // 2. Alert the campaign creator
-      this.eventEmitter.emit('donation.received', {
-        creatorId: campaign.creatorId,
-        campaignName: campaign.title,
-        amount: trueDonationAmount,
-        donorName: isAnonymous ? 'Anonymous' : customUsername || user.firstName,
-      });
-
-      // 3. Milestone Checks
-      const newCurrentAmount =
-        Number(campaign.currentAmount) + trueDonationAmount;
-      const targetAmount = Number(campaign.target);
-
-      if (targetAmount > 0) {
-        // Did it just hit exactly 50% or 100% boundary?
-        const previousAmount = Number(campaign.currentAmount);
-
-        const hit50 =
-          previousAmount < targetAmount / 2 &&
-          newCurrentAmount >= targetAmount / 2 &&
-          newCurrentAmount < targetAmount;
-        const hit100 =
-          previousAmount < targetAmount && newCurrentAmount >= targetAmount;
-
-        if (hit50 || hit100) {
-          this.eventEmitter.emit('campaign.milestone', {
-            creatorId: campaign.creatorId,
-            campaignName: campaign.title,
-            percentage: hit100 ? 100 : 50,
-          });
-        }
-      }
 
       return savedDonation;
     } catch (err) {
       await qr.rollbackTransaction();
-      this.logger.error(
-        `Donation failed for user ${user.id} to campaign ${campaign.id}`,
-        err,
-      );
+      this.logger.error(`Wallet donation failed for user ${user.id}`, err);
       throw err;
     } finally {
       await qr.release();
+    }
+  }
+
+  private async initializePaystackDonation(
+    campaign: Campaign,
+    donateDto: DonateDto,
+    user: User,
+  ) {
+    const qr = this.dataSource.createQueryRunner();
+    await qr.connect();
+    await qr.startTransaction();
+    try {
+      const txReference = `SBP-${uuidv4().replace(/-/g, '').substring(0, 16).toUpperCase()}`;
+
+      const paystackRes = await this.paymentService.initiateTransactions({
+        amount: donateDto.amount * 100,
+        email: user?.email as string,
+        reference: txReference,
+        metadata: {
+          type: 'CAMPAIGN_DONATION',
+          campaignId: campaign.id,
+          user_id: user.id,
+        },
+      });
+
+      await qr.manager.save(Transaction, {
+        walletId: null,
+        amount: donateDto.amount,
+        currency: 'NGN',
+        type: TransactionType.CAMPAIGN_DONATION,
+        direction: TransactionDirection.CREDIT,
+        status: TransactionStatus.PENDING,
+        reference: txReference,
+        gatewayReference: txReference,
+        paymentGateway: 'paystack',
+        description: `Campaign donation via Paystack — ${campaign.title}`,
+        sourceRef: {
+          entity: 'campaign',
+          id: campaign.id,
+        },
+        metadata: { campaignId: campaign.id, userId: user.id },
+      });
+
+      await qr.commitTransaction();
+
+      return {
+        status: 'pending',
+        paymentMethod: 'paystack',
+        authorizationUrl: paystackRes.data.authorization_url,
+        reference: txReference,
+      };
+    } catch (err) {
+      await qr.rollbackTransaction();
+      this.logger.error(`Wallet donation failed for user ${user.id}`, err);
+      throw err;
+    } finally {
+      await qr.release();
+    }
+  }
+
+  private triggerDonationEvents(
+    campaign: Campaign,
+    donation: Donation,
+    user: User,
+    amount: number,
+    isAnonymous: boolean,
+    customUsername: string,
+  ) {
+    this.eventEmitter.emit('donation.receipt', {
+      donorId: user.id,
+      email: user.email,
+      campaignName: campaign.title,
+      amount,
+    });
+
+    this.eventEmitter.emit('donation.received', {
+      creatorId: campaign.creatorId,
+      campaignName: campaign.title,
+      amount,
+      donorName: isAnonymous ? 'Anonymous' : customUsername || user.firstName,
+    });
+
+    const newCurrentAmount = Number(campaign.currentAmount) + amount;
+    const targetAmount = Number(campaign.target);
+
+    if (targetAmount > 0) {
+      const previousAmount = Number(campaign.currentAmount);
+      const hit50 =
+        previousAmount < targetAmount / 2 &&
+        newCurrentAmount >= targetAmount / 2;
+      const hit100 =
+        previousAmount < targetAmount && newCurrentAmount >= targetAmount;
+
+      if (hit50 || hit100) {
+        this.eventEmitter.emit('campaign.milestone', {
+          creatorId: campaign.creatorId,
+          campaignName: campaign.title,
+          percentage: hit100 ? 100 : 50,
+        });
+      }
     }
   }
 

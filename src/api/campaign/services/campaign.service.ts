@@ -93,28 +93,6 @@ export class CampaignService {
     return campaign;
   }
 
-  // async findAll(
-  //   paginationDto: PaginationDto,
-  // ): Promise<PaginatedResponse<CampaignResponseDto>> {
-  //   const { page, limit } = paginationDto;
-  //   const skip = paginationDto.getSkip();
-
-  //   const [data, total] = await this.campaignRepository.findAndCount({
-  //     where: { status: CampaignStatus.ACTIVE },
-  //     relations: ['creator', 'creator.profile'],
-  //     order: { createdAt: 'DESC' },
-  //     skip,
-  //     take: limit,
-  //   });
-
-  //   return PaginationHelper.createResponse(
-  //     data.map((campaign) => this.mapToResponse(campaign)),
-  //     total,
-  //     page ?? 1,
-  //     limit ?? 10,
-  //   );
-  // }
-
   async findAll(
     filterDto: CampaignFilterDto,
   ): Promise<PaginatedResponse<CampaignResponseDto>> {
