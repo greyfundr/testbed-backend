@@ -7,7 +7,11 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CampaignRepository } from '../repository/campaign.repository';
-import { CreateCampaignDto, UpdateCampaignDto } from '../dto/campaign.dto';
+import {
+  CampaignFilterDto,
+  CreateCampaignDto,
+  UpdateCampaignDto,
+} from '../dto/campaign.dto';
 import { Campaign } from '../entities/campaign.entity';
 import { CampaignStatus } from '../enums/campaign.enum';
 import { User } from '../../user/entities/user.entity';
@@ -23,6 +27,7 @@ import {
 } from '../dto/campaign-response.dto';
 import { CampaignCategoryRepository } from '../repository/campaign-category.repository';
 import { nanoid } from 'nanoid';
+import { ILike } from 'typeorm';
 
 @Injectable()
 export class CampaignService {
@@ -88,15 +93,45 @@ export class CampaignService {
     return campaign;
   }
 
+  // async findAll(
+  //   paginationDto: PaginationDto,
+  // ): Promise<PaginatedResponse<CampaignResponseDto>> {
+  //   const { page, limit } = paginationDto;
+  //   const skip = paginationDto.getSkip();
+
+  //   const [data, total] = await this.campaignRepository.findAndCount({
+  //     where: { status: CampaignStatus.ACTIVE },
+  //     relations: ['creator', 'creator.profile'],
+  //     order: { createdAt: 'DESC' },
+  //     skip,
+  //     take: limit,
+  //   });
+
+  //   return PaginationHelper.createResponse(
+  //     data.map((campaign) => this.mapToResponse(campaign)),
+  //     total,
+  //     page ?? 1,
+  //     limit ?? 10,
+  //   );
+  // }
+
   async findAll(
-    paginationDto: PaginationDto,
+    filterDto: CampaignFilterDto,
   ): Promise<PaginatedResponse<CampaignResponseDto>> {
-    const { page, limit } = paginationDto;
-    const skip = paginationDto.getSkip();
+    const { page, limit, category } = filterDto;
+    const skip = filterDto.getSkip();
+
+    const whereCondition: any = {
+      status: CampaignStatus.ACTIVE,
+    };
+
+    if (category) {
+      whereCondition.category = { name: ILike(category) };
+    }
 
     const [data, total] = await this.campaignRepository.findAndCount({
-      where: { status: CampaignStatus.ACTIVE },
-      relations: ['creator', 'creator.profile'],
+      where: whereCondition,
+      relations: ['creator', 'creator.profile', 'category'],
       order: { createdAt: 'DESC' },
       skip,
       take: limit,

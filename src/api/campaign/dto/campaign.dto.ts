@@ -15,6 +15,7 @@ import {
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { CampaignCategory, DonationOnBehalfOf } from '../enums/campaign.enum';
+import { PaginationDto } from 'src/common/helpers';
 
 class CampaignOfferDto {
   @IsEnum(['auto', 'manual'])
@@ -214,4 +215,14 @@ export class DonateDto {
   // @IsNotEmpty()
   @IsOptional()
   transactionPin: string;
+}
+
+export class CampaignFilterDto extends PaginationDto {
+  @ApiPropertyOptional({
+    description: 'Filter campaigns by category name',
+    example: 'Education',
+  })
+  @IsOptional()
+  @IsString()
+  category?: string;
 }

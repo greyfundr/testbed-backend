@@ -21,6 +21,7 @@ import {
   CreateCampaignDto,
   UpdateCampaignDto,
   DonateDto,
+  CampaignFilterDto,
 } from '../dto/campaign.dto';
 import {
   CampaignCategoryResponseDto,
@@ -78,9 +79,9 @@ export class CampaignController {
   })
   @Get()
   async findAll(
-    @Query() paginationDto: PaginationDto,
+    @Query() filterDto: CampaignFilterDto,
   ): Promise<PaginatedResponse<CampaignResponseDto>> {
-    return this.campaignService.findAll(paginationDto);
+    return this.campaignService.findAll(filterDto);
   }
 
   @ApiOperation({ summary: 'Get campaigns created by the current user' })
