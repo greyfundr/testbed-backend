@@ -277,7 +277,7 @@ export class DynamicLinkService implements OnModuleInit {
   }
 
   private buildShortUrl(shortCode: string): string {
-    const baseUrl = this.config.getOrThrow<string>('API_BASE_URL');
+    const baseUrl = this.config.getOrThrow<string>('APP_BASE_URL');
     return `${baseUrl}/l/${shortCode}`;
   }
 }
