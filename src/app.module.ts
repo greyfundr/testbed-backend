@@ -44,28 +44,28 @@ import { LoggerModule } from 'nestjs-pino';
         ...dataSourceOptions,
       }),
     }),
-    LoggerModule.forRoot({
-      pinoHttp: {
-        autoLogging: true,
-        transport:
-          process.env.NODE_ENV !== 'production'
-            ? { target: 'pino-pretty', options: { singleLine: true } }
-            : undefined,
+    // LoggerModule.forRoot({
+    //   pinoHttp: {
+    //     autoLogging: true,
+    //     transport:
+    //       process.env.NODE_ENV !== 'production'
+    //         ? { target: 'pino-pretty', options: { singleLine: true } }
+    //         : undefined,
 
-        redact: {
-          paths: [
-            'req.headers.authorization',
-            'req.body.password',
-            'req.body.confirmPassword',
-            'req.body.token',
-            'req.body.user.password',
-            'req.body.pin',
-            'req.body.transactionPin',
-          ],
-          censor: '[REDACTED]',
-        },
-      },
-    }),
+    //     redact: {
+    //       paths: [
+    //         'req.headers.authorization',
+    //         'req.body.password',
+    //         'req.body.confirmPassword',
+    //         'req.body.token',
+    //         'req.body.user.password',
+    //         'req.body.pin',
+    //         'req.body.transactionPin',
+    //       ],
+    //       censor: '[REDACTED]',
+    //     },
+    //   },
+    // }),
     AuthModule,
     CampaignModule,
     UserModule,

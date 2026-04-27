@@ -106,7 +106,7 @@ export class SplitBillService {
         currency: dto.currency ?? 'NGN',
         creatorId,
         splitMethod: dto.splitMethod,
-        status: SplitBillStatus.DRAFT,
+        status: SplitBillStatus.ACTIVE,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
         imageUrl: dto.imageUrl ?? null,
         billReceipt: dto.billReceipt ?? null,
@@ -1469,8 +1469,8 @@ export class SplitBillService {
       });
 
       if (!participant) throw new NotFoundException('Participant not found');
-      if (participant.userId !== payerId)
-        throw new ForbiddenException('You can only pay your own share');
+      // if (participant.userId !== payerId)
+      //   throw new ForbiddenException('You can only pay your own share');
 
       const bill = await qr.manager.findOne(SplitBill, {
         where: { id: billId },

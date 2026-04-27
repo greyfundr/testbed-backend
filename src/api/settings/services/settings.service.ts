@@ -169,6 +169,7 @@ export class SettingsService {
       },
       language: 'en',
       currency: 'NGN',
+      allowSplitBillInvites: true,
     });
 
     return repository.save(settings);
