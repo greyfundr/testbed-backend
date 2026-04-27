@@ -86,7 +86,7 @@ export class UpdateProfileDto {
   image?: string;
 
   @ApiProperty({ required: false })
-  @IsString()
+  // @IsString()
   @IsOptional()
   dateOfBirth?: string;
 }
