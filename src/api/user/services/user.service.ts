@@ -126,8 +126,8 @@ export class UserService {
         user.firstName = updateProfileDto.firstName;
       if (updateProfileDto.lastName) user.lastName = updateProfileDto.lastName;
       if (updateProfileDto.username) user.username = updateProfileDto.username;
-      // if (updateProfileDto.dateOfBirth)
-      //   user.dateOfBirth = new Date(updateProfileDto.dateOfBirth);
+      if (updateProfileDto.dateOfBirth)
+        user.dateOfBirth = new Date(updateProfileDto.dateOfBirth);
 
       await queryRunner.manager.save(user);
 

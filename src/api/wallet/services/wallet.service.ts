@@ -89,22 +89,6 @@ export class WalletService {
 
   private readonly MIN_FUNDING_NAIRA = 100.0;
   private readonly MAX_FUNDING_NAIRA = 10_000_000.0;
-  private readonly TRIVIAL_PINS = new Set([
-    '0000',
-    '1111',
-    '2222',
-    '3333',
-    '4444',
-    '5555',
-    '6666',
-    '7777',
-    '8888',
-    '9999',
-    '1234',
-    '4321',
-    '0123',
-    '9876',
-  ]);
   private readonly MAX_PIN_ATTEMPTS = 5;
   private readonly PIN_LOCK_MINUTES = 15;
 
@@ -1219,12 +1203,6 @@ export class WalletService {
       throw new BadRequestException('PINs do not match');
     }
 
-    if (this.TRIVIAL_PINS.has(dto.pin)) {
-      throw new BadRequestException(
-        'PIN is too simple. Please choose a less predictable PIN.',
-      );
-    }
-
     const hashed = await bcrypt.hash(dto.pin, 12);
 
     await this.walletRepository.update(wallet.id, {
@@ -1263,10 +1241,6 @@ export class WalletService {
 
     if (dto.newPin !== dto.confirmPin) {
       throw new BadRequestException('New PINs do not match');
-    }
-
-    if (this.TRIVIAL_PINS.has(dto.newPin)) {
-      throw new BadRequestException('PIN is too simple.');
     }
 
     const isSame = await bcrypt.compare(dto.newPin, wallet.transactionPin);

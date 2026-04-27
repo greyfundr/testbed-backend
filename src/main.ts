@@ -10,6 +10,8 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { LoggingInterceptor } from './common/interceptors';
+import { Logger as AppLogger } from 'nestjs-pino';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -42,6 +44,8 @@ async function bootstrap() {
       ],
     });
 
+    // app.useLogger(app.get(AppLogger));
+
     // Versioning
     app.enableVersioning({
       type: VersioningType.URI,
@@ -73,6 +77,7 @@ async function bootstrap() {
 
     app.useGlobalInterceptors(
       new ClassSerializerInterceptor(app.get(Reflector)),
+      new LoggingInterceptor(),
     );
 
     const port = configService.get<number>('PORT') || 8080;

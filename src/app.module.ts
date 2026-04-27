@@ -21,13 +21,13 @@ import { SplitBillModule } from './api/split-bill/split-bill.module';
 import { UploadModule } from './api/upload/upload.module';
 import { EventModule } from './api/event/event.module';
 import { DynamicLinkModule } from './api/dynamic-link/dynamic-link.module';
+import { LoggerModule } from 'nestjs-pino';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
-
       validationSchema: environmentValidationSchema,
     }),
     ThrottlerModule.forRoot({
@@ -43,6 +43,28 @@ import { DynamicLinkModule } from './api/dynamic-link/dynamic-link.module';
       useFactory: () => ({
         ...dataSourceOptions,
       }),
+    }),
+    LoggerModule.forRoot({
+      pinoHttp: {
+        autoLogging: true,
+        transport:
+          process.env.NODE_ENV !== 'production'
+            ? { target: 'pino-pretty', options: { singleLine: true } }
+            : undefined,
+
+        redact: {
+          paths: [
+            'req.headers.authorization',
+            'req.body.password',
+            'req.body.confirmPassword',
+            'req.body.token',
+            'req.body.user.password',
+            'req.body.pin',
+            'req.body.transactionPin',
+          ],
+          censor: '[REDACTED]',
+        },
+      },
     }),
     AuthModule,
     CampaignModule,
