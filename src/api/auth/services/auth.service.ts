@@ -592,7 +592,7 @@ export class AuthService {
     };
   }
 
-  async setPin(userId: string, pin: string): Promise<void> {
+  async setPin(userId: string, pin: string) {
     const user = await this.userRepository.findOne({
       where: { id: userId },
       select: ['id', 'pin'],
@@ -613,9 +613,14 @@ export class AuthService {
     await this.userRepository.update({ id: userId }, { pin: hashedPin });
 
     this.logger.log(`PIN set for user ${userId}`);
+
+    return {
+      success: true,
+      message: 'PIN set successfully',
+    };
   }
 
-  async changePin(userId: string, params: ChangePinDto): Promise<void> {
+  async changePin(userId: string, params: ChangePinDto) {
     const user = await this.userRepository.findOne({
       where: { id: userId },
       select: ['id', 'pin'],
@@ -649,6 +654,11 @@ export class AuthService {
     await this.userRepository.update({ id: userId }, { pin: hashedPin });
 
     this.logger.log(`PIN changed for user ${userId}`);
+
+    return {
+      success: true,
+      message: 'PIN changed successfully',
+    };
   }
 
   async loginWithPin(params: LoginPinDto) {

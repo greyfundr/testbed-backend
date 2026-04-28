@@ -200,11 +200,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
   async setPin(@Body() body: SetPinDto, @CurrentUser() user: User) {
-    await this.authService.setPin(user.id, body.pin);
-    return {
-      success: true,
-      message: 'PIN set successfully',
-    };
+    return await this.authService.setPin(user.id, body.pin);
   }
 
   @ApiOperation({ summary: 'Change existing PIN — requires current PIN' })
@@ -213,11 +209,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
   async changePin(@Body() body: ChangePinDto, @CurrentUser() user: User) {
-    await this.authService.changePin(user.id, body);
-    return {
-      success: true,
-      message: 'PIN changed successfully',
-    };
+    return await this.authService.changePin(user.id, body);
   }
 
   @ApiOperation({ summary: 'Endpoint to enable two factor authentication' })

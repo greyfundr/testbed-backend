@@ -6,7 +6,7 @@ import {
   IsOptional,
   IsPhoneNumber,
   IsString,
-  IsStrongPassword,
+  // IsStrongPassword,
   Length,
   Matches,
   MaxLength,
@@ -18,7 +18,6 @@ import {
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { AccountType } from '../user/enums/user.enum';
-import { Transform } from 'class-transformer';
 
 export class SignupDto {
   @ApiProperty({ description: 'Email address', example: 'johndoe@example.com' })
@@ -33,7 +32,7 @@ export class SignupDto {
 
   @ApiProperty({ description: 'Password' })
   @IsNotEmpty({ message: 'Password is required' })
-  @IsStrongPassword()
+  // @IsStrongPassword()
   password: string;
 
   @ApiProperty({ description: 'Account type', enum: AccountType })
@@ -98,10 +97,6 @@ export class ChangePasswordDto {
   @IsString()
   @MinLength(8)
   @MaxLength(72)
-  // @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, {
-  //   message:
-  //     'Password must contain at least one uppercase letter, one lowercase letter, and one number',
-  // })
   newPassword: string;
 
   @IsString()
@@ -116,7 +111,7 @@ export class LoginDto {
 
   @ApiProperty({ description: 'Password' })
   @IsNotEmpty({ message: 'Password is required' })
-  @IsStrongPassword()
+  // @IsStrongPassword()
   password: string;
 }
 
