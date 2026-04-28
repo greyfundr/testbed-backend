@@ -51,3 +51,9 @@ export enum KycLevels {
   LEVEL_2 = 'level_2',
   LEVEL_3 = 'level_3',
 }
+
+export enum FriendRequestStatus {
+  PENDING = 'pending',
+  ACCEPTED = 'accepted',
+  REJECTED = 'rejected',
+}

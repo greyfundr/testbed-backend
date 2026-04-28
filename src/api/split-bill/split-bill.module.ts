@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { SplitBillController } from './controllers/split-bill.controller';
 import { SplitBillService } from './services/split-bill.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -16,9 +16,9 @@ import { DynamicLinkModule } from '../dynamic-link/dynamic-link.module';
       SplitBillParticipant,
       SplitBillActivity,
     ]),
-    UserModule,
-    WalletModule,
-    TransactionModule,
+    forwardRef(() => UserModule),
+    forwardRef(() => WalletModule),
+    forwardRef(() => TransactionModule),
     DynamicLinkModule,
   ],
   controllers: [SplitBillController],

@@ -12,7 +12,7 @@ import { UserModule } from '../user/user.module';
     forwardRef(() => WalletModule),
     TransactionModule,
     forwardRef(() => EventModule),
-    UserModule,
+    forwardRef(() => UserModule),
   ],
   controllers: [PaymentWebhookController],
   providers: [PaymentService, PaymentWebhookService],

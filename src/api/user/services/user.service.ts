@@ -16,6 +16,8 @@ import {
 } from 'src/api/split-bill/entities';
 import { SplitBillStatus, ParticipantStatus } from 'src/api/split-bill/enums';
 import { Wallet } from 'src/api/wallet/entities';
+import { FriendRequest, Follow, Block } from '../entities';
+import { FriendRequestStatus } from '../enums/user.enum';
 
 @Injectable()
 export class UserService {
@@ -33,7 +35,7 @@ export class UserService {
   }
 
   async getUserProfile(userId: string) {
-    return this.userRepository.findOne({
+    const user = await this.userRepository.findOne({
       where: { id: userId },
       relations: ['profile', 'kycs', 'wallet'],
       select: {
@@ -53,9 +55,24 @@ export class UserService {
         },
       },
     });
+
+    if (!user) return null;
+
+    const followersCount = await this.dataSource.getRepository(Follow).count({
+      where: { followingId: userId },
+    });
+    const followingCount = await this.dataSource.getRepository(Follow).count({
+      where: { followerId: userId },
+    });
+
+    return {
+      ...user,
+      followersCount,
+      followingCount,
+    };
   }
 
-  async getUsers(filterDto: GetUsersFilterDto) {
+  async getUsers(filterDto: GetUsersFilterDto, currentUserId?: string) {
     const { name, email, phoneNumber, username, accountType } = filterDto;
 
     const query = this.userRepository
@@ -99,7 +116,65 @@ export class UserService {
       );
     }
 
-    return query.getMany();
+    const users = await query.getMany();
+
+    if (!currentUserId || users.length === 0) {
+      return users;
+    }
+
+    const userIds = users.map((u) => u.id);
+    const friendRequests = await this.dataSource
+      .getRepository(FriendRequest)
+      .find({
+        where: [{ senderId: currentUserId }, { receiverId: currentUserId }],
+      });
+
+    const follows = await this.dataSource.getRepository(Follow).find({
+      where: { followerId: currentUserId },
+    });
+
+    const blocked = await this.dataSource.getRepository(Block).find({
+      where: { blockerId: currentUserId },
+    });
+
+    const blockedBy = await this.dataSource.getRepository(Block).find({
+      where: { blockedId: currentUserId },
+    });
+
+    return users.map((u) => {
+      if (u.id === currentUserId) return { ...u, connectionStatus: 'self' };
+
+      const request = friendRequests.find(
+        (req) =>
+          (req.senderId === currentUserId && req.receiverId === u.id) ||
+          (req.receiverId === currentUserId && req.senderId === u.id),
+      );
+
+      const isFollowing = follows.some((f) => f.followingId === u.id);
+      const isBlocked = blocked.some((b) => b.blockedId === u.id);
+      const isBlockedBy = blockedBy.some((b) => b.blockerId === u.id);
+
+      let connectionStatus = 'none';
+      if (request) {
+        if (request.status === FriendRequestStatus.ACCEPTED) {
+          connectionStatus = 'friends';
+        } else if (request.status === FriendRequestStatus.PENDING) {
+          connectionStatus =
+            request.senderId === currentUserId
+              ? 'request_sent'
+              : 'request_received';
+        }
+      }
+
+      return {
+        ...u,
+        connectionStatus,
+        requestId: request?.id || null,
+        isFollowing,
+        isBlocked,
+        isBlockedBy,
+      };
+    });
   }
 
   update(id: number, updateUserDto: UpdateUserDto) {

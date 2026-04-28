@@ -15,7 +15,7 @@ import { PaymentService } from '../payment/services';
     TypeOrmModule.forFeature([Campaign, Donation, CampaignCategory]),
     forwardRef(() => WalletModule),
     TransactionModule,
-    UserModule,
+    forwardRef(() => UserModule),
   ],
   controllers: [CampaignController],
   providers: [
@@ -24,7 +24,7 @@ import { PaymentService } from '../payment/services';
     CampaignRepository,
     DonationRepository,
     CampaignCategoryRepository,
-    PaymentService
+    PaymentService,
   ],
   exports: [
     CampaignService,

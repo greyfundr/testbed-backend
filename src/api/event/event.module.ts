@@ -34,7 +34,7 @@ import { DynamicLinkModule } from '../dynamic-link/dynamic-link.module';
     ]),
     forwardRef(() => WalletModule),
     forwardRef(() => TransactionModule),
-    UserModule,
+    forwardRef(() => UserModule),
     forwardRef(() => PaymentModule),
     forwardRef(() => DynamicLinkModule),
   ],

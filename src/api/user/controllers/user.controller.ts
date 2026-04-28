@@ -48,7 +48,7 @@ export class UserController {
     @Query() filterDto: GetUsersFilterDto,
     @CurrentUser() user: User,
   ) {
-    return this.userService.getUsers(filterDto);
+    return this.userService.getUsers(filterDto, user.id);
   }
 
   @Delete('account')
