@@ -45,7 +45,7 @@ export class AdminCampaignService {
     }
 
     // Approve campaign
-    const updatedCampaign = await this.campaignRepository.update(campaign.id, {
+    await this.campaignRepository.update(campaign.id, {
       status: CampaignStatus.ACTIVE,
     });
 
@@ -56,6 +56,9 @@ export class AdminCampaignService {
       email: campaign.creator.email,
     });
 
-    return updatedCampaign;
+    return this.campaignRepository.findOne({
+      where: { id: campaignId },
+      relations: ['creator'],
+    });
   }
 }

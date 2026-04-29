@@ -27,7 +27,7 @@ import { TransactionModule } from '../transaction/transaction.module';
       WithdrawalRequest,
     ]),
     forwardRef(() => PaymentModule),
-    UserModule,
+    forwardRef(() => UserModule),
     forwardRef(() => TransactionModule),
   ],
   controllers: [WalletController],

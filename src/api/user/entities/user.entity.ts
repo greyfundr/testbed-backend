@@ -7,6 +7,9 @@ import { Profile } from './profile.entity';
 import { Kyc } from './kyc.entity';
 import { Exclude, Expose } from 'class-transformer';
 import { Wallet } from 'src/api/wallet/entities';
+import { FriendRequest } from './friend-request.entity';
+import { Follow } from './follow.entity';
+import { Block } from './block.entity';
 
 @Entity('users')
 export class User extends AbstractEntity {
@@ -111,6 +114,24 @@ export class User extends AbstractEntity {
 
   @OneToOne(() => Wallet, (wallet) => wallet.user)
   wallet: Wallet;
+
+  @OneToMany(() => FriendRequest, (friendRequest) => friendRequest.sender)
+  sentFriendRequests: FriendRequest[];
+
+  @OneToMany(() => FriendRequest, (friendRequest) => friendRequest.receiver)
+  receivedFriendRequests: FriendRequest[];
+
+  @OneToMany(() => Follow, (follow) => follow.follower)
+  following: Follow[];
+
+  @OneToMany(() => Follow, (follow) => follow.following)
+  followers: Follow[];
+
+  @OneToMany(() => Block, (block) => block.blocker)
+  blockedUsers: Block[];
+
+  @OneToMany(() => Block, (block) => block.blocked)
+  blockedBy: Block[];
 
   @Expose()
   get isPinSet(): boolean {

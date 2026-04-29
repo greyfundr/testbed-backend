@@ -13,6 +13,8 @@ import { User } from '../../user/entities';
 import { CampaignStatus } from '../enums/campaign.enum';
 import { Donation } from './donation.entity';
 import { CampaignCategory } from './campaign-category.entity';
+import { CampaignLike } from './campaign-like.entity';
+import { CampaignComment } from './campaign-comment.entity';
 import { ColumnNumericTransformer } from '../../../common/transformers/column-numeric.transformer';
 
 export interface CampaignOffer {
@@ -142,4 +144,10 @@ export class Campaign extends AbstractEntity {
 
   @OneToMany(() => Donation, (donation) => donation.campaign)
   donations: Donation[];
+
+  @OneToMany(() => CampaignLike, (like) => like.campaign)
+  likes: CampaignLike[];
+
+  @OneToMany(() => CampaignComment, (comment) => comment.campaign)
+  comments: CampaignComment[];
 }

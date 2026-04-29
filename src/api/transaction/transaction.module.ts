@@ -15,7 +15,7 @@ import { UserModule } from '../user/user.module';
   imports: [
     TypeOrmModule.forFeature([Transaction, LedgerEntry, WebhookLog]),
     forwardRef(() => WalletModule),
-    UserModule,
+    forwardRef(() => UserModule),
   ],
   controllers: [TransactionController],
   providers: [
