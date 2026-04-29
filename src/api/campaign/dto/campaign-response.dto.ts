@@ -67,6 +67,15 @@ export class CampaignResponseDto {
 
   @ApiProperty()
   createdAt: Date;
+
+  @ApiProperty()
+  likesCount: number;
+
+  @ApiProperty()
+  commentsCount: number;
+
+  @ApiPropertyOptional()
+  isLiked?: boolean;
 }
 
 export class CampaignCategoryResponseDto {

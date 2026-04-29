@@ -14,6 +14,7 @@ import {
 } from '../dto/campaign.dto';
 import { Campaign } from '../entities/campaign.entity';
 import { CampaignStatus } from '../enums/campaign.enum';
+import { CampaignLike, CampaignComment } from '../entities';
 import { User } from '../../user/entities/user.entity';
 import { UserRepository } from '../../user/repository/user.repository';
 import {
@@ -79,7 +80,7 @@ export class CampaignService {
       feePercentage,
       creatorId: user.id,
       currentAmount: 0,
-      status: CampaignStatus.ACTIVE,
+      status: CampaignStatus.PENDING_APPROVAL,
       participants,
       shareSlug: nanoid(12),
     });
@@ -95,6 +96,7 @@ export class CampaignService {
 
   async findAll(
     filterDto: CampaignFilterDto,
+    currentUserId?: string,
   ): Promise<PaginatedResponse<CampaignResponseDto>> {
     const { page, limit, category } = filterDto;
     const skip = filterDto.getSkip();
@@ -116,7 +118,9 @@ export class CampaignService {
     });
 
     return PaginationHelper.createResponse(
-      data.map((campaign) => this.mapToResponse(campaign)),
+      await Promise.all(
+        data.map((campaign) => this.mapToResponse(campaign, currentUserId)),
+      ),
       total,
       page ?? 1,
       limit ?? 10,
@@ -172,10 +176,33 @@ export class CampaignService {
       relations: ['creator', 'creator.profile'],
       order: { createdAt: 'DESC' },
     });
-    return campaigns.map((campaign) => this.mapToResponse(campaign));
+    return Promise.all(
+      campaigns.map((campaign) => this.mapToResponse(campaign, user.id)),
+    );
   }
 
-  public mapToResponse(campaign: Campaign): CampaignResponseDto {
+  public async mapToResponse(
+    campaign: Campaign,
+    currentUserId?: string,
+  ): Promise<CampaignResponseDto> {
+    const likesCount = await this.campaignRepository
+      .getManager()
+      .getRepository(CampaignLike)
+      .count({ where: { campaignId: campaign.id } });
+    const commentsCount = await this.campaignRepository
+      .getManager()
+      .getRepository(CampaignComment)
+      .count({ where: { campaignId: campaign.id } });
+
+    let isLiked = false;
+    if (currentUserId) {
+      const like = await this.campaignRepository
+        .getManager()
+        .getRepository(CampaignLike)
+        .findOne({ where: { userId: currentUserId, campaignId: campaign.id } });
+      isLiked = !!like;
+    }
+
     const creator: CampaignCreatorDto = {
       id: campaign.creator?.id || campaign.creatorId,
       firstName: campaign.creator?.firstName ?? undefined,
@@ -203,6 +230,9 @@ export class CampaignService {
       )}/campaigns/${campaign.shareSlug}`,
       creator,
       createdAt: campaign.createdAt,
+      likesCount,
+      commentsCount,
+      isLiked,
     };
   }
 

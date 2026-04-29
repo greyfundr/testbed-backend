@@ -80,8 +80,9 @@ export class CampaignController {
   @Get()
   async findAll(
     @Query() filterDto: CampaignFilterDto,
+    @CurrentUser() user?: User,
   ): Promise<PaginatedResponse<CampaignResponseDto>> {
-    return this.campaignService.findAll(filterDto);
+    return this.campaignService.findAll(filterDto, user?.id);
   }
 
   @ApiOperation({ summary: 'Get campaigns created by the current user' })
@@ -106,9 +107,12 @@ export class CampaignController {
     type: CampaignResponseDto,
   })
   @Get(':id')
-  async findOne(@Param('id') id: string): Promise<CampaignResponseDto> {
+  async findOne(
+    @Param('id') id: string,
+    @CurrentUser() user?: User,
+  ): Promise<CampaignResponseDto> {
     const campaign = await this.campaignService.findOne(id);
-    return this.campaignService.mapToResponse(campaign);
+    return this.campaignService.mapToResponse(campaign, user?.id);
   }
 
   @ApiOperation({ summary: 'Update a campaign' })

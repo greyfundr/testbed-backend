@@ -11,7 +11,9 @@ export enum CampaignCategory {
 }
 
 export enum CampaignStatus {
+  PENDING_APPROVAL = 'pending_approval',
   ACTIVE = 'active',
+  REJECTED = 'rejected',
   COMPLETED = 'completed',
   CANCELLED = 'cancelled',
   EXPIRED = 'expired',
