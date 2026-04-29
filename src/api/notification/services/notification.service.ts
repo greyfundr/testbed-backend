@@ -19,7 +19,7 @@ export class NotificationService {
     private readonly settingsService: SettingsService,
     private readonly mailtrapService: MailtrapService,
     private readonly firebaseService: FirebaseService,
-    private readonly smsService: TermiiService,
+    private readonly termiiService: TermiiService,
     private readonly whatsAppService: WhatsAppService,
   ) {}
 
@@ -76,7 +76,7 @@ export class NotificationService {
 
     if ((prefs as any).sms && metadata?.phoneNumber) {
       try {
-        await this.smsService.sendSMS(metadata.phoneNumber, message);
+        await this.termiiService.sendSMS(metadata.phoneNumber, message);
       } catch (e) {
         this.logger.error(
           `SMS failed for ${metadata.phoneNumber}: ${e.message}`,
@@ -93,6 +93,19 @@ export class NotificationService {
         );
       } catch (e) {
         this.logger.error('WhatsApp failed', e);
+      }
+    }
+
+    if (['account', 'auth'].includes(type as string) && metadata?.email) {
+      try {
+        await this.termiiService.sendEmail(
+          metadata.category,
+          metadata.email,
+          title,
+          metadata,
+        );
+      } catch (e) {
+        this.logger.error(`Email failed for ${metadata.email}: ${e.message}`);
       }
     }
   }
@@ -184,7 +197,7 @@ export class NotificationService {
 
     if (metadata?.phoneNumber) {
       try {
-        await this.smsService.sendSMS(metadata.phoneNumber, message);
+        await this.termiiService.sendSMS(metadata.phoneNumber, message);
       } catch (e) {
         this.logger.error(
           `SMS failed for ${metadata.phoneNumber}: ${e.message}`,

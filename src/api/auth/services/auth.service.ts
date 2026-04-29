@@ -266,32 +266,38 @@ export class AuthService {
     }
   }
 
-  async forgotPassword(params: ForgotPasswordDto) {
+  async forgotPassword(params: { emailOrPhone: string }) {
     try {
+      const { emailOrPhone } = params;
+
       const user = await this.userRepository.findOne({
-        where: [
-          {
-            email: params.emailOrPhone,
-          },
-          {
-            phoneNumber: params.emailOrPhone,
-          },
-        ],
+        where: [{ email: emailOrPhone }, { phoneNumber: emailOrPhone }],
       });
 
       if (!user) throw new NotFoundException('Account not found');
+
       const otp = generateNumericToken(6);
       const otpExpiration = new Date(Date.now() + 5 * 60 * 1000);
 
       user.phoneOtp = otp;
       user.emailOtp = otp;
       user.otpExpiration = otpExpiration;
+
       await this.userRepository.save(user);
 
-      //TODO: Add proper sms message for OTP
-      await this.smsService.sendSMS(user.phoneNumber, `Your OTP is ${otp}`);
+      this.eventEmitter.emit('password.reset.otp', {
+        userId: user.id,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        otp,
+      });
+
+      return {
+        message:
+          'Password reset OTP sent successfully. It expires in 5 minutes.',
+      };
     } catch (error) {
-      this.logger.error('Unable to send OTP', error);
+      this.logger.error('Unable to process forgot password request', error);
       throw error;
     }
   }

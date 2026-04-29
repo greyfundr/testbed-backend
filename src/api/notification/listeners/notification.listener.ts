@@ -30,6 +30,8 @@ export class NotificationListener {
       metadata: {
         email: payload.email,
         phoneNumber: payload.phoneNumber,
+        otp: payload.otp,
+        category: 'welcome',
       },
     });
   }
@@ -41,22 +43,41 @@ export class NotificationListener {
     phoneNumber?: string;
     otp: string;
   }) {
-    this.logger.log(`Handling OTP WhatsApp notification for ${payload.userId}`);
+    this.logger.log(`Handling OTP notification for ${payload.userId}`);
 
-    const title = 'Your Verification Code';
-    const message = `Your GreyFundr security code is ${payload.otp}. This code expires in 5 minutes. Please do not share this with anyone.`;
+    await this.notificationService.notify(payload.userId, 'securityAlerts', {
+      title: 'Your Verification Code',
+      message: `Your GreyFundr security code is ${payload.otp}. This code expires in 5 minutes. Please do not share this with anyone.`,
+      type: 'auth',
+      metadata: {
+        phoneNumber: payload.phoneNumber,
+        email: payload.email,
+        otp: payload.otp,
+        category: 'verifyOtp',
+      },
+    });
+  }
 
-    if (payload.phoneNumber) {
-      await this.notificationService.notify(payload.userId, 'securityAlerts', {
-        title,
-        message,
-        type: 'auth',
-        metadata: {
-          phoneNumber: payload.phoneNumber,
-          email: payload.email,
-        },
-      });
-    }
+  @OnEvent('password.reset.otp')
+  async handlePasswordResetOtpEvent(payload: {
+    userId: string;
+    email: string;
+    phoneNumber?: string;
+    otp: string;
+  }) {
+    this.logger.log(`Handling Password Reset OTP for ${payload.userId}`);
+
+    await this.notificationService.notify(payload.userId, 'securityAlerts', {
+      title: 'Password Reset Verification',
+      message: `Your password reset code is ${payload.otp}. It expires in 5 minutes.`,
+      type: 'auth',
+      metadata: {
+        phoneNumber: payload.phoneNumber,
+        email: payload.email,
+        otp: payload.otp,
+        category: 'passwordReset',
+      },
+    });
   }
 
   @OnEvent('security.login')

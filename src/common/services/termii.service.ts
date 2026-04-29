@@ -19,8 +19,6 @@ export class TermiiService {
 
   async sendSMS(to: string, sms: string): Promise<any> {
     try {
-      const formattedNumber = formatPhoneForTermii(to);
-
       const payload = {
         api_key: this.configService.get<string>('TERMII_API_KEY'),
         to,
@@ -34,6 +32,64 @@ export class TermiiService {
       return response.data;
     } catch (error) {
       this.logger.error(`Termii SMS Failed: ${error.message}`);
+      return null;
+    }
+  }
+
+  async sendEmail(
+    type: string,
+    to: string,
+    subject: string,
+    variables: Record<string, unknown>,
+  ): Promise<any> {
+    try {
+      let template_id;
+
+      switch (type) {
+        case 'welcome':
+          template_id = this.configService.get<string>(
+            'TERMII_WELCOME_EMAIL_TEMPLATE_ID',
+          );
+          break;
+        case 'verifyOtp':
+          template_id = this.configService.get<string>(
+            'TERMII_VERIFY_OTP_EMAIL_TEMPLATE_ID',
+          );
+          break;
+        case 'passwordReset':
+          template_id = this.configService.get<string>(
+            'TERMII_PASSWORD_RESET_EMAIL_TEMPLATE_ID',
+          );
+          break;
+        case 'walletFunding':
+          template_id = this.configService.get<string>(
+            'TERMII_WALLET_FUNDING_EMAIL_TEMPLATE_ID',
+          );
+          break;
+        default:
+          throw new Error(`Unknown email type: ${type}`);
+      }
+
+      const payload = {
+        api_key: this.configService.get<string>('TERMII_API_KEY'),
+        email: to,
+        subject,
+        template_id: template_id,
+        variables,
+        email_configuration_id: this.configService.get<string>(
+          'TERMII_EMAIL_CONFIG_ID',
+        ),
+      };
+
+      const response = await this.axiosInstance.post(
+        '/api/templates/send-email',
+        payload,
+      );
+      return response.data;
+    } catch (error) {
+      this.logger.error(
+        `Termii Email Failed: ${error.response?.data?.message || error.message}`,
+      );
       return null;
     }
   }
