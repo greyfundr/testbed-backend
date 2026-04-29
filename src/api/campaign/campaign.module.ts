@@ -14,7 +14,7 @@ import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Campaign, Donation, CampaignCategory, CampaignLike, CampaignComment]),
+    TypeOrmModule.forFeature([Campaign, Donation, CampaignCategory, CampaignLike, CampaignComment, ]),
     forwardRef(() => WalletModule),
     TransactionModule,
     forwardRef(() => UserModule),

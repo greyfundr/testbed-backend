@@ -18,6 +18,7 @@ import { SplitBillStatus, ParticipantStatus } from 'src/api/split-bill/enums';
 import { Wallet } from 'src/api/wallet/entities';
 import { FriendRequest, Follow, Block } from '../entities';
 import { FriendRequestStatus } from '../enums/user.enum';
+import { instanceToPlain } from 'class-transformer';
 
 @Injectable()
 export class UserService {
@@ -66,7 +67,7 @@ export class UserService {
     });
 
     return {
-      ...user,
+      ...instanceToPlain(user),
       followersCount,
       followingCount,
     };
