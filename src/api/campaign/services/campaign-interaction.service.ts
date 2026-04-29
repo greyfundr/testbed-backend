@@ -7,17 +7,18 @@ import { CampaignStatus } from '../enums/campaign.enum';
 import { CreateCommentDto } from '../dto/campaign-interaction.dto';
 import { NotificationService } from '../../notification/services/notification.service';
 
+import { CampaignRepository } from '../repository/campaign.repository';
+import { UserRepository } from '../../user/repository/user.repository';
+
 @Injectable()
 export class CampaignInteractionService {
   constructor(
-    @InjectRepository(Campaign)
-    private readonly campaignRepository: Repository<Campaign>,
+    private readonly campaignRepository: CampaignRepository,
     @InjectRepository(CampaignLike)
     private readonly likeRepository: Repository<CampaignLike>,
     @InjectRepository(CampaignComment)
     private readonly commentRepository: Repository<CampaignComment>,
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
+    private readonly userRepository: UserRepository,
     private readonly notificationService: NotificationService,
   ) {}
 
