@@ -250,8 +250,6 @@ export class AuthService {
 
       await this.userRepository.save(user);
 
-      await this.smsService.sendSMS(user.phoneNumber, otp);
-
       this.eventEmitter.emit('verify.otp', {
         userId: user.id,
         email: user.email,
