@@ -30,7 +30,6 @@ export class NotificationListener {
       metadata: {
         email: payload.email,
         phoneNumber: payload.phoneNumber,
-        pushToken: payload.pushToken,
       },
     });
   }

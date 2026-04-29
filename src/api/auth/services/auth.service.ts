@@ -109,12 +109,6 @@ export class AuthService {
         userId: user.id,
         email: user.email,
         phoneNumber: user.phoneNumber,
-      });
-
-      this.eventEmitter.emit('user.created', {
-        userId: user.id,
-        email: user.email,
-        phoneNumber: user.phoneNumber,
         otp,
       });
 
