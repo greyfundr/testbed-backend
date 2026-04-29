@@ -23,6 +23,15 @@ export class NotificationService {
     private readonly whatsAppService: WhatsAppService,
   ) {}
 
+  private readonly ALWAYS_INAPP_TYPES = new Set([
+    'security',
+    'kyc',
+    'transaction',
+    'split_bill',
+    'campaign',
+    'event',
+  ]);
+
   async notify(
     userId: string,
     category: keyof NotificationPreferences,
@@ -35,12 +44,13 @@ export class NotificationService {
     if (!prefs) return;
 
     const { title, message, type, metadata } = options;
-    const user = { id: userId } as any;
 
-    if ((prefs as any).inApp) {
+    const forceInApp = type ? this.ALWAYS_INAPP_TYPES.has(type) : false;
+
+    if (forceInApp || (prefs as any).inApp) {
       try {
         await this.notificationRepository.save({
-          user,
+          user: { id: userId },
           title,
           message,
           type,
