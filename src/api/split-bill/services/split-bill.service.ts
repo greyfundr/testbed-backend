@@ -13,6 +13,7 @@ import {
   SplitBillActivity,
   SplitBill,
   SplitBillParticipant,
+  SplitBillComment,
 } from '../entities';
 import { Transaction } from '../../transaction/entities';
 import {
@@ -46,6 +47,8 @@ import {
   GetMyBillsDto,
   GetMyInvitesDto,
   BillPaymentMethod,
+  AddSplitBillCommentDto,
+  EditSplitBillCommentDto,
 } from '../dto/split-bill.dto';
 import { UserRepository } from '../../user/repository';
 import { TransactionRepository } from '../../transaction/repository';
@@ -66,6 +69,8 @@ export class SplitBillService {
     private readonly participantRepo: Repository<SplitBillParticipant>,
     @InjectRepository(SplitBillActivity)
     private readonly activityRepo: Repository<SplitBillActivity>,
+    @InjectRepository(SplitBillComment)
+    private readonly commentRepo: Repository<SplitBillComment>,
     private readonly userRepo: UserRepository,
     private readonly transactionRepo: TransactionRepository,
     private readonly walletService: WalletService,
@@ -123,6 +128,7 @@ export class SplitBillService {
         sourceBillId: dto.sourceBillId ?? null,
         recipientUserId: dto.recipientUserId ?? creatorId,
         isFinalized: false,
+        offers: dto.offers ?? null,
       });
 
       const bill = await qr.manager.save(newBill);
@@ -264,6 +270,7 @@ export class SplitBillService {
         'participants.user.profile',
         'creator',
         'creator.profile',
+        'comments',
       ],
     });
 
@@ -464,6 +471,7 @@ export class SplitBillService {
         updateData.minPaymentAmount = dto.minPaymentAmount;
       if (dto.recipientUserId !== undefined)
         updateData.recipientUserId = dto.recipientUserId;
+      if (dto.offers !== undefined) updateData.offers = dto.offers;
 
       if (Object.keys(updateData).length > 0) {
         await qr.manager.update(SplitBill, billId, updateData);
@@ -2309,6 +2317,163 @@ export class SplitBillService {
     });
 
     return { activities, total, page, totalPages: Math.ceil(total / limit) };
+  }
+
+  async addComment(
+    billId: string,
+    participantId: string,
+    dto: AddSplitBillCommentDto,
+  ): Promise<SplitBillComment> {
+    const participant = await this.participantRepo.findOne({
+      where: { id: participantId, splitBillId: billId },
+      relations: ['splitBill', 'user'],
+    });
+
+    if (!participant) {
+      throw new NotFoundException('Participant not found on this bill');
+    }
+
+    if (participant.status === ParticipantStatus.DECLINED) {
+      throw new ForbiddenException(
+        'You declined this bill and cannot comment on it',
+      );
+    }
+
+    if (participant.splitBill.status === SplitBillStatus.CANCELLED) {
+      throw new BadRequestException('Cannot comment on a cancelled bill');
+    }
+
+    let displayName: string;
+    let displayType: SplitBillComment['displayType'];
+
+    if (participant.isGuest) {
+      displayName = participant.guestName ?? 'Guest';
+      displayType = 'guest';
+    } else if (dto.displayType === 'anonymous') {
+      displayName = 'Anonymous';
+      displayType = 'anonymous';
+    } else if (dto.displayType === 'username') {
+      displayName =
+        participant.user?.username ??
+        `${participant.user?.firstName ?? ''} ${participant.user?.lastName ?? ''}`.trim() ??
+        'Unknown';
+      displayType = 'username';
+    } else {
+      displayName =
+        `${participant.user?.firstName ?? ''} ${participant.user?.lastName ?? ''}`.trim() ||
+        participant.user?.email ||
+        'Unknown';
+      displayType = 'full_name';
+    }
+
+    return this.commentRepo.save(
+      this.commentRepo.create({
+        splitBillId: billId,
+        participantId: participant.id,
+        authorId: participant.userId,
+        guestPhone: participant.guestPhone ?? null,
+        displayName,
+        displayType,
+        content: dto.content.trim(),
+        isPinned: false,
+        isEdited: false,
+      }),
+    );
+  }
+
+  async editComment(
+    commentId: string,
+    participantId: string,
+    dto: EditSplitBillCommentDto,
+  ): Promise<SplitBillComment> {
+    const comment = await this.commentRepo.findOne({
+      where: { id: commentId },
+    });
+
+    if (!comment || comment.deletedAt) {
+      throw new NotFoundException('Comment not found');
+    }
+
+    if (comment.participantId !== participantId) {
+      throw new ForbiddenException('You can only edit your own comments');
+    }
+
+    await this.commentRepo.update(commentId, {
+      content: dto.content.trim(),
+      isEdited: true,
+      editedAt: new Date(),
+    });
+
+    return this.commentRepo.findOne({
+      where: { id: commentId },
+    }) as Promise<SplitBillComment>;
+  }
+
+  async deleteComment(commentId: string, participantId: string): Promise<void> {
+    const comment = await this.commentRepo.findOne({
+      where: { id: commentId },
+      relations: ['splitBill'],
+    });
+
+    if (!comment || comment.deletedAt) {
+      throw new NotFoundException('Comment not found');
+    }
+
+    const isAuthor = comment.participantId === participantId;
+
+    let isCreator = false;
+    if (!isAuthor) {
+      const requestingParticipant = await this.participantRepo.findOne({
+        where: { id: participantId },
+      });
+      isCreator = comment.splitBill.creatorId === requestingParticipant?.userId;
+    }
+
+    if (!isAuthor && !isCreator) {
+      throw new ForbiddenException(
+        'You can only delete your own comments, or moderate as the bill creator',
+      );
+    }
+
+    await this.commentRepo.softDelete(commentId);
+  }
+
+  async getBillComments(
+    billId: string,
+    page = 1,
+    limit = 50,
+  ): Promise<{
+    comments: any[];
+    total: number;
+    page: number;
+    totalPages: number;
+  }> {
+    const [raw, total] = await this.commentRepo
+      .createQueryBuilder('c')
+      .where('c.splitBillId = :billId', { billId })
+      .andWhere('c.deletedAt IS NULL')
+      .orderBy('c.isPinned', 'DESC')
+      .addOrderBy('c.createdAt', 'ASC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+
+    const comments = raw.map((c) => ({
+      id: c.id,
+      content: c.content,
+      displayName: c.displayName,
+      displayType: c.displayType,
+      participantId: c.participantId,
+      authorId: c.authorId,
+      isGuest: c.authorId === null,
+      isPinned: c.isPinned,
+      isEdited: c.isEdited,
+      editedAt: c.editedAt,
+      transactionId: c.transactionId,
+      createdAt: c.createdAt,
+    }));
+
+    return { comments, total, page, totalPages: Math.ceil(total / limit) };
   }
 
   // ─── Private: Compute and Save Shares ────────────────────────────────────────

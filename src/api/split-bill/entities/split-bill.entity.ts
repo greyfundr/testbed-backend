@@ -12,6 +12,13 @@ import { SplitBillParticipant } from './split-bill-participant.entity';
 import { SplitBillActivity } from './split-bill-activity.entity';
 import { SplitMethod, SplitBillStatus } from '../enums/split-bill.enum';
 import { ColumnNumericTransformer } from '../../../common/transformers/column-numeric.transformer';
+import { SplitBillComment } from './split-bill-comment.entity';
+
+export interface SplitBillOffer {
+  type: 'auto' | 'manual';
+  condition: string;
+  reward: string;
+}
 
 @Entity('split_bills')
 @Index(['creatorId', 'status'])
@@ -146,6 +153,12 @@ export class SplitBill extends AbstractEntity {
 
   @OneToMany(() => SplitBillActivity, (a) => a.splitBill, { cascade: true })
   activities: SplitBillActivity[];
+
+  @Column({ type: 'json', nullable: true })
+  offers: SplitBillOffer[] | null;
+
+  @OneToMany(() => SplitBillComment, (c) => c.splitBill)
+  comments: SplitBillComment[];
 
   get remainingAmount(): number {
     return this.totalAmount - this.totalCollected;

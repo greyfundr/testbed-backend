@@ -26,6 +26,8 @@ import {
   GetUserBillsDto,
   GetMyBillsDto,
   GetMyInvitesDto,
+  AddSplitBillCommentDto,
+  EditSplitBillCommentDto,
 } from '../dto';
 import { ShareAdjustment } from '../interfaces';
 import { User } from 'src/api/user/entities';
@@ -387,5 +389,61 @@ export class SplitBillController {
           : 'Partial payment recorded.',
       data: result,
     };
+  }
+
+  @ApiOperation({ summary: 'Add a comment to a split bill' })
+  @Post(':billId/participants/:participantId/comments')
+  @UseGuards(JwtAuthGuard)
+  async addComment(
+    @Param('billId') billId: string,
+    @Param('participantId') participantId: string,
+    @Body() dto: AddSplitBillCommentDto,
+  ) {
+    const comment = await this.splitBillService.addComment(
+      billId,
+      participantId,
+      dto,
+    );
+    return { success: true, data: comment };
+  }
+
+  @ApiOperation({ summary: 'Edit your own comment on a split bill' })
+  @Patch(':billId/participants/:participantId/comments/:commentId')
+  @UseGuards(JwtAuthGuard)
+  async editComment(
+    @Param('participantId') participantId: string,
+    @Param('commentId') commentId: string,
+    @Body() dto: EditSplitBillCommentDto,
+  ) {
+    const comment = await this.splitBillService.editComment(
+      commentId,
+      participantId,
+      dto,
+    );
+    return { success: true, data: comment };
+  }
+
+  @ApiOperation({
+    summary: 'Delete a comment (own or as bill creator/moderator)',
+  })
+  @Delete(':billId/participants/:participantId/comments/:commentId')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async deleteComment(
+    @Param('participantId') participantId: string,
+    @Param('commentId') commentId: string,
+  ) {
+    await this.splitBillService.deleteComment(commentId, participantId);
+    return { success: true, message: 'Comment deleted' };
+  }
+
+  @ApiOperation({ summary: 'Get all comments on a split bill' })
+  @Get(':billId/comments')
+  async getBillComments(
+    @Param('billId') billId: string,
+    @Query('page') page = 1,
+    @Query('limit') limit = 50,
+  ) {
+    return this.splitBillService.getBillComments(billId, +page, +limit);
   }
 }

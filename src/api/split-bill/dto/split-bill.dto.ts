@@ -27,6 +27,7 @@ import {
   MyBillsRole,
   ParticipantStatus,
 } from '../enums/split-bill.enum';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 // export class UserParticipantDto {
 //   @IsIn(['USER'])
@@ -117,6 +118,31 @@ export class RedistributionItemDto {
   value: number;
 }
 
+// export class SplitBillOfferDto {
+//   @IsString()
+//   @IsNotEmpty()
+//   title: string;
+
+//   @IsOptional()
+//   @IsString()
+//   description?: string;
+
+//   @IsNumber()
+//   @Min(0)
+//   value: number;
+// }
+
+class SplitBillOfferDto {
+  @IsEnum(['auto', 'manual'])
+  type: 'auto' | 'manual';
+
+  @IsString()
+  condition: string;
+
+  @IsString()
+  reward: string;
+}
+
 export class CreateSplitBillDto {
   @IsString()
   @MinLength(2)
@@ -185,6 +211,12 @@ export class CreateSplitBillDto {
   @IsOptional()
   @IsUUID()
   recipientUserId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SplitBillOfferDto)
+  offers?: SplitBillOfferDto[];
 }
 
 export class UpdateParticipantDto {
@@ -265,6 +297,12 @@ export class UpdateSplitBillDto {
   @ValidateNested({ each: true })
   @Type(() => UpdateParticipantDto)
   participants?: UpdateParticipantDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SplitBillOfferDto)
+  offers?: SplitBillOfferDto[];
 }
 
 export class AddParticipantDto {
@@ -457,4 +495,48 @@ export class MyBillItem {
   creatorId: string;
   createdAt: Date;
   myShare: MyParticipantSlice;
+}
+
+export type CommentDisplayType = 'full_name' | 'username' | 'anonymous';
+
+export class AddSplitBillCommentDto {
+  @ApiProperty({ description: 'Comment content', maxLength: 2000 })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(2000)
+  content: string;
+
+  @ApiPropertyOptional({
+    description: 'How you want your name to appear on the comment',
+    enum: ['full_name', 'username', 'anonymous'],
+    default: 'full_name',
+  })
+  @IsOptional()
+  @IsIn(['full_name', 'username', 'anonymous'])
+  displayType?: CommentDisplayType = 'full_name';
+}
+
+export class EditSplitBillCommentDto {
+  @ApiProperty({ description: 'Updated comment content', maxLength: 2000 })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(2000)
+  content: string;
+}
+
+export class GetBillCommentsDto {
+  @ApiPropertyOptional({ default: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number = 1;
+
+  @ApiPropertyOptional({ default: 50 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number = 50;
 }

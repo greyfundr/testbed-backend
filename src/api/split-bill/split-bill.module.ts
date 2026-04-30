@@ -2,7 +2,12 @@ import { forwardRef, Module } from '@nestjs/common';
 import { SplitBillController } from './controllers/split-bill.controller';
 import { SplitBillService } from './services/split-bill.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { SplitBill, SplitBillActivity, SplitBillParticipant } from './entities';
+import {
+  SplitBill,
+  SplitBillActivity,
+  SplitBillComment,
+  SplitBillParticipant,
+} from './entities';
 import { UserModule } from '../user/user.module';
 import { WalletModule } from '../wallet/wallet.module';
 import { TransactionModule } from '../transaction/transaction.module';
@@ -15,6 +20,7 @@ import { DynamicLinkModule } from '../dynamic-link/dynamic-link.module';
       SplitBill,
       SplitBillParticipant,
       SplitBillActivity,
+      SplitBillComment,
     ]),
     forwardRef(() => UserModule),
     forwardRef(() => WalletModule),
