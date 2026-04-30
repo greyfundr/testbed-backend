@@ -18,6 +18,7 @@ import {
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { AccountType } from '../user/enums/user.enum';
+import { Transform } from 'class-transformer';
 
 export class SignupDto {
   @ApiProperty({ description: 'Email address', example: 'johndoe@example.com' })
@@ -65,7 +66,7 @@ export class VerifyOtpDto {
   @IsNotEmpty({ message: 'emailOrPhone is required' })
   @IsString({ message: 'emailOrPhone must be a string' })
   @Validate(IsEmailOrPhoneConstraint)
-  emailOrPhone: string;
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
 
   @ApiProperty({ description: 'OTP' })
   @IsNotEmpty({ message: 'OTP is required' })
@@ -77,6 +78,7 @@ export class ResendOtpDto {
     description: 'Email address or phone number',
     example: '+2347042674347',
   })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsNotEmpty({ message: 'Email or phone number is required' })
   @IsString()
   emailOrPhone: string;
@@ -85,6 +87,7 @@ export class ResendOtpDto {
 export class ForgotPasswordDto {
   @IsNotEmpty({ message: 'emailOrPhone is required' })
   @IsString({ message: 'emailOrPhone must be a string' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @Validate(IsEmailOrPhoneConstraint)
   emailOrPhone: string;
 }
