@@ -221,6 +221,8 @@ export class LoginResponseDto extends BaseResponseDto {
 export class VerifyResetOtpDto {
   @IsString()
   @MinLength(1)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Validate(IsEmailOrPhoneConstraint)
   emailOrPhone: string;
 
   @IsString()
