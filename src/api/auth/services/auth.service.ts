@@ -36,6 +36,7 @@ import { WalletService } from '../../wallet/services';
 import { AccountType } from '../../user/enums/user.enum';
 import * as crypto from 'crypto';
 import { WhatsAppService } from 'src/common/services/whatsapp.service';
+import { Not } from 'typeorm';
 
 @Injectable()
 export class AuthService {
@@ -480,6 +481,32 @@ export class AuthService {
     });
   }
 
+  // async checkUsername(username: string): Promise<{ exists: boolean }> {
+  //   const user = await this.userRepository.findOne({
+  //     where: { username: username.toLowerCase() },
+  //   });
+
+  //   return { exists: !!user };
+  // }
+
+  // users.service.ts
+
+  async checkUsername(
+    username: string,
+    excludeUserId?: string,
+  ): Promise<{ exists: boolean }> {
+    const normalizedUsername = username.toLowerCase();
+
+    const user = await this.userRepository.findOne({
+      where: {
+        username: normalizedUsername,
+        ...(excludeUserId && { id: Not(excludeUserId) }),
+      },
+    });
+
+    return { exists: !!user };
+  }
+
   async submitBasicInfo(params: SubmitBasicInfoDto, userId: string) {
     const user = await this.userRepository.findOne({
       where: { id: userId },
@@ -487,15 +514,45 @@ export class AuthService {
 
     if (!user) throw new NotFoundException('Account not found');
 
+    if (
+      params.username &&
+      params.username.toLowerCase() !== user.username?.toLowerCase()
+    ) {
+      const { exists } = await this.checkUsername(params.username, userId);
+      if (exists) throw new BadRequestException('Username is already taken');
+    }
+
     user.firstName = params.firstName;
     user.lastName = params.lastName;
     user.agreeToTerms = params.agreeToTerms;
-    user.username = params.username;
+    user.username = params.username.toLowerCase();
     user.hasSubmittedBasicInfo = true;
     user.dateOfBirth = new Date(params.dateOfBirth);
 
     await this.userRepository.save(user);
   }
+
+  // async submitBasicInfo(params: SubmitBasicInfoDto, userId: string) {
+  //   const user = await this.userRepository.findOne({
+  //     where: { id: userId },
+  //   });
+
+  //   if (!user) throw new NotFoundException('Account not found');
+
+  //   if (params.username && params.username !== user.username) {
+  //     const { exists } = await this.checkUsername(params.username);
+  //     if (exists) throw new BadRequestException('Username is already taken');
+  //   }
+
+  //   user.firstName = params.firstName;
+  //   user.lastName = params.lastName;
+  //   user.agreeToTerms = params.agreeToTerms;
+  //   user.username = params.username;
+  //   user.hasSubmittedBasicInfo = true;
+  //   user.dateOfBirth = new Date(params.dateOfBirth);
+
+  //   await this.userRepository.save(user);
+  // }
 
   async completeKyc(params: CompleteKycDto, userId: string) {
     const user = await this.userRepository.findOne({

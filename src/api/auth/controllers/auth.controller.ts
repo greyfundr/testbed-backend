@@ -7,6 +7,8 @@ import {
   HttpCode,
   Get,
   HttpStatus,
+  Query,
+  BadRequestException,
 } from '@nestjs/common';
 import { AuthService } from '../services/auth.service';
 import {
@@ -151,6 +153,19 @@ export class AuthController {
       success: true,
       message: 'Password changed successfully',
     };
+  }
+
+  @ApiOperation({ summary: 'Check if a username is already taken' })
+  @Get('check-username')
+  @UseGuards(JwtAuthGuard)
+  async checkUsername(
+    @CurrentUser() user: User,
+    @Query('username') username: string,
+  ) {
+    if (!username) {
+      throw new BadRequestException('Username query parameter is required');
+    }
+    return await this.authService.checkUsername(username, user?.id);
   }
 
   @ApiOperation({ summary: 'Submit basic information' })
