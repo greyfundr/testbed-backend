@@ -65,8 +65,9 @@ export class IsEmailOrPhoneConstraint implements ValidatorConstraintInterface {
 export class VerifyOtpDto {
   @IsNotEmpty({ message: 'emailOrPhone is required' })
   @IsString({ message: 'emailOrPhone must be a string' })
-  @Validate(IsEmailOrPhoneConstraint)
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Validate(IsEmailOrPhoneConstraint)
+  emailOrPhone: string;
 
   @ApiProperty({ description: 'OTP' })
   @IsNotEmpty({ message: 'OTP is required' })
