@@ -19,6 +19,7 @@ import { Wallet } from 'src/api/wallet/entities';
 import { FriendRequest, Follow, Block } from '../entities';
 import { FriendRequestStatus } from '../enums/user.enum';
 import { instanceToPlain } from 'class-transformer';
+import { AuthService } from 'src/api/auth/services';
 
 @Injectable()
 export class UserService {
@@ -26,6 +27,7 @@ export class UserService {
     private readonly userRepository: UserRepository,
     private readonly profileRepository: ProfileRepository,
     private readonly dataSource: DataSource,
+    private readonly authService: AuthService,
   ) {}
 
   async findOneById(id: string) {
@@ -197,6 +199,16 @@ export class UserService {
     await queryRunner.startTransaction();
 
     try {
+      if (
+        updateProfileDto.username &&
+        updateProfileDto.username.toLowerCase() !== user.username?.toLowerCase()
+      ) {
+        const { exists } = await this.authService.checkUsername(
+          updateProfileDto.username,
+          user.id,
+        );
+        if (exists) throw new BadRequestException('Username is already taken');
+      }
       // Update User fields
       if (updateProfileDto.firstName)
         user.firstName = updateProfileDto.firstName;

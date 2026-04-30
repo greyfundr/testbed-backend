@@ -19,6 +19,7 @@ import { UserRepository, ProfileRepository, KycRepository } from './repository';
 import { SettingsModule } from '../settings/settings.module';
 import { NotificationModule } from '../notification/notification.module';
 import { UserKycService } from 'src/common/services/kyc-verification.service';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { UserKycService } from 'src/common/services/kyc-verification.service';
       Block,
     ]),
     SettingsModule,
+    forwardRef(() => AuthModule),
     forwardRef(() => NotificationModule),
   ],
   controllers: [

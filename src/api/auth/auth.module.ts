@@ -35,6 +35,6 @@ import { WhatsAppService } from '../../common/services/whatsapp.service';
     OtpAuthService,
     WhatsAppService,
   ],
-  exports: [OtpAuthService],
+  exports: [OtpAuthService, AuthService],
 })
 export class AuthModule {}
