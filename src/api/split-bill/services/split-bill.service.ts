@@ -887,22 +887,21 @@ export class SplitBillService {
         myRole: isCreator ? 'creator' : 'participant',
         allowPartialPayment: bill.allowPartialPayment,
         minPaymentAmount: bill.minPaymentAmount,
-        myShare:
-          !isCreator && myParticipant
-            ? {
-                participantId: myParticipant.id,
-                role: myParticipant.role,
-                status: myParticipant.status,
-                amountOwed: myParticipant.amountOwed,
-                amountPaid: myParticipant.amountPaid,
-                amountRemaining: myParticipant.amountRemaining,
-                percentage: myParticipant.percentage,
-                inviteCode: myParticipant.inviteCode,
-                paymentLink: myParticipant.paymentLink,
-                acceptedAt: myParticipant.acceptedAt,
-                fullyPaidAt: myParticipant.fullyPaidAt,
-              }
-            : null,
+        myShare: myParticipant
+          ? {
+              participantId: myParticipant.id,
+              role: myParticipant.role,
+              status: myParticipant.status,
+              amountOwed: myParticipant.amountOwed,
+              amountPaid: myParticipant.amountPaid,
+              amountRemaining: myParticipant.amountRemaining,
+              percentage: myParticipant.percentage,
+              inviteCode: myParticipant.inviteCode,
+              paymentLink: myParticipant.paymentLink,
+              acceptedAt: myParticipant.acceptedAt,
+              fullyPaidAt: myParticipant.fullyPaidAt,
+            }
+          : null,
       };
     });
 
