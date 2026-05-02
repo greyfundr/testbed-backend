@@ -49,6 +49,7 @@ import {
   BillPaymentMethod,
   AddSplitBillCommentDto,
   EditSplitBillCommentDto,
+  BillQueryDto,
 } from '../dto/split-bill.dto';
 import { UserRepository } from '../../user/repository';
 import { TransactionRepository } from '../../transaction/repository';
@@ -377,6 +378,466 @@ export class SplitBillService {
     return { bills: shaped, total, page, totalPages: Math.ceil(total / limit) };
   }
 
+  // async updateBill(
+  //   billId: string,
+  //   actorId: string,
+  //   dto: UpdateSplitBillDto,
+  // ): Promise<SplitBill> {
+  //   const qr = this.dataSource.createQueryRunner();
+  //   await qr.connect();
+  //   await qr.startTransaction();
+
+  //   try {
+  //     const bill = await qr.manager.findOne(SplitBill, {
+  //       where: { id: billId },
+  //       relations: ['participants'],
+  //       lock: { mode: 'pessimistic_write' },
+  //     });
+
+  //     if (!bill) throw new NotFoundException('Bill not found');
+  //     if (bill.creatorId !== actorId)
+  //       throw new ForbiddenException(
+  //         'Only the bill creator can update this bill',
+  //       );
+  //     if (bill.isFinalized)
+  //       throw new BadRequestException('Cannot update a finalized bill');
+  //     if (
+  //       [SplitBillStatus.SETTLED, SplitBillStatus.CANCELLED].includes(
+  //         bill.status,
+  //       )
+  //     )
+  //       throw new BadRequestException(`Cannot update a ${bill.status} bill`);
+
+  //     const effectiveAmount = dto.amount ?? bill.totalAmount;
+  //     const effectiveMethod = dto.splitMethod ?? bill.splitMethod;
+  //     const amountChanging =
+  //       dto.amount !== undefined && dto.amount !== bill.totalAmount;
+  //     const methodChanging =
+  //       dto.splitMethod !== undefined && dto.splitMethod !== bill.splitMethod;
+  //     const participantsChanging = dto.participants !== undefined;
+
+  //     const paidParticipants = bill.participants.filter(
+  //       (p) => p.amountPaid > 0,
+  //     );
+
+  //     if (participantsChanging) {
+  //       const incomingUserIds = new Set(
+  //         dto.participants!.map((p) => p.userId).filter(Boolean),
+  //       );
+  //       const incomingPhones = new Set(
+  //         dto.participants!.map((p) => p.phone).filter(Boolean),
+  //       );
+
+  //       for (const p of paidParticipants) {
+  //         const stillPresent = p.userId
+  //           ? incomingUserIds.has(p.userId)
+  //           : incomingPhones.has(p.guestPhone!);
+
+  //         if (!stillPresent) {
+  //           throw new BadRequestException(
+  //             `Cannot remove participant ${p.userId ?? p.guestPhone} — they have already made a payment of ₦${p.amountPaid}.`,
+  //           );
+  //         }
+  //       }
+  //     }
+
+  //     if (paidParticipants.length > 0 && (amountChanging || methodChanging)) {
+  //       const isManualReassignment =
+  //         effectiveMethod === SplitMethod.MANUAL &&
+  //         participantsChanging &&
+  //         dto.participants!.every((p) => p.amount !== undefined);
+
+  //       if (!isManualReassignment) {
+  //         throw new BadRequestException(
+  //           'Cannot change amount or split method after payments have been made ' +
+  //             'unless you provide explicit manual amounts for all participants.',
+  //         );
+  //       }
+  //     }
+
+  //     const updateData: Partial<SplitBill> = {};
+  //     if (dto.title !== undefined) updateData.title = dto.title;
+  //     if (dto.description !== undefined)
+  //       updateData.description = dto.description;
+  //     if (dto.amount !== undefined) updateData.totalAmount = dto.amount;
+  //     if (dto.splitMethod !== undefined)
+  //       updateData.splitMethod = dto.splitMethod;
+  //     if (dto.dueDate !== undefined) updateData.dueDate = new Date(dto.dueDate);
+  //     if (dto.imageUrl !== undefined) updateData.imageUrl = dto.imageUrl;
+  //     if (dto.billReceipt !== undefined)
+  //       updateData.billReceipt = dto.billReceipt;
+  //     if (dto.allowPartialPayment !== undefined)
+  //       updateData.allowPartialPayment = dto.allowPartialPayment;
+  //     if (dto.minPaymentAmount !== undefined)
+  //       updateData.minPaymentAmount = dto.minPaymentAmount;
+  //     if (dto.recipientUserId !== undefined)
+  //       updateData.recipientUserId = dto.recipientUserId;
+  //     if (dto.offers !== undefined) updateData.offers = dto.offers;
+
+  //     if (Object.keys(updateData).length > 0) {
+  //       await qr.manager.update(SplitBill, billId, updateData);
+  //     }
+
+  //     if (participantsChanging) {
+  //       const currentParticipants = await qr.manager.find(
+  //         SplitBillParticipant,
+  //         {
+  //           where: { splitBillId: billId },
+  //         },
+  //       );
+
+  //       const incomingKeys = new Set(
+  //         dto.participants!.map((p) =>
+  //           p.userId ? `user:${p.userId}` : `guest:${p.phone}`,
+  //         ),
+  //       );
+
+  //       const toRemove = currentParticipants.filter((p) => {
+  //         const key = p.userId ? `user:${p.userId}` : `guest:${p.guestPhone}`;
+  //         return !incomingKeys.has(key);
+  //       });
+
+  //       if (toRemove.length) {
+  //         await qr.manager.softDelete(
+  //           SplitBillParticipant,
+  //           toRemove.map((p) => p.id),
+  //         );
+  //       }
+
+  //       const mappedParticipants = dto.participants!.map((p) => ({
+  //         type: p.type ?? (p.userId ? 'USER' : 'GUEST'),
+  //         userId: p.userId,
+  //         name: p.name,
+  //         phone: p.phone,
+  //         percentage: p.percentage,
+  //         amount: p.amount,
+  //       }));
+
+  //       const validatedParticipants = await this.validateParticipants(
+  //         mappedParticipants,
+  //         effectiveMethod,
+  //       );
+
+  //       const brandNewUserIds: string[] = [];
+  //       const brandNewGuests: {
+  //         guestPhone: string;
+  //         guestName: string;
+  //         pRow?: SplitBillParticipant;
+  //       }[] = [];
+
+  //       if (effectiveMethod === SplitMethod.MANUAL) {
+  //         const totalAssigned = dto.participants!.reduce(
+  //           (sum, p) => sum + (p.amount ?? 0),
+  //           0,
+  //         );
+
+  //         if (Math.abs(totalAssigned - effectiveAmount) > 0.001) {
+  //           throw new BadRequestException(
+  //             `Manual split amounts must sum to ₦${effectiveAmount}. Got ₦${totalAssigned}.`,
+  //           );
+  //         }
+
+  //         for (const p of dto.participants!) {
+  //           const existing = currentParticipants.find((cp) =>
+  //             p.userId ? cp.userId === p.userId : cp.guestPhone === p.phone,
+  //           );
+
+  //           const isNew = !existing;
+  //           const amountOwed = p.amount!;
+  //           const alreadyPaid = existing?.amountPaid ?? 0;
+  //           const amountDue = Math.max(0, amountOwed - alreadyPaid);
+
+  //           await qr.manager.upsert(
+  //             SplitBillParticipant,
+  //             {
+  //               ...(existing ?? {}),
+  //               splitBillId: billId,
+  //               userId: p.userId ?? null,
+  //               guestName: p.name ?? null,
+  //               guestPhone: p.phone ?? null,
+  //               percentage: null,
+  //               role: existing?.role ?? ParticipantRole.PARTICIPANT,
+  //               status: isNew
+  //                 ? ParticipantStatus.INVITED
+  //                 : (existing?.status ?? ParticipantStatus.INVITED),
+  //               amountOwed,
+  //               amountPaid: alreadyPaid,
+  //               amountRemaining: amountDue,
+  //               balanceAdjustment: existing?.balanceAdjustment ?? 0,
+  //               inviteCode: existing?.inviteCode ?? this.generateInviteCode(),
+  //               inviteExpiresAt:
+  //                 existing?.inviteExpiresAt ??
+  //                 new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+  //               invitedAt: existing?.invitedAt ?? new Date(),
+  //             },
+  //             p.userId
+  //               ? ['splitBillId', 'userId']
+  //               : ['splitBillId', 'guestPhone'],
+  //           );
+
+  //           if (isNew) {
+  //             if (p.userId) {
+  //               brandNewUserIds.push(p.userId);
+  //             } else if (p.phone) {
+  //               brandNewGuests.push({
+  //                 guestPhone: p.phone,
+  //                 guestName: p.name ?? 'Friend',
+  //               });
+  //             }
+  //           }
+  //         }
+  //       } else {
+  //         for (const p of validatedParticipants) {
+  //           const existingRow = currentParticipants.find((cp) =>
+  //             p.userId
+  //               ? cp.userId === p.userId
+  //               : cp.guestPhone === p.guestPhone,
+  //           );
+
+  //           if (!existingRow) {
+  //             await qr.manager.save(
+  //               qr.manager.create(SplitBillParticipant, {
+  //                 splitBillId: billId,
+  //                 userId: p.userId ?? null,
+  //                 guestName: p.guestName ?? null,
+  //                 guestPhone: p.guestPhone ?? null,
+  //                 guestEmail: p.guestEmail ?? null,
+  //                 role: ParticipantRole.PARTICIPANT,
+  //                 status: ParticipantStatus.INVITED,
+  //                 amountOwed: 0,
+  //                 amountPaid: 0,
+  //                 amountRemaining: 0,
+  //                 balanceAdjustment: 0,
+  //                 percentage: p.percentage ?? null,
+  //                 inviteCode: this.generateInviteCode(),
+  //                 inviteExpiresAt: new Date(
+  //                   Date.now() + 7 * 24 * 60 * 60 * 1000,
+  //                 ),
+  //                 invitedAt: new Date(),
+  //                 paymentMethod: null,
+  //                 walletId: null,
+  //               }),
+  //             );
+
+  //             if (p.userId) {
+  //               brandNewUserIds.push(p.userId);
+  //             } else if (p.guestPhone) {
+  //               brandNewGuests.push({
+  //                 guestPhone: p.guestPhone,
+  //                 guestName: p.guestName ?? 'Friend',
+  //               });
+  //             }
+  //           } else if (
+  //             p.percentage !== undefined &&
+  //             effectiveMethod === SplitMethod.PERCENTAGE
+  //           ) {
+  //             await qr.manager.update(SplitBillParticipant, existingRow.id, {
+  //               percentage: p.percentage,
+  //             });
+  //           }
+  //         }
+
+  //         await qr.manager.update(SplitBill, billId, {
+  //           totalParticipants: validatedParticipants.length,
+  //         });
+
+  //         await this.computeAndSaveShares(
+  //           billId,
+  //           validatedParticipants,
+  //           effectiveMethod,
+  //           qr,
+  //           effectiveAmount,
+  //         );
+
+  //         // const updatedParticipants = await qr.manager.find(
+  //         //   SplitBillParticipant,
+  //         //   {
+  //         //     where: { splitBillId: billId },
+  //         //   },
+  //         // );
+
+  //         // const newUserIds = validatedParticipants
+  //         //   .filter(
+  //         //     (p) =>
+  //         //       p.userId &&
+  //         //       !currentParticipants.some((cp) => cp.userId === p.userId),
+  //         //   )
+  //         //   .map((p) => p.userId!);
+
+  //         // if (newUserIds.length > 0) {
+  //         //   const newUserDetails = await this.userRepo.findAll({
+  //         //     where: { id: In(newUserIds) },
+  //         //     select: ['id', 'email', 'firstName', 'lastName'],
+  //         //   });
+
+  //         //   const creator = await this.userRepo.findOne({
+  //         //     where: { id: actorId },
+  //         //     select: ['firstName', 'lastName', 'email'],
+  //         //   });
+  //         //   const creatorName = creator
+  //         //     ? `${creator.firstName ?? ''} ${creator.lastName ?? ''}`.trim() ||
+  //         //       creator.email
+  //         //     : 'Someone';
+
+  //         //   for (const u of newUserDetails) {
+  //         //     const pRow = updatedParticipants.find((p) => p.userId === u.id);
+  //         //     if (!pRow) continue;
+
+  //         //     this.eventEmitter.emit('split_bill.participant_added', {
+  //         //       userId: u.id,
+  //         //       email: u.email,
+  //         //       billTitle: bill.title,
+  //         //       billId: bill.id,
+  //         //       participantId: pRow.id,
+  //         //       amountOwed: pRow.amountOwed,
+  //         //       currency: bill.currency,
+  //         //       creatorName,
+  //         //     });
+  //         //   }
+  //         // }
+  //       }
+
+  //       await this.logActivity(qr, {
+  //         splitBillId: billId,
+  //         actorId,
+  //         actionType: ActivityActionType.UPDATED,
+  //         description: 'Bill details updated',
+  //         billStatusAtTime: bill.status,
+  //         metadata: {
+  //           updatedFields: [
+  //             ...Object.keys(updateData),
+  //             ...(participantsChanging ? ['participants'] : []),
+  //           ],
+  //         },
+  //       });
+
+  //       if (brandNewUserIds.length > 0 || brandNewGuests.length > 0) {
+  //         const creator = await this.userRepo.findOne({
+  //           where: { id: actorId },
+  //           select: ['firstName', 'lastName', 'email'],
+  //         });
+  //         const creatorName = creator
+  //           ? `${creator.firstName ?? ''} ${creator.lastName ?? ''}`.trim() ||
+  //             creator.email
+  //           : 'Someone';
+
+  //         const finalParticipants = await this.participantRepo.find({
+  //           where: { splitBillId: billId },
+  //         });
+
+  //         if (brandNewUserIds.length > 0) {
+  //           const newUserDetails = await this.userRepo.findAll({
+  //             where: { id: In(brandNewUserIds) },
+  //             select: ['id', 'email', 'phoneNumber', 'fcmToken'],
+  //           });
+
+  //           for (const u of newUserDetails) {
+  //             const pRow = finalParticipants.find((p) => p.userId === u.id);
+  //             if (!pRow) continue;
+
+  //             const { shortUrl } = await this.dynamicLinkService.forSplitBill(
+  //               bill.id,
+  //               bill.title,
+  //             );
+
+  //             this.eventEmitter.emit('split_bill.participant_added', {
+  //               userId: u.id,
+  //               email: u.email,
+  //               billTitle: bill.title,
+  //               billId: bill.id,
+  //               participantId: pRow.id,
+  //               amountOwed: pRow.amountOwed,
+  //               currency: bill.currency,
+  //               creatorName,
+  //               phoneNumber: u.phoneNumber,
+  //               pushToken: u.fcmToken,
+  //               paymentLink: shortUrl,
+  //             });
+  //           }
+  //         }
+
+  //         for (const guest of brandNewGuests) {
+  //           const pRow = finalParticipants.find(
+  //             (p) => p.guestPhone === guest.guestPhone,
+  //           );
+  //           if (!pRow) continue;
+
+  //           const { shortUrl } =
+  //             await this.dynamicLinkService.forSplitBillInvite(
+  //               bill.id,
+  //               pRow.inviteCode as string,
+  //               bill.title,
+  //             );
+
+  //           this.eventEmitter.emit('split_bill.guest_invited', {
+  //             guestName: guest.guestName,
+  //             guestPhone: guest.guestPhone,
+  //             billTitle: bill.title,
+  //             amountOwed: pRow.amountOwed,
+  //             currency: bill.currency,
+  //             creatorName,
+  //             paymentLink: shortUrl,
+  //           });
+  //         }
+  //       }
+
+  //       return this.getBillById(billId, actorId);
+  //     } else if (amountChanging || methodChanging) {
+  //       if (effectiveMethod === SplitMethod.MANUAL) {
+  //         throw new BadRequestException(
+  //           'Cannot auto-recalculate a MANUAL split when changing amount or method. Provide an explicit participants list with amounts.',
+  //         );
+  //       }
+
+  //       const currentParticipants = await qr.manager.find(
+  //         SplitBillParticipant,
+  //         {
+  //           where: { splitBillId: billId },
+  //         },
+  //       );
+
+  //       const participantInputs = currentParticipants.map((p) => ({
+  //         type: p.userId ? 'USER' : 'GUEST',
+  //         userId: p.userId ?? undefined,
+  //         guestName: p.guestName ?? undefined,
+  //         guestPhone: p.guestPhone ?? undefined,
+  //         percentage: p.percentage ?? undefined,
+  //       }));
+
+  //       await this.computeAndSaveShares(
+  //         billId,
+  //         participantInputs as any,
+  //         effectiveMethod,
+  //         qr,
+  //         effectiveAmount,
+  //       );
+  //     }
+
+  //     await this.logActivity(qr, {
+  //       splitBillId: billId,
+  //       actorId,
+  //       actionType: ActivityActionType.UPDATED,
+  //       description: 'Bill details updated',
+  //       billStatusAtTime: bill.status,
+  //       metadata: {
+  //         updatedFields: [
+  //           ...Object.keys(updateData),
+  //           ...(participantsChanging ? ['participants'] : []),
+  //         ],
+  //       },
+  //     });
+
+  //     await qr.commitTransaction();
+  //     return this.getBillById(billId, actorId);
+  //   } catch (err) {
+  //     console.log('error', err);
+  //     await qr.rollbackTransaction();
+  //     throw err;
+  //   } finally {
+  //     await qr.release();
+  //   }
+  // }
+
   async updateBill(
     billId: string,
     actorId: string,
@@ -477,6 +938,12 @@ export class SplitBillService {
         await qr.manager.update(SplitBill, billId, updateData);
       }
 
+      const brandNewUserIds: string[] = [];
+      const brandNewGuests: {
+        guestPhone: string;
+        guestName: string;
+      }[] = [];
+
       if (participantsChanging) {
         const currentParticipants = await qr.manager.find(
           SplitBillParticipant,
@@ -534,6 +1001,7 @@ export class SplitBillService {
               p.userId ? cp.userId === p.userId : cp.guestPhone === p.phone,
             );
 
+            const isNew = !existing;
             const amountOwed = p.amount!;
             const alreadyPaid = existing?.amountPaid ?? 0;
             const amountDue = Math.max(0, amountOwed - alreadyPaid);
@@ -548,7 +1016,9 @@ export class SplitBillService {
                 guestPhone: p.phone ?? null,
                 percentage: null,
                 role: existing?.role ?? ParticipantRole.PARTICIPANT,
-                status: existing?.status ?? ParticipantStatus.INVITED,
+                status: isNew
+                  ? ParticipantStatus.INVITED
+                  : (existing?.status ?? ParticipantStatus.INVITED),
                 amountOwed,
                 amountPaid: alreadyPaid,
                 amountRemaining: amountDue,
@@ -563,7 +1033,22 @@ export class SplitBillService {
                 ? ['splitBillId', 'userId']
                 : ['splitBillId', 'guestPhone'],
             );
+
+            if (isNew) {
+              if (p.userId) {
+                brandNewUserIds.push(p.userId);
+              } else if (p.phone) {
+                brandNewGuests.push({
+                  guestPhone: p.phone,
+                  guestName: p.name ?? 'Friend',
+                });
+              }
+            }
           }
+
+          await qr.manager.update(SplitBill, billId, {
+            totalParticipants: dto.participants!.length,
+          });
         } else {
           for (const p of validatedParticipants) {
             const existingRow = currentParticipants.find((cp) =>
@@ -581,9 +1066,7 @@ export class SplitBillService {
                   guestPhone: p.guestPhone ?? null,
                   guestEmail: p.guestEmail ?? null,
                   role: ParticipantRole.PARTICIPANT,
-                  status: p.userId
-                    ? ParticipantStatus.INVITED
-                    : ParticipantStatus.INVITED,
+                  status: ParticipantStatus.INVITED,
                   amountOwed: 0,
                   amountPaid: 0,
                   amountRemaining: 0,
@@ -598,6 +1081,15 @@ export class SplitBillService {
                   walletId: null,
                 }),
               );
+
+              if (p.userId) {
+                brandNewUserIds.push(p.userId);
+              } else if (p.guestPhone) {
+                brandNewGuests.push({
+                  guestPhone: p.guestPhone,
+                  guestName: p.guestName ?? 'Friend',
+                });
+              }
             } else if (
               p.percentage !== undefined &&
               effectiveMethod === SplitMethod.PERCENTAGE
@@ -608,9 +1100,8 @@ export class SplitBillService {
             }
           }
 
-          const newCount = validatedParticipants.length;
           await qr.manager.update(SplitBill, billId, {
-            totalParticipants: newCount,
+            totalParticipants: validatedParticipants.length,
           });
 
           await this.computeAndSaveShares(
@@ -620,53 +1111,6 @@ export class SplitBillService {
             qr,
             effectiveAmount,
           );
-
-          const updatedParticipants = await qr.manager.find(
-            SplitBillParticipant,
-            {
-              where: { splitBillId: billId },
-            },
-          );
-
-          const newUserIds = validatedParticipants
-            .filter(
-              (p) =>
-                p.userId &&
-                !currentParticipants.some((cp) => cp.userId === p.userId),
-            )
-            .map((p) => p.userId!);
-
-          if (newUserIds.length > 0) {
-            const newUserDetails = await this.userRepo.findAll({
-              where: { id: In(newUserIds) },
-              select: ['id', 'email', 'firstName', 'lastName'],
-            });
-
-            const creator = await this.userRepo.findOne({
-              where: { id: actorId },
-              select: ['firstName', 'lastName', 'email'],
-            });
-            const creatorName = creator
-              ? `${creator.firstName ?? ''} ${creator.lastName ?? ''}`.trim() ||
-                creator.email
-              : 'Someone';
-
-            for (const u of newUserDetails) {
-              const pRow = updatedParticipants.find((p) => p.userId === u.id);
-              if (!pRow) continue;
-
-              this.eventEmitter.emit('split_bill.participant_added', {
-                userId: u.id,
-                email: u.email,
-                billTitle: bill.title,
-                billId: bill.id,
-                participantId: pRow.id,
-                amountOwed: pRow.amountOwed,
-                currency: bill.currency,
-                creatorName,
-              });
-            }
-          }
         }
       } else if (amountChanging || methodChanging) {
         if (effectiveMethod === SplitMethod.MANUAL) {
@@ -714,10 +1158,90 @@ export class SplitBillService {
       });
 
       await qr.commitTransaction();
+
+      if (brandNewUserIds.length > 0 || brandNewGuests.length > 0) {
+        try {
+          const creator = await this.userRepo.findOne({
+            where: { id: actorId },
+            select: ['firstName', 'lastName', 'email'],
+          });
+          const creatorName = creator
+            ? `${creator.firstName ?? ''} ${creator.lastName ?? ''}`.trim() ||
+              creator.email
+            : 'Someone';
+
+          const finalParticipants = await this.participantRepo.find({
+            where: { splitBillId: billId },
+          });
+
+          if (brandNewUserIds.length > 0) {
+            const newUserDetails = await this.userRepo.findAll({
+              where: { id: In(brandNewUserIds) },
+              select: ['id', 'email', 'phoneNumber', 'fcmToken'],
+            });
+
+            for (const u of newUserDetails) {
+              const pRow = finalParticipants.find((p) => p.userId === u.id);
+              if (!pRow) continue;
+
+              const { shortUrl } = await this.dynamicLinkService.forSplitBill(
+                bill.id,
+                bill.title,
+              );
+
+              this.eventEmitter.emit('split_bill.participant_added', {
+                userId: u.id,
+                email: u.email,
+                billTitle: bill.title,
+                billId: bill.id,
+                participantId: pRow.id,
+                amountOwed: pRow.amountOwed,
+                currency: bill.currency,
+                creatorName,
+                phoneNumber: u.phoneNumber,
+                pushToken: u.fcmToken,
+                paymentLink: shortUrl,
+              });
+            }
+          }
+
+          for (const guest of brandNewGuests) {
+            const pRow = finalParticipants.find(
+              (p) => p.guestPhone === guest.guestPhone,
+            );
+            if (!pRow) continue;
+
+            const { shortUrl } =
+              await this.dynamicLinkService.forSplitBillInvite(
+                bill.id,
+                pRow.inviteCode as string,
+                bill.title,
+              );
+
+            this.eventEmitter.emit('split_bill.guest_invited', {
+              guestName: guest.guestName,
+              guestPhone: guest.guestPhone,
+              billTitle: bill.title,
+              amountOwed: pRow.amountOwed,
+              currency: bill.currency,
+              creatorName,
+              paymentLink: shortUrl,
+            });
+          }
+        } catch (notificationErr) {
+          console.error(
+            'Bill updated successfully but notifications failed:',
+            notificationErr,
+          );
+        }
+      }
+
       return this.getBillById(billId, actorId);
     } catch (err) {
       console.log('error', err);
-      await qr.rollbackTransaction();
+      if (qr.isTransactionActive) {
+        await qr.rollbackTransaction();
+      }
       throw err;
     } finally {
       await qr.release();
@@ -2473,6 +2997,93 @@ export class SplitBillService {
     }));
 
     return { comments, total, page, totalPages: Math.ceil(total / limit) };
+  }
+
+  async queryBill(
+    billId: string,
+    userId: string,
+    dto: BillQueryDto,
+  ): Promise<void> {
+    const participant = await this.participantRepo.findOne({
+      where: { splitBillId: billId, userId },
+      relations: ['splitBill'],
+    });
+
+    if (!participant) {
+      throw new NotFoundException('You are not a participant on this bill');
+    }
+
+    if (participant.status === ParticipantStatus.DECLINED) {
+      throw new BadRequestException(
+        'You have declined this bill. You cannot query it.',
+      );
+    }
+
+    if (participant.status === ParticipantStatus.PAID) {
+      throw new BadRequestException(
+        'Your share is already paid. Use the comment section for queries.',
+      );
+    }
+
+    const bill = participant.splitBill;
+
+    await this.activityRepo.save({
+      splitBillId: billId,
+      actorId: userId,
+      actionType: ActivityActionType.QUERY_RAISED,
+      participantId: participant.id,
+      description: dto.message,
+      billStatusAtTime: bill.status,
+      metadata: {
+        participantStatus: participant.status,
+        amountOwed: participant.amountOwed,
+        currency: bill.currency,
+      },
+    });
+
+    const queryingUser = await this.userRepo.findOne({
+      where: { id: userId },
+      select: ['id', 'firstName', 'lastName', 'email', 'phoneNumber'],
+    });
+
+    const participantName = queryingUser
+      ? `${queryingUser.firstName ?? ''} ${queryingUser.lastName ?? ''}`.trim() ||
+        queryingUser.email
+      : 'A participant';
+
+    this.eventEmitter.emit('split_bill.query_raised', {
+      creatorId: bill.creatorId,
+      participantName,
+      billTitle: bill.title,
+      billId,
+      participantId: participant.id,
+      message: dto.message,
+      amountOwed: participant.amountOwed,
+      currency: bill.currency,
+    });
+
+    this.logger.log(`[SplitBill] Query raised by ${userId} on bill ${billId}`);
+  }
+
+  async getBillQueries(billId: string, actorId: string, page = 1, limit = 50) {
+    const bill = await this.billRepo.findOne({ where: { id: billId } });
+    if (!bill) throw new NotFoundException('Bill not found');
+
+    if (bill.creatorId !== actorId) {
+      throw new ForbiddenException('Only the bill creator can view queries');
+    }
+
+    const [queries, total] = await this.activityRepo.findAndCount({
+      where: {
+        splitBillId: billId,
+        actionType: ActivityActionType.QUERY_RAISED,
+      },
+      order: { createdAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+
+    return { queries, total, page, totalPages: Math.ceil(total / limit) };
   }
 
   // ─── Private: Compute and Save Shares ────────────────────────────────────────

@@ -540,3 +540,14 @@ export class GetBillCommentsDto {
   @Max(100)
   limit?: number = 50;
 }
+
+export class BillQueryDto {
+  @ApiProperty({
+    description: 'Your message or concern about this bill to the creator',
+    maxLength: 1000,
+  })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(1000)
+  message: string;
+}

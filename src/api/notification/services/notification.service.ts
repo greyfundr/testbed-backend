@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Notification } from '../entities/notification.entity';
@@ -8,6 +8,10 @@ import { FirebaseService } from './firebase.service';
 import { TermiiService } from '../../../common/services/termii.service';
 import { WhatsAppService } from '../../../common/services/whatsapp.service';
 import { NotificationPreferences } from '../../settings';
+import {
+  GetNotificationsDto,
+  MarkNotificationsReadDto,
+} from '../dtos/notification.dto';
 
 @Injectable()
 export class NotificationService {
@@ -110,18 +114,86 @@ export class NotificationService {
     }
   }
 
-  async getUserNotifications(userId: string) {
-    return this.notificationRepository.find({
-      where: { user: { id: userId } },
-      order: { createdAt: 'DESC' },
+  async getUserNotifications(
+    userId: string,
+    dto: GetNotificationsDto,
+  ): Promise<{
+    notifications: Notification[];
+    total: number;
+    unreadCount: number;
+    page: number;
+    totalPages: number;
+  }> {
+    const { page = 1, limit = 20, isRead, type } = dto;
+
+    const qb = this.notificationRepository
+      .createQueryBuilder('n')
+      .where('n.user_id = :userId', { userId })
+      .orderBy('n.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    if (isRead !== undefined) {
+      qb.andWhere('n.isRead = :isRead', { isRead });
+    }
+
+    if (type) {
+      qb.andWhere('n.type = :type', { type });
+    }
+
+    const [notifications, total] = await qb.getManyAndCount();
+
+    const unreadCount = await this.notificationRepository.count({
+      where: { user: { id: userId }, isRead: false },
     });
+
+    return {
+      notifications,
+      total,
+      unreadCount,
+      page,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
-  async markAsRead(notificationId: number) {
-    await this.notificationRepository.update(notificationId, {
-      isRead: true,
-      readAt: new Date(),
+  async markAsRead(
+    userId: string,
+    dto: MarkNotificationsReadDto,
+  ): Promise<{ updated: number }> {
+    if (dto.ids?.length) {
+      const result = await this.notificationRepository
+        .createQueryBuilder()
+        .update(Notification)
+        .set({ isRead: true, readAt: new Date() })
+        .where('id IN (:...ids)', { ids: dto.ids })
+        .andWhere('user_id = :userId', { userId })
+        .execute();
+
+      return { updated: result.affected ?? 0 };
+    }
+
+    const result = await this.notificationRepository
+      .createQueryBuilder()
+      .update(Notification)
+      .set({ isRead: true, readAt: new Date() })
+      .where('user_id = :userId', { userId })
+      .andWhere('isRead = false')
+      .execute();
+
+    return { updated: result.affected ?? 0 };
+  }
+
+  async deleteNotification(
+    userId: string,
+    notificationId: string,
+  ): Promise<void> {
+    const notification = await this.notificationRepository.findOne({
+      where: { id: notificationId, user: { id: userId } },
     });
+
+    if (!notification) throw new NotFoundException('Notification not found');
+
+    await this.notificationRepository.delete(notificationId);
   }
 
   async notifyAdmin(

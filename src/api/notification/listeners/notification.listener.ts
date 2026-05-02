@@ -577,6 +577,33 @@ export class NotificationListener {
     });
   }
 
+  @OnEvent('split_bill.query_raised')
+  async handleBillQueryRaised(payload: {
+    creatorId: string;
+    participantName: string;
+    billTitle: string;
+    billId: string;
+    participantId: string;
+    message: string;
+    amountOwed: number;
+    currency: string;
+  }) {
+    await this.notificationService.notify(
+      payload.creatorId,
+      'paymentConfirmations',
+      {
+        title: `Query on "${payload.billTitle}"`,
+        message: `${payload.participantName} has a concern about their share of ${payload.currency} ${payload.amountOwed.toLocaleString()}: "${payload.message}"`,
+        type: 'split_bill',
+        metadata: {
+          billId: payload.billId,
+          participantId: payload.participantId,
+          queryMessage: payload.message,
+        },
+      },
+    );
+  }
+
   @OnEvent('wallet.funded')
   async handleWalletFunded(payload: {
     userId: string;

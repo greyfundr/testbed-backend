@@ -59,6 +59,7 @@ export enum ActivityActionType {
   DISPUTE_RESOLVED = 'dispute_resolved',
   REMINDER_SENT = 'reminder_sent',
   OVERDUE_MARKED = 'overdue_marked',
+  QUERY_RAISED = 'query_raised',
 }
 
 export enum MyBillsRole {

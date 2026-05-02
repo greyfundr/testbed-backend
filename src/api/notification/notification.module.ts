@@ -8,6 +8,7 @@ import { NotificationListener } from './listeners/notification.listener';
 import { SettingsModule } from '../settings/settings.module';
 import { CommonModule } from '../../common/common.module';
 import { AdminModule } from '../admin/admin.module';
+import { NotificationController } from './controllers/notification.controller';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { AdminModule } from '../admin/admin.module';
     FirebaseService,
     NotificationListener,
   ],
+  controllers: [NotificationController],
   exports: [NotificationService],
 })
 export class NotificationModule {}

@@ -28,6 +28,7 @@ import {
   GetMyInvitesDto,
   AddSplitBillCommentDto,
   EditSplitBillCommentDto,
+  BillQueryDto,
 } from '../dto';
 import { ShareAdjustment } from '../interfaces';
 import { User } from 'src/api/user/entities';
@@ -445,5 +446,37 @@ export class SplitBillController {
     @Query('limit') limit = 50,
   ) {
     return this.splitBillService.getBillComments(billId, +page, +limit);
+  }
+  
+  @ApiOperation({
+    summary:
+      'Send a query/concern about this bill to the creator. Your status stays INVITED.',
+  })
+  @Post(':billId/query')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async queryBill(
+    @Param('billId') billId: string,
+    @CurrentUser() user: User,
+    @Body() dto: BillQueryDto,
+  ) {
+    await this.splitBillService.queryBill(billId, user.id, dto);
+    return {
+      success: true,
+      message:
+        'Your query has been sent to the bill creator. You can still accept or decline.',
+    };
+  }
+
+  @ApiOperation({ summary: 'Get all queries raised on a bill (creator only)' })
+  @Get(':billId/queries')
+  @UseGuards(JwtAuthGuard)
+  async getBillQueries(
+    @Param('billId') billId: string,
+    @CurrentUser() user: User,
+    @Query('page') page = 1,
+    @Query('limit') limit = 50,
+  ) {
+    return this.splitBillService.getBillQueries(billId, user.id, +page, +limit);
   }
 }
