@@ -604,6 +604,35 @@ export class NotificationListener {
     );
   }
 
+  @OnEvent('split_bill.paid_on_your_behalf')
+  async handlePaidOnYourBehalf(payload: {
+    recipientUserId: string;
+    payerName: string;
+    billTitle: string;
+    billId: string;
+    amount: number;
+    currency: string;
+    fullyPaid: boolean;
+  }) {
+    const message = payload.fullyPaid
+      ? `${payload.payerName} fully paid your share of ${payload.currency} ${payload.amount.toLocaleString()} on "${payload.billTitle}". Your share is now settled.`
+      : `${payload.payerName} paid ${payload.currency} ${payload.amount.toLocaleString()} towards your share on "${payload.billTitle}".`;
+
+    await this.notificationService.notify(
+      payload.recipientUserId,
+      'paymentConfirmations',
+      {
+        title: 'Someone paid your bill share',
+        message,
+        type: 'split_bill',
+        metadata: {
+          billId: payload.billId,
+          fullyPaid: payload.fullyPaid,
+        },
+      },
+    );
+  }
+
   @OnEvent('wallet.funded')
   async handleWalletFunded(payload: {
     userId: string;

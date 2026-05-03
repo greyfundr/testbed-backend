@@ -50,6 +50,7 @@ import {
   AddSplitBillCommentDto,
   EditSplitBillCommentDto,
   BillQueryDto,
+  CommentDisplayType,
 } from '../dto/split-bill.dto';
 import { UserRepository } from '../../user/repository';
 import { TransactionRepository } from '../../transaction/repository';
@@ -377,466 +378,6 @@ export class SplitBillService {
 
     return { bills: shaped, total, page, totalPages: Math.ceil(total / limit) };
   }
-
-  // async updateBill(
-  //   billId: string,
-  //   actorId: string,
-  //   dto: UpdateSplitBillDto,
-  // ): Promise<SplitBill> {
-  //   const qr = this.dataSource.createQueryRunner();
-  //   await qr.connect();
-  //   await qr.startTransaction();
-
-  //   try {
-  //     const bill = await qr.manager.findOne(SplitBill, {
-  //       where: { id: billId },
-  //       relations: ['participants'],
-  //       lock: { mode: 'pessimistic_write' },
-  //     });
-
-  //     if (!bill) throw new NotFoundException('Bill not found');
-  //     if (bill.creatorId !== actorId)
-  //       throw new ForbiddenException(
-  //         'Only the bill creator can update this bill',
-  //       );
-  //     if (bill.isFinalized)
-  //       throw new BadRequestException('Cannot update a finalized bill');
-  //     if (
-  //       [SplitBillStatus.SETTLED, SplitBillStatus.CANCELLED].includes(
-  //         bill.status,
-  //       )
-  //     )
-  //       throw new BadRequestException(`Cannot update a ${bill.status} bill`);
-
-  //     const effectiveAmount = dto.amount ?? bill.totalAmount;
-  //     const effectiveMethod = dto.splitMethod ?? bill.splitMethod;
-  //     const amountChanging =
-  //       dto.amount !== undefined && dto.amount !== bill.totalAmount;
-  //     const methodChanging =
-  //       dto.splitMethod !== undefined && dto.splitMethod !== bill.splitMethod;
-  //     const participantsChanging = dto.participants !== undefined;
-
-  //     const paidParticipants = bill.participants.filter(
-  //       (p) => p.amountPaid > 0,
-  //     );
-
-  //     if (participantsChanging) {
-  //       const incomingUserIds = new Set(
-  //         dto.participants!.map((p) => p.userId).filter(Boolean),
-  //       );
-  //       const incomingPhones = new Set(
-  //         dto.participants!.map((p) => p.phone).filter(Boolean),
-  //       );
-
-  //       for (const p of paidParticipants) {
-  //         const stillPresent = p.userId
-  //           ? incomingUserIds.has(p.userId)
-  //           : incomingPhones.has(p.guestPhone!);
-
-  //         if (!stillPresent) {
-  //           throw new BadRequestException(
-  //             `Cannot remove participant ${p.userId ?? p.guestPhone} — they have already made a payment of ₦${p.amountPaid}.`,
-  //           );
-  //         }
-  //       }
-  //     }
-
-  //     if (paidParticipants.length > 0 && (amountChanging || methodChanging)) {
-  //       const isManualReassignment =
-  //         effectiveMethod === SplitMethod.MANUAL &&
-  //         participantsChanging &&
-  //         dto.participants!.every((p) => p.amount !== undefined);
-
-  //       if (!isManualReassignment) {
-  //         throw new BadRequestException(
-  //           'Cannot change amount or split method after payments have been made ' +
-  //             'unless you provide explicit manual amounts for all participants.',
-  //         );
-  //       }
-  //     }
-
-  //     const updateData: Partial<SplitBill> = {};
-  //     if (dto.title !== undefined) updateData.title = dto.title;
-  //     if (dto.description !== undefined)
-  //       updateData.description = dto.description;
-  //     if (dto.amount !== undefined) updateData.totalAmount = dto.amount;
-  //     if (dto.splitMethod !== undefined)
-  //       updateData.splitMethod = dto.splitMethod;
-  //     if (dto.dueDate !== undefined) updateData.dueDate = new Date(dto.dueDate);
-  //     if (dto.imageUrl !== undefined) updateData.imageUrl = dto.imageUrl;
-  //     if (dto.billReceipt !== undefined)
-  //       updateData.billReceipt = dto.billReceipt;
-  //     if (dto.allowPartialPayment !== undefined)
-  //       updateData.allowPartialPayment = dto.allowPartialPayment;
-  //     if (dto.minPaymentAmount !== undefined)
-  //       updateData.minPaymentAmount = dto.minPaymentAmount;
-  //     if (dto.recipientUserId !== undefined)
-  //       updateData.recipientUserId = dto.recipientUserId;
-  //     if (dto.offers !== undefined) updateData.offers = dto.offers;
-
-  //     if (Object.keys(updateData).length > 0) {
-  //       await qr.manager.update(SplitBill, billId, updateData);
-  //     }
-
-  //     if (participantsChanging) {
-  //       const currentParticipants = await qr.manager.find(
-  //         SplitBillParticipant,
-  //         {
-  //           where: { splitBillId: billId },
-  //         },
-  //       );
-
-  //       const incomingKeys = new Set(
-  //         dto.participants!.map((p) =>
-  //           p.userId ? `user:${p.userId}` : `guest:${p.phone}`,
-  //         ),
-  //       );
-
-  //       const toRemove = currentParticipants.filter((p) => {
-  //         const key = p.userId ? `user:${p.userId}` : `guest:${p.guestPhone}`;
-  //         return !incomingKeys.has(key);
-  //       });
-
-  //       if (toRemove.length) {
-  //         await qr.manager.softDelete(
-  //           SplitBillParticipant,
-  //           toRemove.map((p) => p.id),
-  //         );
-  //       }
-
-  //       const mappedParticipants = dto.participants!.map((p) => ({
-  //         type: p.type ?? (p.userId ? 'USER' : 'GUEST'),
-  //         userId: p.userId,
-  //         name: p.name,
-  //         phone: p.phone,
-  //         percentage: p.percentage,
-  //         amount: p.amount,
-  //       }));
-
-  //       const validatedParticipants = await this.validateParticipants(
-  //         mappedParticipants,
-  //         effectiveMethod,
-  //       );
-
-  //       const brandNewUserIds: string[] = [];
-  //       const brandNewGuests: {
-  //         guestPhone: string;
-  //         guestName: string;
-  //         pRow?: SplitBillParticipant;
-  //       }[] = [];
-
-  //       if (effectiveMethod === SplitMethod.MANUAL) {
-  //         const totalAssigned = dto.participants!.reduce(
-  //           (sum, p) => sum + (p.amount ?? 0),
-  //           0,
-  //         );
-
-  //         if (Math.abs(totalAssigned - effectiveAmount) > 0.001) {
-  //           throw new BadRequestException(
-  //             `Manual split amounts must sum to ₦${effectiveAmount}. Got ₦${totalAssigned}.`,
-  //           );
-  //         }
-
-  //         for (const p of dto.participants!) {
-  //           const existing = currentParticipants.find((cp) =>
-  //             p.userId ? cp.userId === p.userId : cp.guestPhone === p.phone,
-  //           );
-
-  //           const isNew = !existing;
-  //           const amountOwed = p.amount!;
-  //           const alreadyPaid = existing?.amountPaid ?? 0;
-  //           const amountDue = Math.max(0, amountOwed - alreadyPaid);
-
-  //           await qr.manager.upsert(
-  //             SplitBillParticipant,
-  //             {
-  //               ...(existing ?? {}),
-  //               splitBillId: billId,
-  //               userId: p.userId ?? null,
-  //               guestName: p.name ?? null,
-  //               guestPhone: p.phone ?? null,
-  //               percentage: null,
-  //               role: existing?.role ?? ParticipantRole.PARTICIPANT,
-  //               status: isNew
-  //                 ? ParticipantStatus.INVITED
-  //                 : (existing?.status ?? ParticipantStatus.INVITED),
-  //               amountOwed,
-  //               amountPaid: alreadyPaid,
-  //               amountRemaining: amountDue,
-  //               balanceAdjustment: existing?.balanceAdjustment ?? 0,
-  //               inviteCode: existing?.inviteCode ?? this.generateInviteCode(),
-  //               inviteExpiresAt:
-  //                 existing?.inviteExpiresAt ??
-  //                 new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-  //               invitedAt: existing?.invitedAt ?? new Date(),
-  //             },
-  //             p.userId
-  //               ? ['splitBillId', 'userId']
-  //               : ['splitBillId', 'guestPhone'],
-  //           );
-
-  //           if (isNew) {
-  //             if (p.userId) {
-  //               brandNewUserIds.push(p.userId);
-  //             } else if (p.phone) {
-  //               brandNewGuests.push({
-  //                 guestPhone: p.phone,
-  //                 guestName: p.name ?? 'Friend',
-  //               });
-  //             }
-  //           }
-  //         }
-  //       } else {
-  //         for (const p of validatedParticipants) {
-  //           const existingRow = currentParticipants.find((cp) =>
-  //             p.userId
-  //               ? cp.userId === p.userId
-  //               : cp.guestPhone === p.guestPhone,
-  //           );
-
-  //           if (!existingRow) {
-  //             await qr.manager.save(
-  //               qr.manager.create(SplitBillParticipant, {
-  //                 splitBillId: billId,
-  //                 userId: p.userId ?? null,
-  //                 guestName: p.guestName ?? null,
-  //                 guestPhone: p.guestPhone ?? null,
-  //                 guestEmail: p.guestEmail ?? null,
-  //                 role: ParticipantRole.PARTICIPANT,
-  //                 status: ParticipantStatus.INVITED,
-  //                 amountOwed: 0,
-  //                 amountPaid: 0,
-  //                 amountRemaining: 0,
-  //                 balanceAdjustment: 0,
-  //                 percentage: p.percentage ?? null,
-  //                 inviteCode: this.generateInviteCode(),
-  //                 inviteExpiresAt: new Date(
-  //                   Date.now() + 7 * 24 * 60 * 60 * 1000,
-  //                 ),
-  //                 invitedAt: new Date(),
-  //                 paymentMethod: null,
-  //                 walletId: null,
-  //               }),
-  //             );
-
-  //             if (p.userId) {
-  //               brandNewUserIds.push(p.userId);
-  //             } else if (p.guestPhone) {
-  //               brandNewGuests.push({
-  //                 guestPhone: p.guestPhone,
-  //                 guestName: p.guestName ?? 'Friend',
-  //               });
-  //             }
-  //           } else if (
-  //             p.percentage !== undefined &&
-  //             effectiveMethod === SplitMethod.PERCENTAGE
-  //           ) {
-  //             await qr.manager.update(SplitBillParticipant, existingRow.id, {
-  //               percentage: p.percentage,
-  //             });
-  //           }
-  //         }
-
-  //         await qr.manager.update(SplitBill, billId, {
-  //           totalParticipants: validatedParticipants.length,
-  //         });
-
-  //         await this.computeAndSaveShares(
-  //           billId,
-  //           validatedParticipants,
-  //           effectiveMethod,
-  //           qr,
-  //           effectiveAmount,
-  //         );
-
-  //         // const updatedParticipants = await qr.manager.find(
-  //         //   SplitBillParticipant,
-  //         //   {
-  //         //     where: { splitBillId: billId },
-  //         //   },
-  //         // );
-
-  //         // const newUserIds = validatedParticipants
-  //         //   .filter(
-  //         //     (p) =>
-  //         //       p.userId &&
-  //         //       !currentParticipants.some((cp) => cp.userId === p.userId),
-  //         //   )
-  //         //   .map((p) => p.userId!);
-
-  //         // if (newUserIds.length > 0) {
-  //         //   const newUserDetails = await this.userRepo.findAll({
-  //         //     where: { id: In(newUserIds) },
-  //         //     select: ['id', 'email', 'firstName', 'lastName'],
-  //         //   });
-
-  //         //   const creator = await this.userRepo.findOne({
-  //         //     where: { id: actorId },
-  //         //     select: ['firstName', 'lastName', 'email'],
-  //         //   });
-  //         //   const creatorName = creator
-  //         //     ? `${creator.firstName ?? ''} ${creator.lastName ?? ''}`.trim() ||
-  //         //       creator.email
-  //         //     : 'Someone';
-
-  //         //   for (const u of newUserDetails) {
-  //         //     const pRow = updatedParticipants.find((p) => p.userId === u.id);
-  //         //     if (!pRow) continue;
-
-  //         //     this.eventEmitter.emit('split_bill.participant_added', {
-  //         //       userId: u.id,
-  //         //       email: u.email,
-  //         //       billTitle: bill.title,
-  //         //       billId: bill.id,
-  //         //       participantId: pRow.id,
-  //         //       amountOwed: pRow.amountOwed,
-  //         //       currency: bill.currency,
-  //         //       creatorName,
-  //         //     });
-  //         //   }
-  //         // }
-  //       }
-
-  //       await this.logActivity(qr, {
-  //         splitBillId: billId,
-  //         actorId,
-  //         actionType: ActivityActionType.UPDATED,
-  //         description: 'Bill details updated',
-  //         billStatusAtTime: bill.status,
-  //         metadata: {
-  //           updatedFields: [
-  //             ...Object.keys(updateData),
-  //             ...(participantsChanging ? ['participants'] : []),
-  //           ],
-  //         },
-  //       });
-
-  //       if (brandNewUserIds.length > 0 || brandNewGuests.length > 0) {
-  //         const creator = await this.userRepo.findOne({
-  //           where: { id: actorId },
-  //           select: ['firstName', 'lastName', 'email'],
-  //         });
-  //         const creatorName = creator
-  //           ? `${creator.firstName ?? ''} ${creator.lastName ?? ''}`.trim() ||
-  //             creator.email
-  //           : 'Someone';
-
-  //         const finalParticipants = await this.participantRepo.find({
-  //           where: { splitBillId: billId },
-  //         });
-
-  //         if (brandNewUserIds.length > 0) {
-  //           const newUserDetails = await this.userRepo.findAll({
-  //             where: { id: In(brandNewUserIds) },
-  //             select: ['id', 'email', 'phoneNumber', 'fcmToken'],
-  //           });
-
-  //           for (const u of newUserDetails) {
-  //             const pRow = finalParticipants.find((p) => p.userId === u.id);
-  //             if (!pRow) continue;
-
-  //             const { shortUrl } = await this.dynamicLinkService.forSplitBill(
-  //               bill.id,
-  //               bill.title,
-  //             );
-
-  //             this.eventEmitter.emit('split_bill.participant_added', {
-  //               userId: u.id,
-  //               email: u.email,
-  //               billTitle: bill.title,
-  //               billId: bill.id,
-  //               participantId: pRow.id,
-  //               amountOwed: pRow.amountOwed,
-  //               currency: bill.currency,
-  //               creatorName,
-  //               phoneNumber: u.phoneNumber,
-  //               pushToken: u.fcmToken,
-  //               paymentLink: shortUrl,
-  //             });
-  //           }
-  //         }
-
-  //         for (const guest of brandNewGuests) {
-  //           const pRow = finalParticipants.find(
-  //             (p) => p.guestPhone === guest.guestPhone,
-  //           );
-  //           if (!pRow) continue;
-
-  //           const { shortUrl } =
-  //             await this.dynamicLinkService.forSplitBillInvite(
-  //               bill.id,
-  //               pRow.inviteCode as string,
-  //               bill.title,
-  //             );
-
-  //           this.eventEmitter.emit('split_bill.guest_invited', {
-  //             guestName: guest.guestName,
-  //             guestPhone: guest.guestPhone,
-  //             billTitle: bill.title,
-  //             amountOwed: pRow.amountOwed,
-  //             currency: bill.currency,
-  //             creatorName,
-  //             paymentLink: shortUrl,
-  //           });
-  //         }
-  //       }
-
-  //       return this.getBillById(billId, actorId);
-  //     } else if (amountChanging || methodChanging) {
-  //       if (effectiveMethod === SplitMethod.MANUAL) {
-  //         throw new BadRequestException(
-  //           'Cannot auto-recalculate a MANUAL split when changing amount or method. Provide an explicit participants list with amounts.',
-  //         );
-  //       }
-
-  //       const currentParticipants = await qr.manager.find(
-  //         SplitBillParticipant,
-  //         {
-  //           where: { splitBillId: billId },
-  //         },
-  //       );
-
-  //       const participantInputs = currentParticipants.map((p) => ({
-  //         type: p.userId ? 'USER' : 'GUEST',
-  //         userId: p.userId ?? undefined,
-  //         guestName: p.guestName ?? undefined,
-  //         guestPhone: p.guestPhone ?? undefined,
-  //         percentage: p.percentage ?? undefined,
-  //       }));
-
-  //       await this.computeAndSaveShares(
-  //         billId,
-  //         participantInputs as any,
-  //         effectiveMethod,
-  //         qr,
-  //         effectiveAmount,
-  //       );
-  //     }
-
-  //     await this.logActivity(qr, {
-  //       splitBillId: billId,
-  //       actorId,
-  //       actionType: ActivityActionType.UPDATED,
-  //       description: 'Bill details updated',
-  //       billStatusAtTime: bill.status,
-  //       metadata: {
-  //         updatedFields: [
-  //           ...Object.keys(updateData),
-  //           ...(participantsChanging ? ['participants'] : []),
-  //         ],
-  //       },
-  //     });
-
-  //     await qr.commitTransaction();
-  //     return this.getBillById(billId, actorId);
-  //   } catch (err) {
-  //     console.log('error', err);
-  //     await qr.rollbackTransaction();
-  //     throw err;
-  //   } finally {
-  //     await qr.release();
-  //   }
-  // }
 
   async updateBill(
     billId: string,
@@ -1984,7 +1525,7 @@ export class SplitBillService {
 
   async payBillShare(
     billId: string,
-    participantId: string,
+    payerParticipantId: string,
     payerId: string,
     dto: PayBillShareDto,
   ): Promise<any> {
@@ -1993,15 +1534,54 @@ export class SplitBillService {
     await qr.startTransaction();
 
     try {
-      const participant = await qr.manager.findOne(SplitBillParticipant, {
-        where: { id: participantId, splitBillId: billId },
+      const payerParticipant = await qr.manager.findOne(SplitBillParticipant, {
+        where: { id: payerParticipantId, splitBillId: billId },
         relations: ['user'],
         lock: { mode: 'pessimistic_write' },
       });
 
-      if (!participant) throw new NotFoundException('Participant not found');
-      // if (participant.userId !== payerId)
-      //   throw new ForbiddenException('You can only pay your own share');
+      if (!payerParticipant) {
+        throw new NotFoundException('You are not a participant on this bill');
+      }
+
+      if (payerParticipant.userId !== payerId) {
+        throw new ForbiddenException(
+          'You can only make payments from your own account',
+        );
+      }
+
+      const isPayingOnBehalf =
+        !!dto.onBehalfOfParticipantId &&
+        dto.onBehalfOfParticipantId !== payerParticipantId;
+
+      const targetParticipantId = isPayingOnBehalf
+        ? dto.onBehalfOfParticipantId!
+        : payerParticipantId;
+
+      let targetParticipant: SplitBillParticipant;
+
+      if (isPayingOnBehalf) {
+        const found = await qr.manager.findOne(SplitBillParticipant, {
+          where: { id: targetParticipantId, splitBillId: billId },
+          lock: { mode: 'pessimistic_write' },
+        });
+
+        if (!found) {
+          throw new NotFoundException(
+            'The participant you are paying for is not on this bill',
+          );
+        }
+
+        if (found.status === ParticipantStatus.DECLINED) {
+          throw new BadRequestException(
+            'Cannot pay for a participant who declined the bill',
+          );
+        }
+
+        targetParticipant = found;
+      } else {
+        targetParticipant = payerParticipant;
+      }
 
       const bill = await qr.manager.findOne(SplitBill, {
         where: { id: billId },
@@ -2022,32 +1602,29 @@ export class SplitBillService {
       }
 
       const effectiveOwed =
-        participant.amountOwed + participant.balanceAdjustment;
+        targetParticipant.amountOwed + targetParticipant.balanceAdjustment;
 
-      if (participant.amountPaid >= effectiveOwed) {
-        throw new BadRequestException('Your share is already fully paid');
-      }
-
-      const remaining = effectiveOwed - participant.amountPaid;
-
-      if (!bill.allowPartialPayment && dto.amount < remaining) {
+      if (targetParticipant.amountPaid >= effectiveOwed) {
         throw new BadRequestException(
-          `This bill requires full payment. You owe ₦${remaining}.`,
+          isPayingOnBehalf
+            ? "This participant's share is already fully paid"
+            : 'Your share is already fully paid',
         );
       }
 
-      const isFirstPayment = (participant.amountPaid || 0) === 0;
-      if (
-        bill.minPaymentAmount &&
-        isFirstPayment &&
-        dto.amount < bill.minPaymentAmount
-      ) {
-        const requiredMin = Math.min(bill.minPaymentAmount, remaining);
+      const remaining = effectiveOwed - targetParticipant.amountPaid;
 
+      if (!bill.allowPartialPayment && dto.amount < remaining) {
+        throw new BadRequestException(
+          `This bill requires full payment. Remaining: ₦${remaining}.`,
+        );
+      }
+
+      const isFirstPayment = (targetParticipant.amountPaid || 0) === 0;
+      if (bill.minPaymentAmount && isFirstPayment) {
+        const requiredMin = Math.min(bill.minPaymentAmount, remaining);
         if (dto.amount < requiredMin) {
-          throw new BadRequestException(
-            `The initial payment for this bill must be at least ₦${requiredMin}.`,
-          );
+          throw new BadRequestException(`Minimum payment is ₦${requiredMin}.`);
         }
       }
 
@@ -2063,12 +1640,13 @@ export class SplitBillService {
             'Transaction PIN is required for wallet payments',
           );
         }
+
         await this.walletService.verifyTransactionPin(
           payerId,
           dto.transactionPin,
         );
-
         const wallet = await this.walletService.getWalletByUserId(payerId);
+
         const txReference = `SB-${uuidv4().replace(/-/g, '').substring(0, 20).toUpperCase()}`;
 
         const tx = await qr.manager.save(Transaction, {
@@ -2080,16 +1658,23 @@ export class SplitBillService {
           status: TransactionStatus.PROCESSING,
           reference: txReference,
           paymentGateway: 'internal',
-          description: `Split bill payment — ${bill.title}`,
+          description: isPayingOnBehalf
+            ? `Split bill payment on behalf of ${targetParticipant.guestName ?? targetParticipant.userId} — ${bill.title}`
+            : `Split bill payment — ${bill.title}`,
           sourceRef: {
             entity: 'split_bill',
             id: billId,
-            participantId: participant.id,
+            participantId: targetParticipantId,
+            paidByParticipantId: payerParticipantId,
+            isOnBehalfOf: isPayingOnBehalf,
           },
           metadata: {
             billTitle: bill.title,
             billId,
-            participantId: participant.id,
+            participantId: targetParticipantId,
+            paidByParticipantId: payerParticipantId,
+            paidByUserId: payerId,
+            isOnBehalfOf: isPayingOnBehalf,
           },
         });
 
@@ -2108,20 +1693,20 @@ export class SplitBillService {
           confirmedAt: new Date(),
         });
 
-        const newAmountPaid = participant.amountPaid + dto.amount;
+        const newAmountPaid = targetParticipant.amountPaid + dto.amount;
         const newAmountRemaining = Math.max(0, effectiveOwed - newAmountPaid);
-        const participantFullyPaid = newAmountRemaining === 0;
+        const targetFullyPaid = newAmountRemaining === 0;
 
-        await qr.manager.update(SplitBillParticipant, participantId, {
+        await qr.manager.update(SplitBillParticipant, targetParticipantId, {
           amountPaid: newAmountPaid,
           amountRemaining: newAmountRemaining,
-          status: participantFullyPaid
+          status: targetFullyPaid
             ? ParticipantStatus.PAID
             : ParticipantStatus.PARTIAL,
           walletId: wallet.id,
           paymentMethod: 'wallet',
-          firstPaidAt: participant.firstPaidAt ?? new Date(),
-          fullyPaidAt: participantFullyPaid ? new Date() : null,
+          firstPaidAt: targetParticipant.firstPaidAt ?? new Date(),
+          fullyPaidAt: targetFullyPaid ? new Date() : null,
         });
 
         const newTotalCollected = bill.totalCollected + dto.amount;
@@ -2129,7 +1714,7 @@ export class SplitBillService {
 
         await qr.manager.update(SplitBill, billId, {
           totalCollected: newTotalCollected,
-          ...(participantFullyPaid && {
+          ...(targetFullyPaid && {
             totalPaidParticipants: () => 'total_paid_participants + 1',
           }),
           status: billFullyFunded
@@ -2141,14 +1726,21 @@ export class SplitBillService {
           splitBillId: billId,
           actorId: payerId,
           actionType: ActivityActionType.PAYMENT_MADE,
-          participantId,
-          description: `Payment of ₦${dto.amount} made`,
-          amountBefore: participant.amountPaid,
+          participantId: targetParticipantId,
+          description: isPayingOnBehalf
+            ? `₦${dto.amount} paid by ${payerId} on behalf of participant ${targetParticipantId}`
+            : `Payment of ₦${dto.amount} made`,
+          amountBefore: targetParticipant.amountPaid,
           amountAfter: newAmountPaid,
           amountDifference: dto.amount,
           billStatusAtTime: bill.status,
           transactionId: tx.id,
-          metadata: { participantFullyPaid, billFullyFunded },
+          metadata: {
+            isOnBehalfOf: isPayingOnBehalf,
+            paidByParticipantId: payerParticipantId,
+            targetFullyPaid,
+            billFullyFunded,
+          },
         });
 
         if (billFullyFunded) {
@@ -2162,6 +1754,26 @@ export class SplitBillService {
           });
         }
 
+        if (dto.comment?.trim()) {
+          const resolvedDisplayName = await this.resolveDisplayName(
+            payerParticipant,
+            dto.commentDisplayType ?? 'full_name',
+          );
+
+          await qr.manager.save(
+            qr.manager.create(SplitBillComment, {
+              splitBillId: billId,
+              participantId: payerParticipantId,
+              authorId: payerId,
+              guestPhone: payerParticipant.guestPhone ?? null,
+              displayName: resolvedDisplayName,
+              displayType: dto.commentDisplayType ?? 'full_name',
+              content: dto.comment.trim(),
+              transactionId: tx.id,
+            }),
+          );
+        }
+
         await qr.commitTransaction();
 
         this.emitPaymentReceivedEvent(
@@ -2171,24 +1783,57 @@ export class SplitBillService {
           newTotalCollected,
         );
 
+        if (
+          isPayingOnBehalf &&
+          targetParticipant.userId &&
+          targetParticipant.userId !== payerId
+        ) {
+          const payerUser = await this.userRepo.findOne({
+            where: { id: payerId },
+            select: ['firstName', 'lastName', 'email'],
+          });
+          const payerName = payerUser
+            ? `${payerUser.firstName ?? ''} ${payerUser.lastName ?? ''}`.trim() ||
+              payerUser.email
+            : 'Someone';
+
+          this.eventEmitter.emit('split_bill.paid_on_your_behalf', {
+            recipientUserId: targetParticipant.userId,
+            payerName,
+            billTitle: bill.title,
+            billId,
+            amount: dto.amount,
+            currency: bill.currency,
+            fullyPaid: targetFullyPaid,
+          });
+        }
+
         return {
           status: 'success',
-          participantFullyPaid,
+          isOnBehalfOf: isPayingOnBehalf,
+          targetParticipantId,
+          payerParticipantId,
+          targetFullyPaid,
           billFullyFunded,
           paymentMethod: 'wallet',
         };
-      } else if (dto.paymentMethod === BillPaymentMethod.PAYSTACK) {
+      }
+
+      // ── PAYSTACK FLOW ─────────────────────────────────────────────────────
+      else if (dto.paymentMethod === BillPaymentMethod.PAYSTACK) {
         const txReference = `SBP-${uuidv4().replace(/-/g, '').substring(0, 16).toUpperCase()}`;
 
         const paystackRes = await this.paymentService.initiateTransactions({
           amount: dto.amount * 100,
-          email: participant?.user?.email as string,
+          email: payerParticipant.user?.email as string,
           reference: txReference,
           metadata: {
             type: 'USER_BILL_PAYMENT',
             split_bill_id: billId,
-            participant_id: participantId,
+            participant_id: targetParticipantId,
+            paid_by_participant_id: payerParticipantId,
             user_id: payerId,
+            is_on_behalf_of: isPayingOnBehalf,
           },
         });
 
@@ -2202,19 +1847,30 @@ export class SplitBillService {
           reference: txReference,
           gatewayReference: txReference,
           paymentGateway: 'paystack',
-          description: `Split bill payment via Paystack — ${bill.title}`,
+          description: isPayingOnBehalf
+            ? `Split bill payment via Paystack on behalf of participant ${targetParticipantId}`
+            : `Split bill payment via Paystack — ${bill.title}`,
           sourceRef: {
             entity: 'split_bill',
             id: billId,
-            participantId: participant.id,
+            participantId: targetParticipantId,
+            paidByParticipantId: payerParticipantId,
+            isOnBehalfOf: isPayingOnBehalf,
           },
-          metadata: { participantId: participant.id, userId: payerId },
+          metadata: {
+            participantId: targetParticipantId,
+            paidByParticipantId: payerParticipantId,
+            userId: payerId,
+            isOnBehalfOf: isPayingOnBehalf,
+          },
         });
 
         await qr.commitTransaction();
 
         return {
           status: 'pending',
+          isOnBehalfOf: isPayingOnBehalf,
+          targetParticipantId,
           paymentMethod: 'paystack',
           authorizationUrl: paystackRes.data.authorization_url,
           reference: txReference,
@@ -2226,6 +1882,44 @@ export class SplitBillService {
     } finally {
       await qr.release();
     }
+  }
+
+  private async resolveDisplayName(
+    participant: SplitBillParticipant,
+    displayType: CommentDisplayType,
+  ): Promise<string> {
+    if (participant.isGuest) {
+      return participant.guestName ?? 'Guest';
+    }
+
+    if (!participant.user && participant.userId) {
+      const user = await this.userRepo.findOne({
+        where: { id: participant.userId },
+        select: ['firstName', 'lastName', 'username', 'email'],
+      });
+      if (displayType === 'anonymous') return 'Anonymous';
+      if (displayType === 'username')
+        return user?.username ?? user?.email ?? 'Unknown';
+      return (
+        `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() ||
+        user?.email ||
+        'Unknown'
+      );
+    }
+
+    if (displayType === 'anonymous') return 'Anonymous';
+    if (displayType === 'username') {
+      return (
+        participant.user?.username ??
+        `${participant.user?.firstName ?? ''} ${participant.user?.lastName ?? ''}`.trim() ??
+        'Unknown'
+      );
+    }
+    return (
+      `${participant.user?.firstName ?? ''} ${participant.user?.lastName ?? ''}`.trim() ||
+      participant.user?.email ||
+      'Unknown'
+    );
   }
 
   private async emitPaymentReceivedEvent(

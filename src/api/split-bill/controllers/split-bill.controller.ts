@@ -447,7 +447,7 @@ export class SplitBillController {
   ) {
     return this.splitBillService.getBillComments(billId, +page, +limit);
   }
-  
+
   @ApiOperation({
     summary:
       'Send a query/concern about this bill to the creator. Your status stays INVITED.',
