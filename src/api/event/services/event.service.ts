@@ -54,6 +54,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PaymentService } from '../../payment/services/payment.service';
 import { DynamicLinkService } from '../../dynamic-link/services/dynamic-link.service';
 import { Listing } from '../interfaces/event.interface';
+import { DonationOnBehalfOf } from 'src/api/campaign/enums/campaign.enum';
 
 @Injectable()
 export class EventService {
@@ -364,7 +365,20 @@ export class EventService {
     contributeDto: ContributeToEventDto,
     user: User,
   ): Promise<EventContribution | any> {
-    const { type, amount, details, paymentMethod } = contributeDto;
+    const {
+      type,
+      amount,
+      details,
+      paymentMethod,
+      isAnonymous,
+      displayName,
+      onBehalfOf,
+      onBehalfOfUserId,
+      onBehalfOfFullName,
+      comment,
+      image,
+    } = contributeDto;
+
     const event = await this.findOne(eventId);
 
     if (event.status !== EventStatus.ACTIVE) {
@@ -376,7 +390,7 @@ export class EventService {
     }
 
     if (type === EventContributionType.PURCHASE) {
-      if (!details || !details.items || !Array.isArray(details.items)) {
+      if (!details?.items || !Array.isArray(details.items)) {
         throw new BadRequestException(
           'Purchase details with items are required',
         );
@@ -387,18 +401,26 @@ export class EventService {
         const eventItem = event.purchasableItems?.find(
           (i) => i.name === item.name,
         );
-        if (!eventItem) {
-          throw new BadRequestException(
-            `Item ${item.name} is not available for this event`,
-          );
-        }
+        if (!eventItem)
+          throw new NotFoundException(`Item ${item.name} is not available`);
         calculatedTotal += eventItem.price * item.quantity;
       });
 
       if (amount !== calculatedTotal) {
         throw new BadRequestException(
-          'Total amount does not match the sum of item prices',
+          'Total amount does not match item prices',
         );
+      }
+    }
+
+    let publicName = 'Anonymous';
+    if (!isAnonymous) {
+      if (displayName) {
+        publicName = displayName;
+      } else if (onBehalfOf === DonationOnBehalfOf.EXTERNAL) {
+        publicName = onBehalfOfFullName || 'Guest';
+      } else {
+        publicName = `${user.firstName} ${user.lastName}`.trim() || user.email;
       }
     }
 
@@ -417,19 +439,16 @@ export class EventService {
       });
     }
 
-    if (contributeDto.paymentMethod !== EventPaymentMethod.PAYSTACK) {
-      if (!contributeDto.transactionPin) {
-        throw new BadRequestException(
-          'Transaction PIN is required for wallet payments',
-        );
-      }
-      await this.walletService.verifyTransactionPin(
-        user.id,
-        contributeDto.transactionPin,
+    if (!contributeDto.transactionPin) {
+      throw new BadRequestException(
+        'Transaction PIN is required for wallet payments',
       );
     }
+    await this.walletService.verifyTransactionPin(
+      user.id,
+      contributeDto.transactionPin,
+    );
 
-    // Default Wallet Flow
     const wallet = await this.walletService.getWalletByUserId(user.id);
     if (wallet.availableBalance < amount) {
       throw new BadRequestException('Insufficient wallet balance');
@@ -459,25 +478,29 @@ export class EventService {
       const transaction = await qr.manager.save(
         qr.manager.create(Transaction, {
           walletId: wallet.id,
-          amount: amount,
+          amount,
           currency: 'NGN',
           type: transactionType,
           direction: TransactionDirection.DEBIT,
           status: TransactionStatus.COMPLETED,
           reference,
-          description: `Contribution to event: ${event.name} (${type})`,
-          metadata: { eventId, type, userId: user.id },
+          description: `Event Contribution: ${event.name} by ${publicName}`,
+          metadata: {
+            eventId,
+            userId: user.id,
+            onBehalfOf,
+            isAnonymous,
+          },
         }),
       );
 
-      // Lock funds into event escrow
       await this.walletService.lockIntoEscrow({
         walletId: wallet.id,
-        amount: amount,
+        amount,
         transactionId: transaction.id,
         entityType: 'event',
         entityId: event.id,
-        description: `Escrow for contribution to event: ${event.name}`,
+        description: `Escrow for contribution to: ${event.name}`,
         qr,
       });
 
@@ -485,25 +508,31 @@ export class EventService {
         eventId: event.id,
         userId: user.id,
         type,
-        amount: amount, // Store in Naira (transformer handles DB conversion)
+        amount,
         details: details ?? {},
         transactionId: transaction.id,
+        isAnonymous: !!isAnonymous,
+        displayName: displayName || publicName,
+        onBehalfOf,
+        onBehalfOfUserId,
+        onBehalfOfFullName,
+        comment,
+        image,
       });
 
       const savedContribution = await qr.manager.save(contribution);
 
-      // Update event amount raised
       await qr.manager.update(Event, event.id, {
         amountRaised: () => `amount_raised + ${amount}`,
       });
 
       await qr.commitTransaction();
 
-      // Emit event for real-time update
       this.eventEmitter.emit('event.contribution_created', {
         eventId: event.id,
         contribution: savedContribution,
         newTotal: Number(event.amountRaised) + amount,
+        contributorName: publicName,
       });
 
       return savedContribution;

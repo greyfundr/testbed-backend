@@ -15,6 +15,7 @@ import {
   IsInt,
   IsEmail,
   IsPositive,
+  IsUUID,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import {
@@ -25,6 +26,7 @@ import {
   EventVisibilityStatus,
 } from '../enums/event.enum';
 import { RsvpStatus } from '../entities';
+import { DonationOnBehalfOf } from 'src/api/campaign/enums/campaign.enum';
 
 class EventLocationDto {
   @ApiProperty()
@@ -375,6 +377,34 @@ export class ContributeToEventDto {
   @IsNotEmpty()
   @IsOptional()
   transactionPin?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  isAnonymous?: boolean;
+
+  @IsString()
+  @IsOptional()
+  displayName?: string;
+
+  @IsEnum(DonationOnBehalfOf)
+  @IsOptional()
+  onBehalfOf?: DonationOnBehalfOf = DonationOnBehalfOf.SELF;
+
+  @IsUUID()
+  @IsOptional()
+  onBehalfOfUserId?: string;
+
+  @IsString()
+  @IsOptional()
+  onBehalfOfFullName?: string;
+
+  @IsString()
+  @IsOptional()
+  comment?: string;
+
+  @IsString()
+  @IsOptional()
+  image?: string;
 }
 
 export class GetAllEventsDto {
