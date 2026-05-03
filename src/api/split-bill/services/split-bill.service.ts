@@ -116,7 +116,7 @@ export class SplitBillService {
         status: SplitBillStatus.ACTIVE,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
         imageUrl: dto.imageUrl ?? null,
-        billReceipt: dto.billReceipt ?? null,
+        receipts: dto.receipts ?? null,
         allowPartialPayment: dto.allowPartialPayment ?? true,
         minPaymentAmount: dto.minPaymentAmount ?? null,
         totalParticipants: validated.length,
@@ -465,8 +465,7 @@ export class SplitBillService {
         updateData.splitMethod = dto.splitMethod;
       if (dto.dueDate !== undefined) updateData.dueDate = new Date(dto.dueDate);
       if (dto.imageUrl !== undefined) updateData.imageUrl = dto.imageUrl;
-      if (dto.billReceipt !== undefined)
-        updateData.billReceipt = dto.billReceipt;
+      if (dto.receipts !== undefined) updateData.receipts = dto.receipts;
       if (dto.allowPartialPayment !== undefined)
         updateData.allowPartialPayment = dto.allowPartialPayment;
       if (dto.minPaymentAmount !== undefined)
@@ -923,7 +922,7 @@ export class SplitBillService {
         title: bill.title,
         description: bill.description,
         imageUrl: bill.imageUrl,
-        billReceipt: bill.billReceipt,
+        receipts: bill.receipts,
         totalAmount: bill.totalAmount,
         totalCollected: bill.totalCollected,
         remainingAmount: bill.totalAmount - bill.totalCollected,
@@ -2777,7 +2776,41 @@ export class SplitBillService {
       take: limit,
     });
 
-    return { queries, total, page, totalPages: Math.ceil(total / limit) };
+    const userIds = [...new Set(queries.map((q) => q.actorId).filter(Boolean))];
+
+    let users: User[] = [];
+    if (userIds.length > 0) {
+      users = await this.userRepo.findAll({
+        where: { id: In(userIds) },
+        select: ['id', 'firstName', 'lastName', 'email', 'phoneNumber'],
+      });
+    }
+
+    const userMap = new Map(users.map((u) => [u.id, u]));
+
+    const queriesWithUsers = queries.map((query) => {
+      const user = query.actorId ? userMap.get(query.actorId) : null;
+      return {
+        ...query,
+        user: user
+          ? {
+              id: user?.id,
+              name:
+                `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() ||
+                user.email,
+              email: user.email,
+              phoneNumber: user.phoneNumber,
+            }
+          : null,
+      };
+    });
+
+    return {
+      queries: queriesWithUsers,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   // ─── Private: Compute and Save Shares ────────────────────────────────────────

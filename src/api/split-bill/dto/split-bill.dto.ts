@@ -187,9 +187,14 @@ export class CreateSplitBillDto {
   @IsString()
   imageUrl?: string;
 
+  @ApiPropertyOptional({
+    description: 'Array of receipt image URLs',
+    type: [String],
+  })
   @IsOptional()
-  @IsString()
-  billReceipt?: string;
+  @IsArray()
+  @IsString({ each: true })
+  receipts?: string[];
 
   @IsOptional()
   @IsBoolean()
@@ -275,9 +280,14 @@ export class UpdateSplitBillDto {
   @IsString()
   imageUrl?: string;
 
+  @ApiPropertyOptional({
+    description: 'Replace receipts array',
+    type: [String],
+  })
   @IsOptional()
-  @IsString()
-  billReceipt?: string;
+  @IsArray()
+  @IsString({ each: true })
+  receipts?: string[];
 
   @IsOptional()
   @IsBoolean()

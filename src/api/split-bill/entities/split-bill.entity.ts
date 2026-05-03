@@ -34,13 +34,8 @@ export class SplitBill extends AbstractEntity {
   @Column({ type: 'varchar', length: 500, nullable: true, name: 'image_url' })
   imageUrl: string | null;
 
-  @Column({
-    type: 'varchar',
-    length: 500,
-    nullable: true,
-    name: 'bill_receipt',
-  })
-  billReceipt: string | null;
+  @Column({ type: 'json', nullable: true })
+  receipts: string[] | null;
 
   @Column({
     type: 'decimal',
