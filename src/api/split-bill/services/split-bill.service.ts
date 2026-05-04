@@ -2191,7 +2191,17 @@ export class SplitBillService {
 
     const bill = await this.billRepo.findOne({
       where: { id: participant.splitBillId },
-      select: ['id', 'title', 'creatorId'],
+      relations: ['creator'],
+      select: {
+        id: true,
+        title: true,
+        creatorId: true,
+        creator: {
+          firstName: true,
+          lastName: true,
+          fcmToken: true,
+        },
+      },
     });
 
     const acceptingUser = await this.userRepo.findOne({
@@ -2208,6 +2218,7 @@ export class SplitBillService {
           : 'A participant',
         billTitle: bill.title,
         billId: bill.id,
+        pushToken: bill.creator?.fcmToken,
       });
     }
 
@@ -2239,7 +2250,17 @@ export class SplitBillService {
 
     const bill = await this.billRepo.findOne({
       where: { id: participant.splitBillId },
-      select: ['id', 'title', 'creatorId'],
+      relations: ['creator'],
+      select: {
+        id: true,
+        title: true,
+        creatorId: true,
+        creator: {
+          firstName: true,
+          lastName: true,
+          fcmToken: true,
+        },
+      },
     });
 
     const decliningUser = await this.userRepo.findOne({
@@ -2256,6 +2277,7 @@ export class SplitBillService {
           : 'A participant',
         billTitle: bill.title,
         billId: bill.id,
+        pushToken: bill.creator?.fcmToken,
       });
     }
   }
@@ -2619,7 +2641,24 @@ export class SplitBillService {
   ): Promise<void> {
     const participant = await this.participantRepo.findOne({
       where: { splitBillId: billId, userId },
-      relations: ['splitBill'],
+      relations: ['splitBill', 'splitBill.creator'],
+      select: {
+        id: true,
+        userId: true,
+        amountOwed: true,
+        status: true,
+        splitBill: {
+          id: true,
+          title: true,
+          creatorId: true,
+          currency: true,
+          creator: {
+            firstName: true,
+            lastName: true,
+            fcmToken: true,
+          },
+        },
+      },
     });
 
     if (!participant) {
@@ -2673,6 +2712,7 @@ export class SplitBillService {
       message: dto.message,
       amountOwed: participant.amountOwed,
       currency: bill.currency,
+      pushToken: bill.creator?.fcmToken,
     });
 
     this.logger.log(`[SplitBill] Query raised by ${userId} on bill ${billId}`);

@@ -587,6 +587,7 @@ export class NotificationListener {
     message: string;
     amountOwed: number;
     currency: string;
+    pushToken?: string;
   }) {
     await this.notificationService.notify(
       payload.creatorId,
@@ -599,6 +600,7 @@ export class NotificationListener {
           billId: payload.billId,
           participantId: payload.participantId,
           queryMessage: payload.message,
+          pushToken: payload.pushToken,
         },
       },
     );
