@@ -365,10 +365,11 @@ export class EventService {
     contributeDto: ContributeToEventDto,
     user: User,
   ): Promise<EventContribution | any> {
-    const {
+    let {
       type,
       amount,
       details,
+      items,
       paymentMethod,
       isAnonymous,
       displayName,
@@ -378,6 +379,15 @@ export class EventService {
       comment,
       image,
     } = contributeDto;
+
+    if (items && Array.isArray(items)) {
+      details = details || {};
+      details.items = items.map((item) => ({
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price,
+      }));
+    }
 
     const event = await this.findOne(eventId);
 

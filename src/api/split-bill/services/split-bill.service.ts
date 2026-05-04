@@ -1553,33 +1553,41 @@ export class SplitBillService {
         !!dto.onBehalfOfParticipantId &&
         dto.onBehalfOfParticipantId !== payerParticipantId;
 
-      const targetParticipantId = isPayingOnBehalf
-        ? dto.onBehalfOfParticipantId!
-        : payerParticipantId;
+      const payerOwed =
+        payerParticipant.amountOwed + payerParticipant.balanceAdjustment;
+      const payerRemaining = Math.max(
+        0,
+        payerOwed - payerParticipant.amountPaid,
+      );
 
-      let targetParticipant: SplitBillParticipant;
+      let totalAllowedToPay = payerRemaining;
+      let targetParticipant: SplitBillParticipant | null = null;
 
       if (isPayingOnBehalf) {
-        const found = await qr.manager.findOne(SplitBillParticipant, {
-          where: { id: targetParticipantId, splitBillId: billId },
+        targetParticipant = await qr.manager.findOne(SplitBillParticipant, {
+          where: { id: dto.onBehalfOfParticipantId, splitBillId: billId },
           lock: { mode: 'pessimistic_write' },
         });
 
-        if (!found) {
+        if (!targetParticipant) {
           throw new NotFoundException(
             'The participant you are paying for is not on this bill',
           );
         }
 
-        if (found.status === ParticipantStatus.DECLINED) {
+        if (targetParticipant.status === ParticipantStatus.DECLINED) {
           throw new BadRequestException(
             'Cannot pay for a participant who declined the bill',
           );
         }
 
-        targetParticipant = found;
-      } else {
-        targetParticipant = payerParticipant;
+        const targetOwed =
+          targetParticipant.amountOwed + targetParticipant.balanceAdjustment;
+        const targetRemaining = Math.max(
+          0,
+          targetOwed - targetParticipant.amountPaid,
+        );
+        totalAllowedToPay += targetRemaining;
       }
 
       const bill = await qr.manager.findOne(SplitBill, {
@@ -1596,40 +1604,10 @@ export class SplitBillService {
       ) {
         throw new BadRequestException(`Cannot pay into a ${bill.status} bill`);
       }
-      if (bill.status === SplitBillStatus.FUNDED) {
-        throw new BadRequestException('Bill is already fully funded');
-      }
 
-      const effectiveOwed =
-        targetParticipant.amountOwed + targetParticipant.balanceAdjustment;
-
-      if (targetParticipant.amountPaid >= effectiveOwed) {
+      if (dto.amount > totalAllowedToPay) {
         throw new BadRequestException(
-          isPayingOnBehalf
-            ? "This participant's share is already fully paid"
-            : 'Your share is already fully paid',
-        );
-      }
-
-      const remaining = effectiveOwed - targetParticipant.amountPaid;
-
-      if (!bill.allowPartialPayment && dto.amount < remaining) {
-        throw new BadRequestException(
-          `This bill requires full payment. Remaining: ₦${remaining}.`,
-        );
-      }
-
-      const isFirstPayment = (targetParticipant.amountPaid || 0) === 0;
-      if (bill.minPaymentAmount && isFirstPayment) {
-        const requiredMin = Math.min(bill.minPaymentAmount, remaining);
-        if (dto.amount < requiredMin) {
-          throw new BadRequestException(`Minimum payment is ₦${requiredMin}.`);
-        }
-      }
-
-      if (dto.amount > remaining) {
-        throw new BadRequestException(
-          `Payment of ₦${dto.amount} exceeds remaining balance of ₦${remaining}.`,
+          `Payment of ₦${dto.amount} exceeds the combined remaining balance (₦${totalAllowedToPay}) for you and the target participant.`,
         );
       }
 
@@ -1646,6 +1624,10 @@ export class SplitBillService {
         );
         const wallet = await this.walletService.getWalletByUserId(payerId);
 
+        if (wallet.availableBalance < dto.amount) {
+          throw new BadRequestException('Insufficient wallet balance');
+        }
+
         const txReference = `SB-${uuidv4().replace(/-/g, '').substring(0, 20).toUpperCase()}`;
 
         const tx = await qr.manager.save(Transaction, {
@@ -1654,26 +1636,16 @@ export class SplitBillService {
           currency: bill.currency,
           type: TransactionType.SPLIT_BILL_PAYMENT,
           direction: TransactionDirection.DEBIT,
-          status: TransactionStatus.PROCESSING,
+          status: TransactionStatus.COMPLETED,
           reference: txReference,
           paymentGateway: 'internal',
           description: isPayingOnBehalf
-            ? `Split bill payment on behalf of ${targetParticipant.guestName ?? targetParticipant.userId} — ${bill.title}`
+            ? `Split bill payment for self and others — ${bill.title}`
             : `Split bill payment — ${bill.title}`,
-          sourceRef: {
-            entity: 'split_bill',
-            id: billId,
-            participantId: targetParticipantId,
-            paidByParticipantId: payerParticipantId,
-            isOnBehalfOf: isPayingOnBehalf,
-          },
           metadata: {
-            billTitle: bill.title,
             billId,
-            participantId: targetParticipantId,
-            paidByParticipantId: payerParticipantId,
             paidByUserId: payerId,
-            isOnBehalfOf: isPayingOnBehalf,
+            isPayingOnBehalf,
           },
         });
 
@@ -1687,35 +1659,59 @@ export class SplitBillService {
           qr,
         });
 
-        await qr.manager.update(Transaction, tx.id, {
-          status: TransactionStatus.COMPLETED,
-          confirmedAt: new Date(),
-        });
+        let remainingToDistribute = dto.amount;
+        let finalTargetId = payerParticipantId;
 
-        const newAmountPaid = targetParticipant.amountPaid + dto.amount;
-        const newAmountRemaining = Math.max(0, effectiveOwed - newAmountPaid);
-        const targetFullyPaid = newAmountRemaining === 0;
+        if (isPayingOnBehalf && targetParticipant) {
+          const tOwed =
+            targetParticipant.amountOwed + targetParticipant.balanceAdjustment;
+          const tDebt = Math.max(0, tOwed - targetParticipant.amountPaid);
+          const paymentToTarget = Math.min(remainingToDistribute, tDebt);
 
-        await qr.manager.update(SplitBillParticipant, targetParticipantId, {
-          amountPaid: newAmountPaid,
-          amountRemaining: newAmountRemaining,
-          status: targetFullyPaid
-            ? ParticipantStatus.PAID
-            : ParticipantStatus.PARTIAL,
-          walletId: wallet.id,
-          paymentMethod: 'wallet',
-          firstPaidAt: targetParticipant.firstPaidAt ?? new Date(),
-          fullyPaidAt: targetFullyPaid ? new Date() : null,
-        });
+          if (paymentToTarget > 0) {
+            const newTAmountPaid =
+              targetParticipant.amountPaid + paymentToTarget;
+            const tFullyPaid = newTAmountPaid >= tOwed;
+
+            await qr.manager.update(
+              SplitBillParticipant,
+              targetParticipant.id,
+              {
+                amountPaid: newTAmountPaid,
+                amountRemaining: Math.max(0, tOwed - newTAmountPaid),
+                status: tFullyPaid
+                  ? ParticipantStatus.PAID
+                  : ParticipantStatus.PARTIAL,
+                fullyPaidAt: tFullyPaid ? new Date() : null,
+                firstPaidAt: targetParticipant.firstPaidAt ?? new Date(),
+              },
+            );
+            remainingToDistribute -= paymentToTarget;
+            finalTargetId = targetParticipant.id;
+          }
+        }
+
+        if (remainingToDistribute > 0) {
+          const newPayerPaid =
+            payerParticipant.amountPaid + remainingToDistribute;
+          const payerFullyPaid = newPayerPaid >= payerOwed;
+
+          await qr.manager.update(SplitBillParticipant, payerParticipant.id, {
+            amountPaid: newPayerPaid,
+            amountRemaining: Math.max(0, payerOwed - newPayerPaid),
+            status: payerFullyPaid
+              ? ParticipantStatus.PAID
+              : ParticipantStatus.PARTIAL,
+            fullyPaidAt: payerFullyPaid ? new Date() : null,
+            firstPaidAt: payerParticipant.firstPaidAt ?? new Date(),
+          });
+        }
 
         const newTotalCollected = bill.totalCollected + dto.amount;
         const billFullyFunded = newTotalCollected >= bill.totalAmount;
 
         await qr.manager.update(SplitBill, billId, {
           totalCollected: newTotalCollected,
-          ...(targetFullyPaid && {
-            totalPaidParticipants: () => 'total_paid_participants + 1',
-          }),
           status: billFullyFunded
             ? SplitBillStatus.FUNDED
             : SplitBillStatus.PARTIALLY_PAID,
@@ -1725,48 +1721,24 @@ export class SplitBillService {
           splitBillId: billId,
           actorId: payerId,
           actionType: ActivityActionType.PAYMENT_MADE,
-          participantId: targetParticipantId,
-          description: isPayingOnBehalf
-            ? `₦${dto.amount} paid by ${payerId} on behalf of participant ${targetParticipantId}`
-            : `Payment of ₦${dto.amount} made`,
-          amountBefore: targetParticipant.amountPaid,
-          amountAfter: newAmountPaid,
+          participantId: finalTargetId,
+          description: `₦${dto.amount} paid by ${payerId}`,
           amountDifference: dto.amount,
           billStatusAtTime: bill.status,
           transactionId: tx.id,
-          metadata: {
-            isOnBehalfOf: isPayingOnBehalf,
-            paidByParticipantId: payerParticipantId,
-            targetFullyPaid,
-            billFullyFunded,
-          },
         });
-
-        if (billFullyFunded) {
-          await this.logActivity(qr, {
-            splitBillId: billId,
-            actorId: null,
-            actionType: ActivityActionType.BILL_FUNDED,
-            description: 'Bill fully funded — all participants have paid',
-            billStatusAtTime: SplitBillStatus.FUNDED,
-            metadata: { totalCollected: newTotalCollected },
-          });
-        }
 
         if (dto.comment?.trim()) {
           const resolvedDisplayName = await this.resolveDisplayName(
             payerParticipant,
             dto.commentDisplayType ?? 'full_name',
           );
-
           await qr.manager.save(
             qr.manager.create(SplitBillComment, {
               splitBillId: billId,
               participantId: payerParticipantId,
               authorId: payerId,
-              guestPhone: payerParticipant.guestPhone ?? null,
               displayName: resolvedDisplayName,
-              displayType: dto.commentDisplayType ?? 'full_name',
               content: dto.comment.trim(),
               transactionId: tx.id,
             }),
@@ -1782,44 +1754,12 @@ export class SplitBillService {
           newTotalCollected,
         );
 
-        if (
-          isPayingOnBehalf &&
-          targetParticipant.userId &&
-          targetParticipant.userId !== payerId
-        ) {
-          const payerUser = await this.userRepo.findOne({
-            where: { id: payerId },
-            select: ['firstName', 'lastName', 'email'],
-          });
-          const payerName = payerUser
-            ? `${payerUser.firstName ?? ''} ${payerUser.lastName ?? ''}`.trim() ||
-              payerUser.email
-            : 'Someone';
-
-          this.eventEmitter.emit('split_bill.paid_on_your_behalf', {
-            recipientUserId: targetParticipant.userId,
-            payerName,
-            billTitle: bill.title,
-            billId,
-            amount: dto.amount,
-            currency: bill.currency,
-            fullyPaid: targetFullyPaid,
-          });
-        }
-
         return {
           status: 'success',
-          isOnBehalfOf: isPayingOnBehalf,
-          targetParticipantId,
-          payerParticipantId,
-          targetFullyPaid,
+          amountPaid: dto.amount,
           billFullyFunded,
-          paymentMethod: 'wallet',
         };
-      }
-
-      // ── PAYSTACK FLOW ─────────────────────────────────────────────────────
-      else if (dto.paymentMethod === BillPaymentMethod.PAYSTACK) {
+      } else if (dto.paymentMethod === BillPaymentMethod.PAYSTACK) {
         const txReference = `SBP-${uuidv4().replace(/-/g, '').substring(0, 16).toUpperCase()}`;
 
         const paystackRes = await this.paymentService.initiateTransactions({
@@ -1829,7 +1769,7 @@ export class SplitBillService {
           metadata: {
             type: 'USER_BILL_PAYMENT',
             split_bill_id: billId,
-            participant_id: targetParticipantId,
+            participant_id: dto.onBehalfOfParticipantId ?? payerParticipantId,
             paid_by_participant_id: payerParticipantId,
             user_id: payerId,
             is_on_behalf_of: isPayingOnBehalf,
@@ -1837,40 +1777,20 @@ export class SplitBillService {
         });
 
         await qr.manager.save(Transaction, {
-          walletId: null,
           amount: dto.amount,
           currency: bill.currency,
           type: TransactionType.SPLIT_BILL_PAYMENT,
           direction: TransactionDirection.CREDIT,
           status: TransactionStatus.PENDING,
           reference: txReference,
-          gatewayReference: txReference,
           paymentGateway: 'paystack',
-          description: isPayingOnBehalf
-            ? `Split bill payment via Paystack on behalf of participant ${targetParticipantId}`
-            : `Split bill payment via Paystack — ${bill.title}`,
-          sourceRef: {
-            entity: 'split_bill',
-            id: billId,
-            participantId: targetParticipantId,
-            paidByParticipantId: payerParticipantId,
-            isOnBehalfOf: isPayingOnBehalf,
-          },
-          metadata: {
-            participantId: targetParticipantId,
-            paidByParticipantId: payerParticipantId,
-            userId: payerId,
-            isOnBehalfOf: isPayingOnBehalf,
-          },
+          description: `Split bill payment via Paystack — ${bill.title}`,
         });
 
         await qr.commitTransaction();
 
         return {
           status: 'pending',
-          isOnBehalfOf: isPayingOnBehalf,
-          targetParticipantId,
-          paymentMethod: 'paystack',
           authorizationUrl: paystackRes.data.authorization_url,
           reference: txReference,
         };

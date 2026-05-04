@@ -373,6 +373,10 @@ export class ContributeToEventDto {
   @IsOptional()
   details?: Record<string, any>;
 
+  @IsArray()
+  @IsOptional()
+  items?: any[];
+
   @IsString()
   @IsNotEmpty()
   @IsOptional()
