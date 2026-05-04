@@ -290,7 +290,8 @@ export class PaymentWebhookService {
     const billId = metadata.split_bill_id;
     const targetParticipantId = metadata.participant_id;
     const payerParticipantId = metadata.paid_by_participant_id;
-    const isPayingOnBehalf = metadata.is_on_behalf_of === true;
+
+    const isPayingOnBehalf = String(metadata.is_on_behalf_of) === 'true';
 
     if (!billId || !targetParticipantId) {
       this.logger.error(
@@ -321,11 +322,25 @@ export class PaymentWebhookService {
       if (!bill) throw new Error('Bill not found for webhook');
 
       const paidAmount = amountKobo / 100;
+
       if (existingTx) {
         await qr.manager.update(Transaction, existingTx.id, {
           status: TransactionStatus.COMPLETED,
           confirmedAt: new Date(data.paid_at),
           gatewayResponse: data as Record<string, any>,
+        });
+      } else {
+        await qr.manager.save(Transaction, {
+          amount: paidAmount,
+          currency: bill.currency,
+          type: TransactionType.SPLIT_BILL_PAYMENT,
+          direction: TransactionDirection.CREDIT,
+          status: TransactionStatus.COMPLETED,
+          reference: reference,
+          gatewayReference: reference,
+          paymentGateway: 'paystack',
+          confirmedAt: new Date(data.paid_at),
+          metadata: { ...metadata, channel },
         });
       }
 
@@ -386,14 +401,23 @@ export class PaymentWebhookService {
             fullyPaidAt: pFullyPaid ? new Date() : null,
             firstPaidAt: payerParticipant.firstPaidAt ?? new Date(),
           });
+          remainingToDistribute = 0;
         }
       }
 
       const newTotalCollected = bill.totalCollected + paidAmount;
       const billFullyFunded = newTotalCollected >= bill.totalAmount;
 
+      const totalPaidParticipants = await qr.manager.count(
+        SplitBillParticipant,
+        {
+          where: { splitBillId: billId, status: ParticipantStatus.PAID },
+        },
+      );
+
       await qr.manager.update(SplitBill, billId, {
         totalCollected: newTotalCollected,
+        totalPaidParticipants,
         status: billFullyFunded
           ? SplitBillStatus.FUNDED
           : SplitBillStatus.PARTIALLY_PAID,

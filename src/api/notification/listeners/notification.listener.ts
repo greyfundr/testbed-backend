@@ -508,7 +508,7 @@ export class NotificationListener {
           `${payload.participantName} paid ${payload.currency} ${payload.amount.toLocaleString()} ` +
           `on "${payload.billTitle}". ` +
           `Total collected: ${payload.currency} ${payload.totalCollected.toLocaleString()} ` +
-          `of ${payload.currency} ${payload.totalAmount.toLocaleString()}.`,
+          `of ${payload.currency} ${payload.totalAmount?.toLocaleString()}.`,
         type: 'split_bill',
         metadata: {
           billId: payload.billId,
