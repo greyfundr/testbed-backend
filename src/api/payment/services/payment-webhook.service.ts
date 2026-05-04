@@ -307,9 +307,13 @@ export class PaymentWebhookService {
     try {
       const existingTx = await qr.manager.findOne(Transaction, {
         where: { gatewayReference: reference },
+        lock: { mode: 'pessimistic_write' },
       });
 
       if (existingTx && existingTx.status === TransactionStatus.COMPLETED) {
+        this.logger.warn(
+          `Webhook ignored: Payment ${reference} already processed.`,
+        );
         await qr.rollbackTransaction();
         return;
       }
@@ -328,6 +332,7 @@ export class PaymentWebhookService {
           status: TransactionStatus.COMPLETED,
           confirmedAt: new Date(data.paid_at),
           gatewayResponse: data as Record<string, any>,
+          amount: paidAmount,
         });
       } else {
         await qr.manager.save(Transaction, {
@@ -336,11 +341,12 @@ export class PaymentWebhookService {
           type: TransactionType.SPLIT_BILL_PAYMENT,
           direction: TransactionDirection.CREDIT,
           status: TransactionStatus.COMPLETED,
-          reference: reference,
+          reference: `${reference}-${uuidv4()}`,
           gatewayReference: reference,
           paymentGateway: 'paystack',
+          description: `Split bill payment via Paystack — ${bill.title}`,
           confirmedAt: new Date(data.paid_at),
-          metadata: { ...metadata, channel },
+          metadata: { ...metadata },
         });
       }
 
@@ -401,7 +407,6 @@ export class PaymentWebhookService {
             fullyPaidAt: pFullyPaid ? new Date() : null,
             firstPaidAt: payerParticipant.firstPaidAt ?? new Date(),
           });
-          remainingToDistribute = 0;
         }
       }
 
