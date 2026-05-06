@@ -139,9 +139,21 @@ export class EventController {
     status: 200,
     description: 'Return the event leaderboard.',
   })
+  @UseGuards(JwtAuthGuard)
   @Get(':id/leaderboard')
   async getLeaderboard(@Param('id') id: string) {
     return this.eventService.getLeaderboard(id);
+  }
+
+  @ApiOperation({ summary: 'Get all individual contributions for an event' })
+  @ApiResponse({
+    status: 200,
+    description: 'Return list of individual contributions with comments.',
+  })
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/contributions')
+  async getContributions(@Param('id') id: string) {
+    return this.eventService.getContributionHistory(id);
   }
 
   @ApiOperation({

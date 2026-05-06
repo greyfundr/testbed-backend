@@ -572,6 +572,27 @@ export class EventService {
       .getRawMany();
   }
 
+  async getContributionHistory(eventId: string) {
+    return this.eventContributionRepository
+      .createQueryBuilder('contribution')
+      .leftJoin('contribution.user', 'user')
+      .select([
+        'contribution.id',
+        'contribution.amount',
+        'contribution.comment',
+        'contribution.createdAt',
+        'contribution.isAnonymous',
+        'contribution.displayName',
+        'contribution.image',
+        'user.firstName',
+        'user.lastName',
+        'user.username'
+      ])
+      .where('contribution.eventId = :eventId', { eventId })
+      .orderBy('contribution.createdAt', 'DESC')
+      .getMany();
+  }
+
   async findAll(dto: GetAllEventsDto) {
     const {
       categoryId,
