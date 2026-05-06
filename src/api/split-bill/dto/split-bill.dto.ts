@@ -396,15 +396,13 @@ export class PayBillShareDto {
   transactionPin?: string;
 
   @ApiPropertyOptional({
-    description:
-      'Pay on behalf of another participant. ' +
-      'If omitted, payment applies to your own participantId (passed in the URL). ' +
-      'The payer wallet is always the authenticated user — only the credited share changes.',
+    type: [String],
+    description: 'Array of participant IDs to pay on their behalf.',
   })
   @IsOptional()
-  @IsString()
-  @IsUUID()
-  onBehalfOfParticipantId?: string;
+  @IsArray()
+  @IsUUID(undefined, { each: true })
+  onBehalfOfParticipantIds?: string[];
 
   @ApiPropertyOptional({
     description: 'Optional message attached to this payment',

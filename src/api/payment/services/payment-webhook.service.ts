@@ -1,5 +1,5 @@
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { WebhookLog, Transaction } from '../../transaction/entities';
 import { User } from '../../user/entities';
@@ -288,12 +288,11 @@ export class PaymentWebhookService {
   ): Promise<void> {
     const { reference, amount: amountKobo, metadata, channel } = data;
     const billId = metadata.split_bill_id;
-    const targetParticipantId = metadata.participant_id;
-    const payerParticipantId = metadata.paid_by_participant_id;
 
-    const isPayingOnBehalf = String(metadata.is_on_behalf_of) === 'true';
+    const targetParticipantIds: string[] =
+      metadata.target_participant_ids || [];
 
-    if (!billId || !targetParticipantId) {
+    if (!billId || targetParticipantIds.length === 0) {
       this.logger.error(
         `Missing metadata for bill payment webhook: ${reference}`,
       );
@@ -322,7 +321,6 @@ export class PaymentWebhookService {
         where: { id: billId },
         lock: { mode: 'pessimistic_write' },
       });
-
       if (!bill) throw new Error('Bill not found for webhook');
 
       const paidAmount = amountKobo / 100;
@@ -341,8 +339,8 @@ export class PaymentWebhookService {
           type: TransactionType.SPLIT_BILL_PAYMENT,
           direction: TransactionDirection.CREDIT,
           status: TransactionStatus.COMPLETED,
-          reference: `${reference}-${uuidv4()}`,
           gatewayReference: reference,
+          reference: `${reference}-${uuidv4()}`,
           paymentGateway: 'paystack',
           description: `Split bill payment via Paystack — ${bill.title}`,
           confirmedAt: new Date(data.paid_at),
@@ -350,64 +348,48 @@ export class PaymentWebhookService {
         });
       }
 
-      let remainingToDistribute = paidAmount;
-
-      const targetParticipant = await qr.manager.findOne(SplitBillParticipant, {
-        where: { id: targetParticipantId, splitBillId: billId },
+      const participants = await qr.manager.find(SplitBillParticipant, {
+        where: { id: In(targetParticipantIds), splitBillId: billId },
         lock: { mode: 'pessimistic_write' },
       });
 
-      if (targetParticipant) {
-        const tOwed =
-          targetParticipant.amountOwed + targetParticipant.balanceAdjustment;
-        const tDebt = Math.max(0, tOwed - targetParticipant.amountPaid);
-        const paymentToTarget = Math.min(remainingToDistribute, tDebt);
+      const payerParticipantId = metadata.paid_by_participant_id;
 
-        if (paymentToTarget > 0) {
-          const newTAmountPaid = targetParticipant.amountPaid + paymentToTarget;
-          const tFullyPaid = newTAmountPaid >= tOwed;
+      const sortedParticipants = participants.sort((a, b) => {
+        if (a.id === payerParticipantId) return -1;
+        if (b.id === payerParticipantId) return 1;
+        return 0;
+      });
 
-          await qr.manager.update(SplitBillParticipant, targetParticipant.id, {
-            amountPaid: newTAmountPaid,
-            amountRemaining: Math.max(0, tOwed - newTAmountPaid),
-            status: tFullyPaid
-              ? ParticipantStatus.PAID
-              : ParticipantStatus.PARTIAL,
-            paymentMethod: channel === 'card' ? 'card' : 'bank_transfer',
-            fullyPaidAt: tFullyPaid ? new Date() : null,
-            firstPaidAt: targetParticipant.firstPaidAt ?? new Date(),
-          });
-          remainingToDistribute -= paymentToTarget;
-        }
-      }
+      let remainingToDistribute = paidAmount;
 
-      if (remainingToDistribute > 0 && isPayingOnBehalf && payerParticipantId) {
-        const payerParticipant = await qr.manager.findOne(
-          SplitBillParticipant,
-          {
-            where: { id: payerParticipantId, splitBillId: billId },
-            lock: { mode: 'pessimistic_write' },
-          },
+      for (const p of sortedParticipants) {
+        if (remainingToDistribute <= 0) break;
+
+        const totalOwed = p.amountOwed + p.balanceAdjustment;
+        const currentDebt = Math.max(0, totalOwed - p.amountPaid);
+
+        if (currentDebt <= 0) continue;
+
+        const paymentForThisParticipant = Math.min(
+          remainingToDistribute,
+          currentDebt,
         );
+        const newAmountPaid = p.amountPaid + paymentForThisParticipant;
+        const isFullyPaid = newAmountPaid >= totalOwed;
 
-        if (payerParticipant) {
-          const pOwed =
-            payerParticipant.amountOwed + payerParticipant.balanceAdjustment;
-          const newPAmountPaid =
-            payerParticipant.amountPaid + remainingToDistribute;
-          const pFullyPaid = newPAmountPaid >= pOwed;
+        await qr.manager.update(SplitBillParticipant, p.id, {
+          amountPaid: newAmountPaid,
+          amountRemaining: Math.max(0, totalOwed - newAmountPaid),
+          status: isFullyPaid
+            ? ParticipantStatus.PAID
+            : ParticipantStatus.PARTIAL,
+          paymentMethod: channel === 'card' ? 'card' : 'bank_transfer',
+          fullyPaidAt: isFullyPaid ? new Date() : null,
+          firstPaidAt: p.firstPaidAt ?? new Date(),
+        });
 
-          await qr.manager.update(SplitBillParticipant, payerParticipant.id, {
-            amountPaid: newPAmountPaid,
-            amountRemaining: Math.max(0, pOwed - newPAmountPaid),
-            status: pFullyPaid
-              ? ParticipantStatus.PAID
-              : ParticipantStatus.PARTIAL,
-            paymentMethod: channel === 'card' ? 'card' : 'bank_transfer',
-            fullyPaidAt: pFullyPaid ? new Date() : null,
-            firstPaidAt: payerParticipant.firstPaidAt ?? new Date(),
-          });
-        }
+        remainingToDistribute -= paymentForThisParticipant;
       }
 
       const newTotalCollected = bill.totalCollected + paidAmount;
@@ -432,8 +414,7 @@ export class PaymentWebhookService {
 
       this.eventEmitter.emit('split_bill.payment_received', {
         creatorId: bill.creatorId,
-        participantName:
-          targetParticipant?.guestName || metadata.user_id || 'A participant',
+        participantName: metadata.user_name || 'A participant',
         billTitle: bill.title,
         amount: paidAmount,
         totalCollected: newTotalCollected,

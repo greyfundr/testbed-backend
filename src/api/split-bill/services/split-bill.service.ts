@@ -1549,45 +1549,30 @@ export class SplitBillService {
         );
       }
 
-      const isPayingOnBehalf =
-        !!dto.onBehalfOfParticipantId &&
-        dto.onBehalfOfParticipantId !== payerParticipantId;
-
-      const payerOwed =
-        payerParticipant.amountOwed + payerParticipant.balanceAdjustment;
-      const payerRemaining = Math.max(
-        0,
-        payerOwed - payerParticipant.amountPaid,
+      const targetIds = Array.from(
+        new Set([payerParticipantId, ...(dto.onBehalfOfParticipantIds || [])]),
       );
 
-      let totalAllowedToPay = payerRemaining;
-      let targetParticipant: SplitBillParticipant | null = null;
+      const allParticipants = await qr.manager.find(SplitBillParticipant, {
+        where: { id: In(targetIds), splitBillId: billId },
+        lock: { mode: 'pessimistic_write' },
+      });
 
-      if (isPayingOnBehalf) {
-        targetParticipant = await qr.manager.findOne(SplitBillParticipant, {
-          where: { id: dto.onBehalfOfParticipantId, splitBillId: billId },
-          lock: { mode: 'pessimistic_write' },
-        });
+      let totalRemainingDebt = 0;
+      const debtMap = new Map<string, number>();
 
-        if (!targetParticipant) {
-          throw new NotFoundException(
-            'The participant you are paying for is not on this bill',
-          );
-        }
+      for (const p of allParticipants) {
+        if (p.status === ParticipantStatus.DECLINED) continue;
+        const owed = p.amountOwed + p.balanceAdjustment;
+        const remaining = Math.max(0, owed - p.amountPaid);
+        debtMap.set(p.id, remaining);
+        totalRemainingDebt += remaining;
+      }
 
-        if (targetParticipant.status === ParticipantStatus.DECLINED) {
-          throw new BadRequestException(
-            'Cannot pay for a participant who declined the bill',
-          );
-        }
-
-        const targetOwed =
-          targetParticipant.amountOwed + targetParticipant.balanceAdjustment;
-        const targetRemaining = Math.max(
-          0,
-          targetOwed - targetParticipant.amountPaid,
+      if (dto.amount > totalRemainingDebt) {
+        throw new BadRequestException(
+          `Payment of ₦${dto.amount} exceeds the combined debt (₦${totalRemainingDebt}) of selected participants.`,
         );
-        totalAllowedToPay += targetRemaining;
       }
 
       const bill = await qr.manager.findOne(SplitBill, {
@@ -1603,12 +1588,6 @@ export class SplitBillService {
         )
       ) {
         throw new BadRequestException(`Cannot pay into a ${bill.status} bill`);
-      }
-
-      if (dto.amount > totalAllowedToPay) {
-        throw new BadRequestException(
-          `Payment of ₦${dto.amount} exceeds the combined remaining balance (₦${totalAllowedToPay}) for you and the target participant.`,
-        );
       }
 
       if (dto.paymentMethod === BillPaymentMethod.WALLET) {
@@ -1638,14 +1617,16 @@ export class SplitBillService {
           direction: TransactionDirection.DEBIT,
           status: TransactionStatus.COMPLETED,
           reference: txReference,
-          paymentGateway: 'internal',
-          description: isPayingOnBehalf
-            ? `Split bill payment for self and others — ${bill.title}`
-            : `Split bill payment — ${bill.title}`,
+          paymentGateway: 'wallet',
+          description:
+            dto.onBehalfOfParticipantIds &&
+            dto.onBehalfOfParticipantIds.length > 0
+              ? `Split bill payment for self and others — ${bill.title}`
+              : `Split bill payment — ${bill.title}`,
           metadata: {
             billId,
             paidByUserId: payerId,
-            isPayingOnBehalf,
+            onBehalfOfParticipantIds: dto.onBehalfOfParticipantIds,
           },
         });
 
@@ -1659,69 +1640,55 @@ export class SplitBillService {
           qr,
         });
 
-        let remainingToDistribute = dto.amount;
-        let finalTargetId = payerParticipantId;
+        const sortedParticipants = allParticipants.sort((a, b) => {
+          if (a.id === payerParticipantId) return -1;
+          if (b.id === payerParticipantId) return 1;
+          return 0;
+        });
 
-        if (isPayingOnBehalf && targetParticipant) {
-          const tOwed =
-            targetParticipant.amountOwed + targetParticipant.balanceAdjustment;
-          const tDebt = Math.max(0, tOwed - targetParticipant.amountPaid);
-          const paymentToTarget = Math.min(remainingToDistribute, tDebt);
+        let amountLeftToDistribute = dto.amount;
 
-          if (paymentToTarget > 0) {
-            const newTAmountPaid =
-              targetParticipant.amountPaid + paymentToTarget;
-            const tFullyPaid = newTAmountPaid >= tOwed;
+        for (const p of sortedParticipants) {
+          if (amountLeftToDistribute <= 0) break;
 
-            await qr.manager.update(
-              SplitBillParticipant,
-              targetParticipant.id,
-              {
-                amountPaid: newTAmountPaid,
-                amountRemaining: Math.max(0, tOwed - newTAmountPaid),
-                status: tFullyPaid
-                  ? ParticipantStatus.PAID
-                  : ParticipantStatus.PARTIAL,
-                fullyPaidAt: tFullyPaid ? new Date() : null,
-                firstPaidAt: targetParticipant.firstPaidAt ?? new Date(),
-              },
-            );
-            remainingToDistribute -= paymentToTarget;
-            finalTargetId = targetParticipant.id;
-          }
-        }
+          const debt = debtMap.get(p.id) || 0;
+          if (debt <= 0) continue;
 
-        if (remainingToDistribute > 0) {
-          const newPayerPaid =
-            payerParticipant.amountPaid + remainingToDistribute;
-          const payerFullyPaid = newPayerPaid >= payerOwed;
+          const paymentForThisParticipant = Math.min(
+            amountLeftToDistribute,
+            debt,
+          );
+          const newAmountPaid = p.amountPaid + paymentForThisParticipant;
+          const totalOwed = p.amountOwed + p.balanceAdjustment;
+          const isFullyPaid = newAmountPaid >= totalOwed;
 
-          await qr.manager.update(SplitBillParticipant, payerParticipant.id, {
-            amountPaid: newPayerPaid,
-            amountRemaining: Math.max(0, payerOwed - newPayerPaid),
-            status: payerFullyPaid
+          await qr.manager.update(SplitBillParticipant, p.id, {
+            amountPaid: newAmountPaid,
+            amountRemaining: Math.max(0, totalOwed - newAmountPaid),
+            status: isFullyPaid
               ? ParticipantStatus.PAID
               : ParticipantStatus.PARTIAL,
-            fullyPaidAt: payerFullyPaid ? new Date() : null,
-            firstPaidAt: payerParticipant.firstPaidAt ?? new Date(),
+            fullyPaidAt: isFullyPaid ? new Date() : null,
+            firstPaidAt: p.firstPaidAt ?? new Date(),
           });
+
+          amountLeftToDistribute -= paymentForThisParticipant;
         }
 
         const newTotalCollected = bill.totalCollected + dto.amount;
-        const billFullyFunded = newTotalCollected >= bill.totalAmount;
-
         await qr.manager.update(SplitBill, billId, {
           totalCollected: newTotalCollected,
-          status: billFullyFunded
-            ? SplitBillStatus.FUNDED
-            : SplitBillStatus.PARTIALLY_PAID,
+          status:
+            newTotalCollected >= bill.totalAmount
+              ? SplitBillStatus.FUNDED
+              : SplitBillStatus.PARTIALLY_PAID,
         });
 
         await this.logActivity(qr, {
           splitBillId: billId,
           actorId: payerId,
           actionType: ActivityActionType.PAYMENT_MADE,
-          participantId: finalTargetId,
+          participantId: payerParticipantId,
           description: `₦${dto.amount} paid by ${payerId}`,
           amountDifference: dto.amount,
           billStatusAtTime: bill.status,
@@ -1757,7 +1724,7 @@ export class SplitBillService {
         return {
           status: 'success',
           amountPaid: dto.amount,
-          billFullyFunded,
+          billFullyFunded: newTotalCollected >= bill.totalAmount,
         };
       } else if (dto.paymentMethod === BillPaymentMethod.PAYSTACK) {
         const txReference = `SBP-${uuidv4().replace(/-/g, '').substring(0, 16).toUpperCase()}`;
@@ -1769,10 +1736,12 @@ export class SplitBillService {
           metadata: {
             type: 'USER_BILL_PAYMENT',
             split_bill_id: billId,
-            participant_id: dto.onBehalfOfParticipantId ?? payerParticipantId,
+            target_participant_ids: targetIds,
             paid_by_participant_id: payerParticipantId,
             user_id: payerId,
-            is_on_behalf_of: isPayingOnBehalf,
+            is_on_behalf:
+              !!dto.onBehalfOfParticipantIds &&
+              dto.onBehalfOfParticipantIds.length > 0,
           },
         });
 
