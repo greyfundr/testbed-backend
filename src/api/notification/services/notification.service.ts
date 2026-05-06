@@ -35,6 +35,7 @@ export class NotificationService {
     'campaign',
     'event',
   ]);
+  private readonly SENSITIVE_TYPES = new Set(['auth', 'account']);
 
   async notify(
     userId: string,
@@ -49,7 +50,22 @@ export class NotificationService {
 
     const { title, message, type, metadata } = options;
 
+    const isSensitive = type ? this.SENSITIVE_TYPES.has(type) : false;
     const forceInApp = type ? this.ALWAYS_INAPP_TYPES.has(type) : false;
+
+    if (!isSensitive && (forceInApp || (prefs as any).inApp)) {
+      try {
+        await this.notificationRepository.save({
+          user: { id: userId },
+          title,
+          message,
+          type,
+          metadata,
+        });
+      } catch (e) {
+        this.logger.error('In-App Notification failed', e);
+      }
+    }
 
     if (forceInApp || (prefs as any).inApp) {
       try {

@@ -7,7 +7,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, QueryRunner, In } from 'typeorm';
+import { Repository, DataSource, QueryRunner, In, Not } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import {
   SplitBillActivity,
@@ -265,7 +265,10 @@ export class SplitBillService {
     requestingUserId?: string,
   ): Promise<SplitBill> {
     const bill = await this.billRepo.findOne({
-      where: { id: billId },
+      where: {
+        id: billId,
+        participants: { status: Not(ParticipantStatus.DECLINED) },
+      },
       relations: [
         'participants',
         'participants.user',
