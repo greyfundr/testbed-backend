@@ -3108,8 +3108,6 @@ export class SplitBillService {
       }
     }
 
-    console.log('users to validate', userIdsToValidate);
-
     return result;
   }
 

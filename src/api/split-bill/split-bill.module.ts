@@ -13,6 +13,7 @@ import { WalletModule } from '../wallet/wallet.module';
 import { TransactionModule } from '../transaction/transaction.module';
 import { PaymentService } from '../payment/services';
 import { DynamicLinkModule } from '../dynamic-link/dynamic-link.module';
+import { SplitBillSubscriber } from './subscribers/split-bill.subscriber';
 
 @Module({
   imports: [
@@ -28,7 +29,7 @@ import { DynamicLinkModule } from '../dynamic-link/dynamic-link.module';
     DynamicLinkModule,
   ],
   controllers: [SplitBillController],
-  providers: [SplitBillService, PaymentService],
+  providers: [SplitBillService, PaymentService, SplitBillSubscriber],
   exports: [SplitBillService],
 })
 export class SplitBillModule {}

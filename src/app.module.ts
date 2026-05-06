@@ -72,7 +72,10 @@ import { LoggerModule } from 'nestjs-pino';
     SettingsModule,
     CommonModule,
     NotificationModule,
-    EventEmitterModule.forRoot(),
+    EventEmitterModule.forRoot({
+      wildcard: true,
+      delimiter: '.',
+    }),
     TransactionModule,
     WalletModule,
     PaymentModule,
