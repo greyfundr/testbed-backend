@@ -220,8 +220,6 @@ export class NotificationService {
       metadata,
     });
 
-    // await this.mailtrapService.sendEmail(admin.email, title, message);
-
     if (admin.phoneNumber) {
       const waMessage = `*Admin Alert: ${title}*\n\n${message}`;
       await this.whatsAppService.sendMessage(admin.phoneNumber, waMessage);

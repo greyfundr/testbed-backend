@@ -22,6 +22,7 @@ import { TransactionModule } from '../transaction/transaction.module';
 import { UserModule } from '../user/user.module';
 import { PaymentModule } from '../payment/payment.module';
 import { DynamicLinkModule } from '../dynamic-link/dynamic-link.module';
+import { EventEntitySubscriber } from './subscribers/event.subscriber';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { DynamicLinkModule } from '../dynamic-link/dynamic-link.module';
     EventOrganizerRepository,
     EventContributionRepository,
     EventRsvpRepository,
+    EventEntitySubscriber,
   ],
   exports: [EventService],
 })
