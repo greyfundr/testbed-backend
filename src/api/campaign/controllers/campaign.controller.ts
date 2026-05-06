@@ -68,7 +68,8 @@ export class CampaignController {
     @Body() createCampaignDto: CreateCampaignDto,
     @CurrentUser() user: User,
   ) {
-    return this.campaignService.create(createCampaignDto, user);
+    const campaign = await this.campaignService.create(createCampaignDto, user);
+    return this.campaignService.mapToResponse(campaign, user.id);
   }
 
   @ApiOperation({ summary: 'Get all campaigns' })

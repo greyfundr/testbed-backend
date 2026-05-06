@@ -56,6 +56,9 @@ export class CampaignResponseDto {
   @ApiProperty({ enum: CampaignStatus })
   status: CampaignStatus;
 
+  @ApiProperty({ type: 'array', items: { type: 'object' } })
+  participants: any[];
+
   @ApiPropertyOptional()
   shareSlug?: string;
 

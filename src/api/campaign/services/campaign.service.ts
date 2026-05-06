@@ -58,7 +58,6 @@ export class CampaignService {
       'CAMPAIGN_FEE_PERCENTAGE',
       5,
     );
-    const targetAmount = createCampaignDto.target;
 
     const existingCategory = await this.campaignCategoryRepository.findOne({
       where: { id: campaignData.category },
@@ -70,13 +69,13 @@ export class CampaignService {
       );
     }
 
-    const campaign = await this.campaignRepository.create({
+    const campaignInstance = this.campaignRepository.create({
       ...campaignData,
       category: existingCategory,
       offers: createCampaignDto.offers ?? [],
       budget: createCampaignDto.budget ?? [],
       images: createCampaignDto.images ?? [],
-      target: targetAmount,
+      target: createCampaignDto.target,
       feePercentage,
       creatorId: user.id,
       currentAmount: 0,
@@ -84,6 +83,8 @@ export class CampaignService {
       participants,
       shareSlug: nanoid(12),
     });
+
+    const campaign = await this.campaignRepository.save(await campaignInstance);
 
     this.eventEmitter.emit('admin.campaign_created', {
       campaignId: campaign.id,
@@ -128,10 +129,13 @@ export class CampaignService {
   }
 
   async findOne(id: string): Promise<Campaign> {
-    const campaign = await this.campaignRepository.findOne({
-      where: { id },
-      relations: ['creator', 'creator.profile'],
-    });
+    const campaign = await this.campaignRepository
+      .createQueryBuilder('campaign')
+      .leftJoinAndSelect('campaign.creator', 'creator')
+      .leftJoinAndSelect('creator.profile', 'profile')
+      .leftJoinAndSelect('campaign.participants', 'participants')
+      .where('campaign.id = :id', { id })
+      .getOne();
 
     if (!campaign) {
       throw new NotFoundException(`Campaign with ID ${id} not found`);
@@ -224,6 +228,14 @@ export class CampaignService {
       budget: campaign.budget,
       images: campaign.images,
       status: campaign.status,
+      participants:
+        campaign.participants?.map((p) => ({
+          id: p.id,
+          firstName: p.firstName,
+          lastName: p.lastName,
+          username: p.username,
+          profileImage: p.profile?.image,
+        })) || [],
       shareSlug: campaign.shareSlug,
       shareUrl: `${this.configService.get<string>(
         'API_BASE_URL',
