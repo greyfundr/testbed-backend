@@ -1717,12 +1717,25 @@ export class SplitBillService {
 
         await qr.commitTransaction();
 
-        this.emitPaymentReceivedEvent(
-          bill,
-          payerId,
-          dto.amount,
-          newTotalCollected,
-        );
+        const freshBill = await this.billRepo.findOne({
+          where: { id: billId },
+          relations: ['participants'],
+        });
+
+        this.eventEmitter.emit('split_bill.updated', {
+          billId: billId,
+          type: 'UPDATE',
+          data: freshBill,
+        });
+
+        if (freshBill) {
+          this.emitPaymentReceivedEvent(
+            freshBill,
+            payerId,
+            dto.amount,
+            freshBill.totalCollected,
+          );
+        }
 
         return {
           status: 'success',
