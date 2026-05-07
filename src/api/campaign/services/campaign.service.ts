@@ -102,21 +102,24 @@ export class CampaignService {
     const { page, limit, category } = filterDto;
     const skip = filterDto.getSkip();
 
-    const whereCondition: any = {
-      status: CampaignStatus.ACTIVE,
-    };
+    const query = this.campaignRepository
+      .createQueryBuilder('campaign')
+      .leftJoinAndSelect('campaign.creator', 'creator')
+      .leftJoinAndSelect('creator.profile', 'profile')
+      .leftJoinAndSelect('campaign.category', 'category')
+      .loadRelationCountAndMap('campaign.donorsCount', 'campaign.donations')
+      .where('campaign.status = :status', { status: CampaignStatus.ACTIVE })
+      .orderBy('campaign.createdAt', 'DESC')
+      .skip(skip)
+      .take(limit);
 
     if (category) {
-      whereCondition.category = { name: ILike(category) };
+      query.andWhere('category.name ILIKE :category', {
+        category: `%${category}%`,
+      });
     }
 
-    const [data, total] = await this.campaignRepository.findAndCount({
-      where: whereCondition,
-      relations: ['creator', 'creator.profile', 'category'],
-      order: { createdAt: 'DESC' },
-      skip,
-      take: limit,
-    });
+    const [data, total] = await query.getManyAndCount();
 
     return PaginationHelper.createResponse(
       await Promise.all(
@@ -242,6 +245,7 @@ export class CampaignService {
       )}/campaigns/${campaign.shareSlug}`,
       creator,
       createdAt: campaign.createdAt,
+      donorsCount: campaign.donorsCount ?? 0,
       likesCount,
       commentsCount,
       isLiked,

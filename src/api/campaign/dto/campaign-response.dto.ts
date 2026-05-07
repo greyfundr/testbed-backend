@@ -72,6 +72,9 @@ export class CampaignResponseDto {
   createdAt: Date;
 
   @ApiProperty()
+  donorsCount: number;
+
+  @ApiProperty()
   likesCount: number;
 
   @ApiProperty()

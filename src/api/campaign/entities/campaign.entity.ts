@@ -142,6 +142,8 @@ export class Campaign extends AbstractEntity {
   })
   participants: User[];
 
+  donorsCount?: number;
+
   @OneToMany(() => Donation, (donation) => donation.campaign)
   donations: Donation[];
 
