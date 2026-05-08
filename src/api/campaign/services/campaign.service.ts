@@ -114,7 +114,7 @@ export class CampaignService {
       .take(limit);
 
     if (category) {
-      query.andWhere('category.name ILIKE :category', {
+      query.andWhere('category.name LIKE :category', {
         category: `%${category}%`,
       });
     }
