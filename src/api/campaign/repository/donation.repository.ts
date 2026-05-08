@@ -1,9 +1,17 @@
-import { EntityRepository, Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
+import { Injectable } from '@nestjs/common';
 import { Donation } from '../entities/donation.entity';
 
-@EntityRepository(Donation)
+@Injectable()
 export class DonationRepository extends Repository<Donation> {
+  constructor(private dataSource: DataSource) {
+    super(Donation, dataSource.createEntityManager());
+  }
+
   async findByCampaign(campaignId: string): Promise<Donation[]> {
-    return this.find({ where: { campaignId }, relations: ['donor'] });
+    return this.createQueryBuilder('donation')
+      .where('donation.campaignId = :campaignId', { campaignId })
+      .leftJoinAndSelect('donation.donor', 'donor')
+      .getMany();
   }
 }

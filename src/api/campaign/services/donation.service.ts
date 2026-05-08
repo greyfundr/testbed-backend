@@ -318,18 +318,20 @@ export class DonationService {
     const { page, limit } = paginationDto;
     const skip = paginationDto.getSkip();
 
-    const [data, total] = await this.donationRepository.findAndCount({
-      where: { campaignId },
-      relations: [
-        'donor',
-        'donor.profile',
-        'onBehalfOfUser',
-        'onBehalfOfUser.profile',
-      ],
-      order: { createdAt: 'DESC' },
-      skip,
-      take: limit,
-    });
+    const queryBuilder = this.donationRepository
+      .createQueryBuilder('donation')
+      // Join relations
+      .leftJoinAndSelect('donation.donor', 'donor')
+      .leftJoinAndSelect('donor.profile', 'donorProfile')
+      .leftJoinAndSelect('donation.onBehalfOfUser', 'obUser')
+      .leftJoinAndSelect('obUser.profile', 'obUserProfile')
+      .where('donation.campaignId = :campaignId', { campaignId })
+      .orderBy('donation.createdAt', 'DESC')
+      // Pagination
+      .skip(skip)
+      .take(limit);
+
+    const [data, total] = await queryBuilder.getManyAndCount();
 
     return PaginationHelper.createResponse(
       data.map((donation) => this.mapToResponse(donation)),
@@ -337,6 +339,25 @@ export class DonationService {
       page ?? 1,
       limit ?? 10,
     );
+  }
+
+  async getTopDonors(campaignId: string, limit: number = 10): Promise<any> {
+    return this.donationRepository
+      .createQueryBuilder('donation')
+      .leftJoinAndSelect('donation.donor', 'donor')
+      .leftJoinAndSelect('donor.profile', 'profile')
+      .select([
+        'donor.id',
+        'donor.firstName',
+        'donor.lastName',
+        'profile.image',
+        'SUM(donation.amount) as totalDonated',
+      ])
+      .where('donation.campaignId = :campaignId', { campaignId })
+      .groupBy('donor.id')
+      .orderBy('totalDonated', 'DESC')
+      .limit(limit)
+      .getRawMany();
   }
 
   public mapToResponse(donation: Donation): DonationResponseDto {

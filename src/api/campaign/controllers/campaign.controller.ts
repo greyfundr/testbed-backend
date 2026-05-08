@@ -163,4 +163,18 @@ export class CampaignController {
   ): Promise<PaginatedResponse<DonationResponseDto>> {
     return this.donationService.getCampaignDonations(id, paginationDto);
   }
+
+  @ApiOperation({ summary: 'Get top donors for a campaign' })
+  @ApiResponse({
+    status: 200,
+    description: 'Return top donors for the campaign.',
+    type: DonationResponseDto,
+  })
+  @Get(':id/top-donors')
+  async getTopDonors(
+    @Param('id') id: string,
+    @Query('limit') limit: number,
+  ): Promise<DonationResponseDto[]> {
+    return this.donationService.getTopDonors(id, limit);
+  }
 }
