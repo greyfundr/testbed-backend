@@ -28,7 +28,8 @@ import {
 } from '../dto/campaign-response.dto';
 import { CampaignCategoryRepository } from '../repository/campaign-category.repository';
 import { nanoid } from 'nanoid';
-import { ILike } from 'typeorm';
+import { DataSource, ILike } from 'typeorm';
+import { DynamicLinkService } from 'src/api/dynamic-link/services/dynamic-link.service';
 
 @Injectable()
 export class CampaignService {
@@ -37,6 +38,8 @@ export class CampaignService {
   constructor(
     private readonly campaignRepository: CampaignRepository,
     private readonly campaignCategoryRepository: CampaignCategoryRepository,
+    private readonly dynamicLinkService: DynamicLinkService,
+    private readonly dataSource: DataSource,
     private readonly userRepository: UserRepository,
     private readonly configService: ConfigService,
     private readonly eventEmitter: EventEmitter2,
@@ -46,53 +49,92 @@ export class CampaignService {
     createCampaignDto: CreateCampaignDto,
     user: User,
   ): Promise<Campaign> {
-    const { participants: participantIds, ...campaignData } = createCampaignDto;
+    const qr = this.dataSource.createQueryRunner();
+    await qr.connect();
+    await qr.startTransaction();
 
-    const participants = participantIds?.length
-      ? await this.userRepository.findAll({
-          where: participantIds.map((id) => ({ id })),
-        })
-      : [];
+    let savedCampaign: Campaign;
 
-    const feePercentage = this.configService.get<number>(
-      'CAMPAIGN_FEE_PERCENTAGE',
-      5,
-    );
+    try {
+      const { participants: participantIds, ...campaignData } =
+        createCampaignDto;
 
-    const existingCategory = await this.campaignCategoryRepository.findOne({
-      where: { id: campaignData.category },
-    });
+      const participants = participantIds?.length
+        ? await this.userRepository.findAll({
+            where: participantIds.map((id) => ({ id })),
+          })
+        : [];
 
-    if (!existingCategory) {
-      throw new NotFoundException(
-        `Campaign category with ID ${campaignData.category} not found`,
+      const feePercentage = this.configService.get<number>(
+        'CAMPAIGN_FEE_PERCENTAGE',
+        5,
+      );
+
+      const existingCategory = await this.campaignCategoryRepository.findOne({
+        where: { id: campaignData.category },
+      });
+
+      if (!existingCategory) {
+        throw new NotFoundException(
+          `Campaign category with ID ${campaignData.category} not found`,
+        );
+      }
+
+      const campaignInstance = this.campaignRepository.create({
+        ...campaignData,
+        category: existingCategory,
+        offers: createCampaignDto.offers ?? [],
+        budget: createCampaignDto.budget ?? [],
+        images: createCampaignDto.images ?? [],
+        target: createCampaignDto.target,
+        feePercentage,
+        creatorId: user.id,
+        currentAmount: 0,
+        status: CampaignStatus.PENDING_APPROVAL,
+        participants,
+        shareSlug: nanoid(12),
+      });
+
+      const campaign = await this.campaignRepository.save(
+        await campaignInstance,
+      );
+
+      savedCampaign = await qr.manager.save(campaign);
+      await qr.commitTransaction();
+
+      this.eventEmitter.emit('admin.campaign_created', {
+        campaignId: campaign.id,
+        campaignTitle: campaign.title,
+        creatorId: user.id,
+      });
+    } catch (err) {
+      await qr.rollbackTransaction();
+      throw err;
+    } finally {
+      await qr.release();
+    }
+
+    try {
+      const { shortUrl } = await this.dynamicLinkService.forCampaign(
+        savedCampaign.id,
+        savedCampaign.shareSlug ?? savedCampaign.id,
+        savedCampaign.title,
+      );
+
+      if (shortUrl) {
+        await this.campaignRepository.update(savedCampaign.id, {
+          shareLink: shortUrl,
+        });
+        savedCampaign.shareLink = shortUrl;
+      }
+    } catch (linkErr) {
+      this.logger.warn(
+        `Campaign created but failed to generate short link for ${savedCampaign.id}`,
+        linkErr,
       );
     }
 
-    const campaignInstance = this.campaignRepository.create({
-      ...campaignData,
-      category: existingCategory,
-      offers: createCampaignDto.offers ?? [],
-      budget: createCampaignDto.budget ?? [],
-      images: createCampaignDto.images ?? [],
-      target: createCampaignDto.target,
-      feePercentage,
-      creatorId: user.id,
-      currentAmount: 0,
-      status: CampaignStatus.PENDING_APPROVAL,
-      participants,
-      shareSlug: nanoid(12),
-    });
-
-    const campaign = await this.campaignRepository.save(await campaignInstance);
-
-    this.eventEmitter.emit('admin.campaign_created', {
-      campaignId: campaign.id,
-      campaignTitle: campaign.title,
-      creatorId: user.id,
-    });
-
-    return campaign;
+    return savedCampaign;
   }
 
   async findAll(
@@ -240,9 +282,7 @@ export class CampaignService {
           profileImage: p.profile?.image,
         })) || [],
       shareSlug: campaign.shareSlug,
-      shareUrl: `${this.configService.get<string>(
-        'API_BASE_URL',
-      )}/campaigns/${campaign.shareSlug}`,
+      shareUrl: campaign.shareLink as string,
       creator,
       createdAt: campaign.createdAt,
       donorsCount: campaign.donorsCount ?? 0,

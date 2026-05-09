@@ -314,6 +314,32 @@ export class EventService {
       }
 
       await qr.commitTransaction();
+
+      if (pageNumber === 5) {
+        const currentEvent = await this.eventRepository.findOne({
+          where: { id: eventId },
+        });
+
+        if (currentEvent && !currentEvent.shareLink) {
+          try {
+            const { shortUrl } = await this.dynamicLinkService.forEvent(
+              eventId,
+              currentEvent.name,
+            );
+            if (shortUrl) {
+              await this.eventRepository.update(eventId, {
+                shareLink: shortUrl,
+              });
+            }
+          } catch (linkErr) {
+            this.logger.warn(
+              `Event published but failed to generate short link for ${eventId}`,
+              linkErr,
+            );
+          }
+        }
+      }
+
       return this.findOne(eventId);
     } catch (err) {
       await qr.rollbackTransaction();

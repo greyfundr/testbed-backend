@@ -22,6 +22,7 @@ import { PaymentService } from '../payment/services';
 import { CampaignInteractionController } from './controllers/campaign-interaction.controller';
 import { NotificationModule } from '../notification/notification.module';
 import { CampaignSubscriber } from './subscribers/campaign.subscriber';
+import { DynamicLinkModule } from '../dynamic-link/dynamic-link.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { CampaignSubscriber } from './subscribers/campaign.subscriber';
     TransactionModule,
     forwardRef(() => UserModule),
     forwardRef(() => NotificationModule),
+    DynamicLinkModule,
   ],
   controllers: [CampaignController, CampaignInteractionController],
   providers: [
