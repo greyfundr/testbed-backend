@@ -190,10 +190,15 @@ export class DonationService {
         currentAmount: () => `current_amount + ${amount}`,
       });
 
+      const updatedCampaign = await qr.manager.findOne(Campaign, {
+        where: { id: campaign.id },
+        relations: ['creator'],
+      });
+
       await qr.commitTransaction();
 
       this.triggerDonationEvents(
-        campaign,
+        updatedCampaign as Campaign,
         savedDonation,
         user,
         amount,

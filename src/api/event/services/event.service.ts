@@ -564,12 +564,17 @@ export class EventService {
         amountRaised: () => `amount_raised + ${amount}`,
       });
 
+      const updatedEvent = await qr.manager.findOne(Event, {
+        where: { id: event.id },
+        relations: ['creator'],
+      });
+
       await qr.commitTransaction();
 
       this.eventEmitter.emit('event.contribution_created', {
         eventId: event.id,
         contribution: savedContribution,
-        newTotal: Number(event.amountRaised) + amount,
+        newTotal: Number(updatedEvent?.amountRaised),
         contributorName: publicName,
       });
 
