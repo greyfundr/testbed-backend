@@ -78,6 +78,7 @@ export class CampaignController {
     description: 'Return all campaigns.',
     type: CampaignResponseDto,
   })
+  @UseGuards(JwtAuthGuard)
   @Get()
   async findAll(
     @Query() filterDto: CampaignFilterDto,
@@ -108,6 +109,7 @@ export class CampaignController {
     type: CampaignResponseDto,
   })
   @Get(':id')
+  @UseGuards(JwtAuthGuard)
   async findOne(
     @Param('id') id: string,
     @CurrentUser() user?: User,
