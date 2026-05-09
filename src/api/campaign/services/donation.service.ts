@@ -235,6 +235,12 @@ export class DonationService {
           type: 'CAMPAIGN_DONATION',
           campaignId: campaign.id,
           user_id: user.id,
+          isAnonymous: donateDto.isAnonymous,
+          customUsername: donateDto.username,
+          onBehalfOf: donateDto.onBehalfOf,
+          onBehalfOfUserId: donateDto.onBehalfOfUserId,
+          onBehalfOfExternal: donateDto.onBehalfOfExternal,
+          comment: donateDto.comment,
         },
       });
 

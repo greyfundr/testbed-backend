@@ -473,6 +473,12 @@ export class EventService {
           eventId: event.id,
           userId: user.id,
           contributeDto,
+          displayName: displayName || publicName,
+          comment,
+          image,
+          onBehalfOf,
+          onBehalfOfUserId,
+          isAnonymous: !!isAnonymous,
         },
       });
     }
@@ -571,11 +577,15 @@ export class EventService {
 
       await qr.commitTransaction();
 
+      const finalEvent = await this.dataSource.getRepository(Event).findOne({
+        where: { id: event.id },
+      });
+
       this.eventEmitter.emit('event.contribution_created', {
         eventId: event.id,
         contribution: savedContribution,
-        newTotal: Number(updatedEvent?.amountRaised),
-        contributorName: publicName,
+        newTotal: Number(finalEvent?.amountRaised),
+        contributorName: displayName || publicName,
       });
 
       return savedContribution;

@@ -210,8 +210,16 @@ export class PaymentWebhookService {
     data: PaystackChargeSuccessData,
   ): Promise<void> {
     const { reference, metadata, amount: amountInKobo } = data;
-    const campaignId = metadata?.campaignId;
-    const userId = metadata?.user_id;
+    const {
+      campaignId,
+      user_id: userId,
+      isAnonymous,
+      customUsername,
+      onBehalfOf,
+      onBehalfOfUserId,
+      onBehalfOfExternal,
+      comment,
+    } = metadata;
 
     const amount = amountInKobo / 100;
 
@@ -228,11 +236,9 @@ export class PaymentWebhookService {
         this.logger.warn(
           `Transaction not found or already processed: ${reference}`,
         );
+        await qr.rollbackTransaction();
         return;
       }
-
-      transaction.status = TransactionStatus.COMPLETED;
-      await qr.manager.save(transaction);
 
       const campaign = await qr.manager.findOne(Campaign, {
         where: { id: campaignId },
@@ -243,14 +249,21 @@ export class PaymentWebhookService {
         throw new Error('Campaign or User not found during webhook processing');
       }
 
+      transaction.status = TransactionStatus.COMPLETED;
+      await qr.manager.save(transaction);
+
       const donation = qr.manager.create(Donation, {
         amount,
         donorId: user.id,
         campaignId: campaign.id,
         transactionId: transaction.id,
-        isAnonymous: false,
-        onBehalfOf: DonationOnBehalfOf.SELF,
-        comment: 'Donation via Paystack',
+        isAnonymous: isAnonymous ?? false,
+        customUsername: customUsername,
+        onBehalfOf: onBehalfOf ?? DonationOnBehalfOf.SELF,
+        onBehalfOfUserId: onBehalfOfUserId,
+        onBehalfOfFullName: onBehalfOfExternal?.fullName,
+        onBehalfOfPhone: onBehalfOfExternal?.phoneNumber,
+        comment: comment || 'Donation via Paystack',
       });
 
       const savedDonation = await qr.manager.save(donation);
@@ -259,15 +272,20 @@ export class PaymentWebhookService {
         currentAmount: () => `current_amount + ${amount}`,
       });
 
+      const updatedCampaign = await qr.manager.findOne(Campaign, {
+        where: { id: campaign.id },
+        relations: ['creator'],
+      });
+
       await qr.commitTransaction();
 
       this.triggerDonationEvents(
-        campaign,
+        updatedCampaign as Campaign,
         savedDonation,
         user,
         amount,
-        false,
-        `${user.firstName} ${user.lastName}`,
+        isAnonymous as boolean,
+        customUsername as string,
       );
 
       this.logger.log(`Successfully finalized Paystack donation: ${reference}`);
@@ -558,7 +576,17 @@ export class PaymentWebhookService {
     data: PaystackChargeSuccessData,
   ): Promise<void> {
     const { reference, amount: amountKobo, metadata } = data;
-    const { eventId, userId, contributeDto } = metadata;
+    const {
+      eventId,
+      userId,
+      contributeDto,
+      displayName,
+      comment,
+      image,
+      onBehalfOf,
+      onBehalfOfUserId,
+      isAnonymous,
+    } = metadata;
 
     if (!eventId || !userId || !contributeDto) {
       this.logger.error(
@@ -629,6 +657,12 @@ export class PaymentWebhookService {
         },
       });
 
+      let contributorName = displayName;
+
+      if (isAnonymous) {
+        contributorName = user.anonymousId;
+      }
+
       // 3. Create the Contribution Record directly
       const contribution = qr.manager.create(EventContribution, {
         eventId: event.id,
@@ -637,6 +671,11 @@ export class PaymentWebhookService {
         amount: contributeDto.amount,
         details: contributeDto.details ?? {},
         transactionId: transaction.id,
+        displayName: contributorName,
+        comment,
+        image,
+        onBehalfOf,
+        onBehalfOfUserId,
       });
 
       const savedContribution = await qr.manager.save(contribution);
@@ -650,10 +689,15 @@ export class PaymentWebhookService {
         `Event contribution finalized directly via Paystack webhook for ref: ${reference}`,
       );
 
+      const updatedEvent = await this.dataSource
+        .getRepository(Event)
+        .findOne({ where: { id: event.id } });
+
       this.eventEmitter.emit('event.contribution_created', {
         eventId: event.id,
         contribution: savedContribution,
-        newTotal: Number(event.amountRaised) + amountKobo / 100,
+        newTotal: updatedEvent ? Number(updatedEvent.amountRaised) : undefined,
+        contributorName,
       });
     } catch (err) {
       await qr.rollbackTransaction();
