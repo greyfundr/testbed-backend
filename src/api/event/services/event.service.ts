@@ -423,7 +423,7 @@ export class EventService {
       }
     }
 
-    let publicName = 'Anonymous';
+    let publicName = user.anonymousId;
     if (!isAnonymous) {
       if (displayName) {
         publicName = displayName;
@@ -432,6 +432,8 @@ export class EventService {
       } else {
         publicName = `${user.firstName} ${user.lastName}`.trim() || user.email;
       }
+    } else {
+      displayName = publicName as string;
     }
 
     if (paymentMethod === EventPaymentMethod.PAYSTACK) {
@@ -586,7 +588,7 @@ export class EventService {
         'contribution.image',
         'user.firstName',
         'user.lastName',
-        'user.username'
+        'user.username',
       ])
       .where('contribution.eventId = :eventId', { eventId })
       .orderBy('contribution.createdAt', 'DESC')

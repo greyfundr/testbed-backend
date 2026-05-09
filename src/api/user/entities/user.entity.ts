@@ -1,4 +1,4 @@
-import { Entity, Column, OneToOne, OneToMany } from 'typeorm';
+import { Entity, Column, OneToOne, OneToMany, BeforeInsert } from 'typeorm';
 import { AbstractEntity } from '../../../common/entities';
 import { AccountType } from '../enums/user.enum';
 import { Settings } from '../../settings';
@@ -31,6 +31,21 @@ export class User extends AbstractEntity {
 
   @Column({ type: 'varchar', unique: true, nullable: true })
   username: string | null;
+
+  @Column({
+    type: 'varchar',
+    nullable: true,
+    unique: true,
+    name: 'anonymous_id',
+  })
+  anonymousId: string | null;
+
+  @BeforeInsert()
+  generateAnonymousId() {
+    const timePart = Date.now().toString().slice(-6);
+    const randomPart = Math.floor(Math.random() * 10);
+    this.anonymousId = `Anonymous${timePart}${randomPart}`;
+  }
 
   @Column({ type: 'varchar', name: 'account_type' })
   accountType: AccountType;
@@ -154,4 +169,5 @@ export const USER_SAFE_FIELDS: (keyof User)[] = [
   'dateOfBirth',
   'createdAt',
   'fcmToken',
+  'anonymousId',
 ];

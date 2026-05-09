@@ -87,6 +87,7 @@ export class UserService {
         'user.firstName',
         'user.lastName',
         'user.username',
+        'user.anonymousId',
         'user.accountType',
       ])
       .leftJoinAndSelect('user.profile', 'profile')
