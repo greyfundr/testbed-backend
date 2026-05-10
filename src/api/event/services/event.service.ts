@@ -463,6 +463,14 @@ export class EventService {
     }
 
     if (paymentMethod === EventPaymentMethod.PAYSTACK) {
+      if (
+        onBehalfOf === DonationOnBehalfOf.USER &&
+        (onBehalfOfUserId || details?.onBehalfOfUserId)
+      ) {
+        publicName = details?.onBehalfOfFullName;
+        displayName = details?.onBehalfOfFullName;
+      }
+
       const reference = `EC-${uuidv4().replace(/-/g, '').substring(0, 20).toUpperCase()}`;
       return this.paymentService.initiateTransactions({
         amount: Math.round(amount * 100),
@@ -474,10 +482,10 @@ export class EventService {
           userId: user.id,
           contributeDto,
           displayName: displayName || publicName,
-          comment,
-          image,
-          onBehalfOf,
-          onBehalfOfUserId,
+          comment: comment || details?.comment,
+          image: image || details?.image,
+          onBehalfOf: onBehalfOf || details?.onBehalfOf,
+          onBehalfOfUserId: onBehalfOfUserId || details?.onBehalfOfUserId,
           isAnonymous: !!isAnonymous,
         },
       });

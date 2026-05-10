@@ -659,10 +659,6 @@ export class PaymentWebhookService {
 
       let contributorName = displayName;
 
-      if (isAnonymous) {
-        contributorName = user.anonymousId;
-      }
-
       // 3. Create the Contribution Record directly
       const contribution = qr.manager.create(EventContribution, {
         eventId: event.id,
