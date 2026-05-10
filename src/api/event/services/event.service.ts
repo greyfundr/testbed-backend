@@ -559,7 +559,7 @@ export class EventService {
 
       const contribution = qr.manager.create(EventContribution, {
         eventId: event.id,
-        userId: user.id,
+        userId: onBehalfOfUserId ? onBehalfOfUserId : user.id,
         type,
         amount,
         details: details ?? {},

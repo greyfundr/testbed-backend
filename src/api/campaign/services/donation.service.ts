@@ -165,7 +165,7 @@ export class DonationService {
 
       const donation = qr.manager.create(Donation, {
         amount,
-        donorId: user.id,
+        donorId: onBehalfOfUserId ? onBehalfOfUserId : user.id,
         campaignId: campaign.id,
         transactionId: transaction.id,
         isAnonymous: isAnonymous ?? false,
