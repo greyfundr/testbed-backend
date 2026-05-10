@@ -279,10 +279,14 @@ export class PaymentWebhookService {
 
       await qr.commitTransaction();
 
+      const donor = onBehalfOfUserId
+        ? await qr.manager.findOne(User, { where: { id: onBehalfOfUserId } })
+        : user;
+
       this.triggerDonationEvents(
         updatedCampaign as Campaign,
         savedDonation,
-        user,
+        donor as User,
         amount,
         isAnonymous as boolean,
         customUsername as string,
