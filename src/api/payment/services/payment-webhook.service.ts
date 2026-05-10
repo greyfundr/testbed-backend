@@ -254,7 +254,7 @@ export class PaymentWebhookService {
 
       const donation = qr.manager.create(Donation, {
         amount,
-        donorId: user.id,
+        donorId: onBehalfOfUserId ? onBehalfOfUserId : user.id,
         campaignId: campaign.id,
         transactionId: transaction.id,
         isAnonymous: isAnonymous ?? false,
@@ -654,6 +654,9 @@ export class PaymentWebhookService {
           type: contributeDto.type,
           userId: user.id,
           channel: data.channel,
+          onBehalfOf: onBehalfOf,
+          onBehalfOfUserId: onBehalfOfUserId,
+          onBehalfOfFullName: onBehalfOfFullName,
         },
       });
 
@@ -662,7 +665,7 @@ export class PaymentWebhookService {
       // 3. Create the Contribution Record directly
       const contribution = qr.manager.create(EventContribution, {
         eventId: event.id,
-        userId: user.id,
+        userId: onBehalfOfUserId ? onBehalfOfUserId : user.id,
         type: contributeDto.type,
         amount: contributeDto.amount,
         details: contributeDto.details ?? {},
