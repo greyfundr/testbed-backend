@@ -464,7 +464,7 @@ export class EventService {
 
     if (paymentMethod === EventPaymentMethod.PAYSTACK) {
       if (
-        onBehalfOf === DonationOnBehalfOf.USER &&
+        (details?.onBehalfOf || onBehalfOf) === DonationOnBehalfOf.USER &&
         (onBehalfOfUserId || details?.onBehalfOfUserId)
       ) {
         publicName = details?.onBehalfOfFullName;
@@ -484,8 +484,9 @@ export class EventService {
           displayName: displayName || publicName,
           comment: comment || details?.comment,
           image: image || details?.image,
-          onBehalfOf: onBehalfOf || details?.onBehalfOf,
+          onBehalfOf: details?.onBehalfOf || onBehalfOf,
           onBehalfOfUserId: onBehalfOfUserId || details?.onBehalfOfUserId,
+          onBehalfOfFullName: onBehalfOfFullName || details?.onBehalfOfFullName,
           isAnonymous: !!isAnonymous,
         },
       });

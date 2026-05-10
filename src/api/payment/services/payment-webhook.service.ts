@@ -585,7 +585,7 @@ export class PaymentWebhookService {
       image,
       onBehalfOf,
       onBehalfOfUserId,
-      isAnonymous,
+      onBehalfOfFullName,
     } = metadata;
 
     if (!eventId || !userId || !contributeDto) {
@@ -672,6 +672,7 @@ export class PaymentWebhookService {
         image,
         onBehalfOf,
         onBehalfOfUserId,
+        onBehalfOfFullName,
       });
 
       const savedContribution = await qr.manager.save(contribution);
