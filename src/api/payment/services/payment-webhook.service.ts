@@ -662,7 +662,6 @@ export class PaymentWebhookService {
 
       let contributorName = displayName;
 
-      // 3. Create the Contribution Record directly
       const contribution = qr.manager.create(EventContribution, {
         eventId: event.id,
         userId: onBehalfOfUserId ? onBehalfOfUserId : user.id,
@@ -689,15 +688,18 @@ export class PaymentWebhookService {
         `Event contribution finalized directly via Paystack webhook for ref: ${reference}`,
       );
 
-      const updatedEvent = await this.dataSource
-        .getRepository(Event)
-        .findOne({ where: { id: event.id } });
+      const updatedEvent = await this.dataSource.getRepository(Event).findOne({
+        where: { id: event.id },
+        relations: ['creator'],
+      });
 
       this.eventEmitter.emit('event.contribution_created', {
         eventId: event.id,
+        title: event.name,
         contribution: savedContribution,
-        newTotal: updatedEvent ? Number(updatedEvent.amountRaised) : undefined,
-        contributorName,
+        newTotal: Number(updatedEvent?.amountRaised),
+        contributorName: contributorName,
+        pushToken: updatedEvent?.creator?.fcmToken,
       });
     } catch (err) {
       await qr.rollbackTransaction();

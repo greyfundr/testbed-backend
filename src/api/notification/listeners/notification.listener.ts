@@ -3,6 +3,7 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { NotificationService } from '../services/notification.service';
 import { AdminRepository } from '../../admin/repository/admin.repository';
 import { FirebaseService } from '../services/firebase.service';
+import { EventContribution } from 'src/api/event/entities';
 
 @Injectable()
 export class NotificationListener {
@@ -128,21 +129,24 @@ export class NotificationListener {
     email: string;
     campaignName: string;
     amount: number;
-    phoneNumber?: string;
+    campaignId: string;
     pushToken?: string;
   }) {
-    this.logger.log(`Handling donation.receipt event for ${payload.donorId}`);
+    this.logger.log(
+      `Sending push notification receipt to donor ${payload.donorId}`,
+    );
+
     await this.notificationService.notify(
       payload.donorId,
       'paymentConfirmations',
       {
-        title: 'Donation Successful',
-        message: `Thank you for your generous donation of ₦${payload.amount} to "${payload.campaignName}".`,
+        title: 'Donation Successful! ❤️',
+        message: `Your donation of ₦${payload.amount.toLocaleString()} to "${payload.campaignName}" was received. Thank you!`,
         type: 'transaction',
         metadata: {
-          email: payload.email,
-          phoneNumber: payload.phoneNumber,
+          campaignId: payload.campaignId,
           pushToken: payload.pushToken,
+          amount: payload.amount.toString(),
         },
       },
     );
@@ -154,22 +158,24 @@ export class NotificationListener {
     campaignName: string;
     amount: number;
     donorName: string;
-    phoneNumber?: string;
+    campaignId: string;
     pushToken?: string;
   }) {
     this.logger.log(
-      `Handling donation.received event for creator ${payload.creatorId}`,
+      `Sending push notification alert to creator ${payload.creatorId}`,
     );
+
     await this.notificationService.notify(
       payload.creatorId,
       'campaignUpdates',
       {
-        title: 'New Donation Received!',
-        message: `"${payload.campaignName}" just received a donation of ₦${payload.amount} from ${payload.donorName}.`,
+        title: 'New Donation! 💰',
+        message: `${payload.donorName} just donated ₦${payload.amount.toLocaleString()} to "${payload.campaignName}".`,
         type: 'campaign',
         metadata: {
-          phoneNumber: payload.phoneNumber,
+          campaignId: payload.campaignId,
           pushToken: payload.pushToken,
+          donorName: payload.donorName,
         },
       },
     );
@@ -692,5 +698,52 @@ export class NotificationListener {
       type: 'transaction',
       metadata: { amount: payload.amount, reason: payload.reason },
     });
+  }
+
+  @OnEvent('event.contribution_created')
+  async handleEventContributionEvent(payload: {
+    eventId: string;
+    title: string;
+    contribution: EventContribution;
+    newTotal: number;
+    contributorName: string;
+    pushToken?: string;
+  }) {
+    const { contribution, title, contributorName, pushToken } = payload;
+
+    this.logger.log(
+      `Handling event.contribution_created for event ${payload.eventId}`,
+    );
+
+    await this.notificationService.notify(
+      contribution.event?.creatorId || payload.contribution.eventId,
+      'socialInteractions',
+      {
+        title: 'New Event Contribution!',
+        message: `${contributorName} just contributed ₦${contribution.amount.toLocaleString()} to "${title}".`,
+        type: 'event_contribution',
+        metadata: {
+          eventId: payload.eventId,
+          contributionId: contribution.id,
+          pushToken: pushToken,
+        },
+      },
+    );
+
+    if (contribution.userId) {
+      await this.notificationService.notify(
+        contribution.userId,
+        'paymentConfirmations',
+        {
+          title: 'Contribution Successful',
+          message: `Your contribution of ₦${contribution.amount.toLocaleString()} to "${title}" was successful. Thank you for your support!`,
+          type: 'transaction',
+          metadata: {
+            eventId: payload.eventId,
+            amount: contribution.amount,
+          },
+        },
+      );
+    }
   }
 }

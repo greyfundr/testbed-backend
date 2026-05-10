@@ -55,6 +55,7 @@ import { PaymentService } from '../../payment/services/payment.service';
 import { DynamicLinkService } from '../../dynamic-link/services/dynamic-link.service';
 import { Listing } from '../interfaces/event.interface';
 import { DonationOnBehalfOf } from 'src/api/campaign/enums/campaign.enum';
+import { title } from 'process';
 
 @Injectable()
 export class EventService {
@@ -579,22 +580,20 @@ export class EventService {
         amountRaised: () => `amount_raised + ${amount}`,
       });
 
-      const updatedEvent = await qr.manager.findOne(Event, {
-        where: { id: event.id },
-        relations: ['creator'],
-      });
-
       await qr.commitTransaction();
 
       const finalEvent = await this.dataSource.getRepository(Event).findOne({
         where: { id: event.id },
+        relations: ['creator'],
       });
 
       this.eventEmitter.emit('event.contribution_created', {
         eventId: event.id,
+        title: event.name,
         contribution: savedContribution,
         newTotal: Number(finalEvent?.amountRaised),
         contributorName: displayName || publicName,
+        pushToken: finalEvent?.creator.fcmToken,
       });
 
       return savedContribution;

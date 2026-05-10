@@ -197,10 +197,13 @@ export class DonationService {
 
       await qr.commitTransaction();
 
+      const donor = onBehalfOfUserId
+        ? await qr.manager.findOne(User, { where: { id: onBehalfOfUserId } })
+        : user;
+
       this.triggerDonationEvents(
         updatedCampaign as Campaign,
-        savedDonation,
-        user,
+        donor as User,
         amount,
         isAnonymous as boolean,
         customUsername as string,
@@ -281,7 +284,6 @@ export class DonationService {
 
   private triggerDonationEvents(
     campaign: Campaign,
-    donation: Donation,
     user: User,
     amount: number,
     isAnonymous: boolean,
@@ -291,14 +293,18 @@ export class DonationService {
       donorId: user.id,
       email: user.email,
       campaignName: campaign.title,
+      campaignId: campaign.id,
       amount,
+      pushToken: user.fcmToken,
     });
 
     this.eventEmitter.emit('donation.received', {
       creatorId: campaign.creatorId,
       campaignName: campaign.title,
+      campaignId: campaign.id,
       amount,
       donorName: isAnonymous ? 'Anonymous' : customUsername || user.firstName,
+      pushToken: campaign.creator?.fcmToken,
     });
 
     const newCurrentAmount = Number(campaign.currentAmount) + amount;
