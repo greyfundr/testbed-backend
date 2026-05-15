@@ -6,14 +6,35 @@ import {
   Donation,
   CampaignLike,
   CampaignComment,
+  CampaignOrganizer,
+  CampaignOrganizerFollow,
+  CampaignAmplifier,
+  CampaignExpenditure,
+  CampaignSave,
+  CampaignVendor,
+  CampaignProposal,
+  CampaignProposalAllocation,
+  CampaignProposalVote,
+  CampaignUpdate,
 } from './entities';
 import { CampaignRepository, DonationRepository } from './repository';
 import {
   CampaignService,
   DonationService,
   CampaignInteractionService,
+  CampaignSaveService,
+  CampaignOrganizerService,
+  CampaignAmplifierService,
+  CampaignExpenditureService,
+  CampaignVendorService,
+  CampaignProposalService,
+  CampaignUpdateService,
 } from './services';
 import { CampaignController } from './controllers/campaign.controller';
+import { CampaignOrganizerController } from './controllers/campaign-organizer.controller';
+import { CampaignExtrasController } from './controllers/campaign-extras.controller';
+import { CampaignGovernanceController } from './controllers/campaign-governance.controller';
+import { CampaignUpdateController } from './controllers/campaign-update.controller';
 import { WalletModule } from '../wallet/wallet.module';
 import { TransactionModule } from '../transaction/transaction.module';
 import { UserModule } from '../user/user.module';
@@ -23,6 +44,7 @@ import { CampaignInteractionController } from './controllers/campaign-interactio
 import { NotificationModule } from '../notification/notification.module';
 import { CampaignSubscriber } from './subscribers/campaign.subscriber';
 import { DynamicLinkModule } from '../dynamic-link/dynamic-link.module';
+import { User } from '../user/entities';
 
 @Module({
   imports: [
@@ -32,6 +54,19 @@ import { DynamicLinkModule } from '../dynamic-link/dynamic-link.module';
       CampaignCategory,
       CampaignLike,
       CampaignComment,
+      CampaignOrganizer,
+      CampaignOrganizerFollow,
+      CampaignAmplifier,
+      CampaignExpenditure,
+      CampaignSave,
+      CampaignVendor,
+      CampaignProposal,
+      CampaignProposalAllocation,
+      CampaignProposalVote,
+      CampaignUpdate,
+      // Needed by CampaignOrganizerService to look up invitees and
+      // gate the create() flow when a userId is provided.
+      User,
     ]),
     forwardRef(() => WalletModule),
     TransactionModule,
@@ -39,7 +74,14 @@ import { DynamicLinkModule } from '../dynamic-link/dynamic-link.module';
     forwardRef(() => NotificationModule),
     DynamicLinkModule,
   ],
-  controllers: [CampaignController, CampaignInteractionController],
+  controllers: [
+    CampaignController,
+    CampaignInteractionController,
+    CampaignOrganizerController,
+    CampaignExtrasController,
+    CampaignGovernanceController,
+    CampaignUpdateController,
+  ],
   providers: [
     CampaignService,
     DonationService,
@@ -49,6 +91,13 @@ import { DynamicLinkModule } from '../dynamic-link/dynamic-link.module';
     PaymentService,
     CampaignInteractionService,
     CampaignSubscriber,
+    CampaignSaveService,
+    CampaignOrganizerService,
+    CampaignAmplifierService,
+    CampaignExpenditureService,
+    CampaignVendorService,
+    CampaignProposalService,
+    CampaignUpdateService,
   ],
   exports: [
     CampaignService,
@@ -56,6 +105,13 @@ import { DynamicLinkModule } from '../dynamic-link/dynamic-link.module';
     CampaignRepository,
     DonationRepository,
     CampaignInteractionService,
+    CampaignSaveService,
+    CampaignOrganizerService,
+    CampaignAmplifierService,
+    CampaignExpenditureService,
+    CampaignVendorService,
+    CampaignProposalService,
+    CampaignUpdateService,
   ],
 })
 export class CampaignModule {}

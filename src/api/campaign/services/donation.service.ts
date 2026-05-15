@@ -28,6 +28,7 @@ import {
 } from '../../../common/helpers/pagination.helper';
 import { DonationResponseDto, DonorDto } from '../dto/donation-response.dto';
 import { PaymentService } from 'src/api/payment/services';
+import { CampaignAmplifierService } from './campaign-amplifier.service';
 
 @Injectable()
 export class DonationService {
@@ -41,7 +42,19 @@ export class DonationService {
     private readonly paymentService: PaymentService,
     private readonly walletService: WalletService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly amplifierService: CampaignAmplifierService,
   ) {}
+
+  /** Resolve a referral code to its amplifier id, scoped to this campaign. */
+  private async resolveReferrerAmplifierId(
+    code: string | undefined,
+    campaignId: string,
+  ): Promise<string | null> {
+    if (!code) return null;
+    const amp = await this.amplifierService.getByCode(code);
+    if (!amp || amp.campaignId !== campaignId) return null;
+    return amp.id;
+  }
 
   async donate(
     campaignId: string,
@@ -163,6 +176,11 @@ export class DonationService {
         qr,
       });
 
+      const referrerAmplifierId = await this.resolveReferrerAmplifierId(
+        donateDto.referrerCode,
+        campaign.id,
+      );
+
       const donation = qr.manager.create(Donation, {
         amount,
         donorId: onBehalfOfUserId ? onBehalfOfUserId : user.id,
@@ -182,6 +200,7 @@ export class DonationService {
             ? onBehalfOfExternal?.phoneNumber
             : undefined,
         comment,
+        referrerAmplifierId,
       });
 
       const savedDonation = await qr.manager.save(donation);
@@ -230,6 +249,11 @@ export class DonationService {
     try {
       const txReference = `SBP-${uuidv4().replace(/-/g, '').substring(0, 16).toUpperCase()}`;
 
+      const referrerAmplifierId = await this.resolveReferrerAmplifierId(
+        donateDto.referrerCode,
+        campaign.id,
+      );
+
       const paystackRes = await this.paymentService.initiateTransactions({
         amount: donateDto.amount * 100,
         email: user?.email as string,
@@ -244,6 +268,7 @@ export class DonationService {
           onBehalfOfUserId: donateDto.onBehalfOfUserId,
           onBehalfOfExternal: donateDto.onBehalfOfExternal,
           comment: donateDto.comment,
+          referrerAmplifierId,
         },
       });
 
@@ -359,7 +384,18 @@ export class DonationService {
   }
 
   async getTopDonors(campaignId: string, limit: number = 10): Promise<any> {
-    return this.donationRepository
+    // `donation.donorId IS NOT NULL` matches the criteria used by the
+    // public Top-donor chip on the funding card
+    // (see CampaignService.getTopDonor). Without it, donations missing
+    // a linked donor would all collapse into a single GROUP BY donor.id
+    // null bucket and surface as a phantom top row.
+    //
+    // `MIN(donation.isAnonymous)` is 1 iff *every* donation by this
+    // donor on this campaign was flagged anonymous — in that case we
+    // strip the name/avatar before returning so the leaderboard
+    // honours the donor's privacy choice. A donor with even one
+    // non-anonymous donation has effectively opted into being named.
+    const rows = await this.donationRepository
       .createQueryBuilder('donation')
       .leftJoinAndSelect('donation.donor', 'donor')
       .leftJoinAndSelect('donor.profile', 'profile')
@@ -369,12 +405,29 @@ export class DonationService {
         'donor.lastName',
         'profile.image',
         'SUM(donation.amount) as totalDonated',
+        'MIN(donation.isAnonymous) as allAnonymous',
       ])
       .where('donation.campaignId = :campaignId', { campaignId })
+      .andWhere('donation.donorId IS NOT NULL')
       .groupBy('donor.id')
       .orderBy('totalDonated', 'DESC')
       .limit(limit)
       .getRawMany();
+
+    return rows.map((r) => {
+      const isAnonymous =
+        r.allAnonymous === 1 ||
+        r.allAnonymous === '1' ||
+        r.allAnonymous === true;
+      return {
+        donor_id: r.donor_id,
+        donor_first_name: isAnonymous ? null : r.donor_firstName,
+        donor_last_name: isAnonymous ? null : r.donor_lastName,
+        profile_image: isAnonymous ? null : r.profile_image,
+        isAnonymous,
+        totalDonated: r.totalDonated,
+      };
+    });
   }
 
   public mapToResponse(donation: Donation): DonationResponseDto {

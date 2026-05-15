@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Param,
   Req,
   Res,
   HttpCode,
@@ -9,9 +10,12 @@ import {
   Headers,
   Body,
   RawBodyRequest,
+  UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import { PaymentWebhookService, PaymentService } from '../services';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 
 @Controller('payment')
 export class PaymentWebhookController {
@@ -21,6 +25,23 @@ export class PaymentWebhookController {
     private readonly webhookService: PaymentWebhookService,
     private readonly paymentService: PaymentService,
   ) {}
+
+  // Client-side verification fallback for Paystack donations. The web
+  // sheet's success callback fires before Paystack's async webhook is
+  // guaranteed to have hit our backend — especially in local dev where
+  // Paystack can't reach localhost. Hitting this endpoint re-uses the
+  // same finalization code path the webhook does, and is idempotent.
+  @Post('verify/:reference')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary:
+      'Force-verify a pending Paystack donation by reference and create the Donation row if not already done',
+  })
+  async verifyDonation(@Param('reference') reference: string) {
+    return this.webhookService.finalizeCampaignDonationByReference(reference);
+  }
 
   @Post('webhook')
   @HttpCode(HttpStatus.OK)

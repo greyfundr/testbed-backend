@@ -14,7 +14,13 @@ import {
 } from '../dto/campaign.dto';
 import { Campaign } from '../entities/campaign.entity';
 import { CampaignStatus } from '../enums/campaign.enum';
-import { CampaignLike, CampaignComment } from '../entities';
+import {
+  CampaignLike,
+  CampaignComment,
+  CampaignAmplifier,
+  CampaignOrganizer,
+  Donation,
+} from '../entities';
 import { User } from '../../user/entities/user.entity';
 import { UserRepository } from '../../user/repository/user.repository';
 import {
@@ -30,6 +36,10 @@ import { CampaignCategoryRepository } from '../repository/campaign-category.repo
 import { nanoid } from 'nanoid';
 import { DataSource, ILike } from 'typeorm';
 import { DynamicLinkService } from 'src/api/dynamic-link/services/dynamic-link.service';
+import { CampaignSaveService } from './campaign-save.service';
+import { CampaignOrganizerService } from './campaign-organizer.service';
+import { CampaignAmplifierService } from './campaign-amplifier.service';
+import { CampaignVendorService } from './campaign-vendor.service';
 
 @Injectable()
 export class CampaignService {
@@ -43,6 +53,10 @@ export class CampaignService {
     private readonly userRepository: UserRepository,
     private readonly configService: ConfigService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly saveService: CampaignSaveService,
+    private readonly organizerService: CampaignOrganizerService,
+    private readonly amplifierService: CampaignAmplifierService,
+    private readonly vendorService: CampaignVendorService,
   ) {}
 
   async create(
@@ -56,8 +70,11 @@ export class CampaignService {
     let savedCampaign: Campaign;
 
     try {
-      const { participants: participantIds, ...campaignData } =
-        createCampaignDto;
+      const {
+        participants: participantIds,
+        vendors: seedVendors,
+        ...campaignData
+      } = createCampaignDto;
 
       const participants = participantIds?.length
         ? await this.userRepository.findAll({
@@ -90,7 +107,11 @@ export class CampaignService {
         feePercentage,
         creatorId: user.id,
         currentAmount: 0,
-        status: CampaignStatus.PENDING_APPROVAL,
+        // Campaigns go live immediately. The PENDING_APPROVAL status is
+        // retained on the enum for a future moderation flow but is not
+        // applied here today — no approval endpoint currently exists to
+        // flip a campaign from pending to active.
+        status: CampaignStatus.ACTIVE,
         participants,
         shareSlug: nanoid(12),
       });
@@ -101,6 +122,21 @@ export class CampaignService {
 
       savedCampaign = await qr.manager.save(campaign);
       await qr.commitTransaction();
+
+      if (seedVendors?.length) {
+        try {
+          await this.vendorService.createMany(
+            savedCampaign.id,
+            user.id,
+            seedVendors,
+          );
+        } catch (vendorErr) {
+          this.logger.warn(
+            `Campaign ${savedCampaign.id} created but vendor seeding failed`,
+            vendorErr,
+          );
+        }
+      }
 
       this.eventEmitter.emit('admin.campaign_created', {
         campaignId: campaign.id,
@@ -219,6 +255,26 @@ export class CampaignService {
     return this.campaignRepository.save(campaign);
   }
 
+  // Creator-only status flip. Used by the Manage panel's Pause / Resume
+  // / Cancel actions. Donations are blocked for any non-ACTIVE status
+  // by [DonationService.donate].
+  async updateStatus(
+    id: string,
+    status: CampaignStatus,
+    user: User,
+  ): Promise<Campaign> {
+    const campaign = await this.findOne(id);
+
+    if (campaign.creatorId !== user.id) {
+      throw new ForbiddenException(
+        'You are not authorized to change this campaign status',
+      );
+    }
+
+    campaign.status = status;
+    return this.campaignRepository.save(campaign);
+  }
+
   async findMyCampaigns(user: User): Promise<CampaignResponseDto[]> {
     const campaigns = await this.campaignRepository.findAll({
       where: { creatorId: user.id },
@@ -252,12 +308,32 @@ export class CampaignService {
       isLiked = !!like;
     }
 
+    const [
+      isSaved,
+      organizers,
+      topAmplifiers,
+      financialAccess,
+      topDonor,
+      distinctDonorsCount,
+    ] = await Promise.all([
+      currentUserId
+        ? this.saveService.isSaved(currentUserId, campaign.id)
+        : Promise.resolve(false),
+      this.organizerService.list(campaign.id, currentUserId),
+      this.amplifierService.topForCampaign(campaign.id, 5),
+      this.computeFinancialAccess(campaign, currentUserId),
+      this.getTopDonor(campaign.id),
+      this.getDistinctDonorsCount(campaign.id),
+    ]);
+
     const creator: CampaignCreatorDto = {
       id: campaign.creator?.id || campaign.creatorId,
       firstName: campaign.creator?.firstName ?? undefined,
       lastName: campaign.creator?.lastName ?? undefined,
       username: campaign.creator?.username ?? undefined,
       profileImage: campaign.creator?.profile?.image ?? undefined,
+      accountType: campaign.creator?.accountType ?? undefined,
+      kycStatus: (campaign.creator as any)?.kyc?.status ?? undefined,
     };
 
     return {
@@ -285,11 +361,186 @@ export class CampaignService {
       shareUrl: campaign.shareLink as string,
       creator,
       createdAt: campaign.createdAt,
-      donorsCount: campaign.donorsCount ?? 0,
+      // Distinct donor count (anonymous-but-authenticated donors
+      // included). Beats the prior `loadRelationCountAndMap` which
+      // counted donation rows and was only wired on the listing query.
+      donorsCount: distinctDonorsCount,
       likesCount,
       commentsCount,
       isLiked,
+      isSaved,
+      location: campaign.location ?? null,
+      urgent: !!campaign.urgent,
+      accountabilityNote: campaign.accountabilityNote ?? null,
+      story: campaign.story ?? null,
+      tiers: campaign.tiers ?? null,
+      approvalThresholdMode: campaign.approvalThresholdMode,
+      approvalThresholdCount: campaign.approvalThresholdCount ?? null,
+      organizers,
+      topAmplifiers,
+      canSeeFinancials: financialAccess,
+      topDonorAmount: topDonor?.amount ?? null,
+      topDonor,
     };
+  }
+
+  // Financial insight (Collected / Spent / In wallet + wallet hero + extra
+  // Financing subtabs) is gated to people who have skin in the game:
+  //   - creator
+  //   - any listed organizer with a linked user id
+  //   - any team participant
+  //   - any user who has donated (anonymous donations still carry user_id)
+  //   - any amplifier whose referral count is > 0 (i.e. actually drove a paid
+  //     donation toward this campaign)
+  // Returns false for anonymous viewers.
+  private async computeFinancialAccess(
+    campaign: Campaign,
+    currentUserId?: string,
+  ): Promise<boolean> {
+    if (!currentUserId) return false;
+    if (campaign.creatorId === currentUserId) return true;
+
+    const mgr = this.campaignRepository.getManager();
+
+    // Organizer with a linked user id?
+    const organizer = await mgr.getRepository(CampaignOrganizer).findOne({
+      where: { campaignId: campaign.id, userId: currentUserId },
+    });
+    if (organizer) return true;
+
+    // Team participant? participants is loaded via leftJoin when available;
+    // fall back to a join-table check otherwise.
+    if (
+      campaign.participants?.some((p) => p.id === currentUserId) === true
+    ) {
+      return true;
+    }
+    const participantRow = await mgr.query(
+      'SELECT 1 FROM campaign_participants WHERE campaign_id = ? AND user_id = ? LIMIT 1',
+      [campaign.id, currentUserId],
+    );
+    if (Array.isArray(participantRow) && participantRow.length > 0) {
+      return true;
+    }
+
+    // Has the viewer donated (anonymous donations still carry donor_id)?
+    const donation = await mgr.getRepository(Donation).findOne({
+      where: { campaignId: campaign.id, donorId: currentUserId },
+      select: { id: true },
+    });
+    if (donation) return true;
+
+    // Amplifier with at least one attributed (paid) donation?
+    const amplifier = await mgr.getRepository(CampaignAmplifier).findOne({
+      where: { campaignId: campaign.id, userId: currentUserId },
+    });
+    if (amplifier) {
+      const referralCount = await mgr
+        .getRepository(Donation)
+        .count({
+          where: {
+            campaignId: campaign.id,
+            referrerAmplifierId: amplifier.id,
+          },
+        });
+      if (referralCount > 0) return true;
+    }
+
+    return false;
+  }
+
+  private async getTopDonorAmount(campaignId: string): Promise<number | null> {
+    const top = await this.getTopDonor(campaignId);
+    return top?.amount ?? null;
+  }
+
+  // Returns the donor with the largest aggregate contribution to this
+  // campaign plus their display name and avatar so the public chip can
+  // show "Adekunle ₦50k" instead of just an amount. Donations with no
+  // linked donor are excluded (donorId IS NOT NULL).
+  //
+  // Privacy rule: if every one of the top donor's donations was flagged
+  // anonymous (MIN(d.isAnonymous) = 1), the response carries
+  // `isAnonymous: true` with name/avatar stripped. The chip renders
+  // these as "Anonymous". A donor with even one non-anonymous donation
+  // has effectively opted into being named.
+  private async getTopDonor(campaignId: string): Promise<{
+    donorId: string;
+    amount: number;
+    name: string | null;
+    profileImage: string | null;
+    isAnonymous: boolean;
+  } | null> {
+    const mgr = this.campaignRepository.getManager();
+    const row = await mgr
+      .getRepository(Donation)
+      .createQueryBuilder('d')
+      .leftJoin('users', 'u', 'u.id = d.donorId')
+      .leftJoin('profiles', 'p', 'p.user_id = u.id')
+      .select('d.donorId', 'donorId')
+      .addSelect('SUM(d.amount)', 'total')
+      .addSelect('MIN(d.isAnonymous)', 'allAnonymous')
+      .addSelect('u.first_name', 'firstName')
+      .addSelect('u.last_name', 'lastName')
+      .addSelect('u.username', 'username')
+      .addSelect('p.image', 'profileImage')
+      .where('d.campaignId = :cid', { cid: campaignId })
+      .andWhere('d.donorId IS NOT NULL')
+      .groupBy('d.donorId')
+      .addGroupBy('u.first_name')
+      .addGroupBy('u.last_name')
+      .addGroupBy('u.username')
+      .addGroupBy('p.image')
+      .orderBy('total', 'DESC')
+      .limit(1)
+      .getRawOne<{
+        donorId: string;
+        total: string | null;
+        allAnonymous: number | string | null;
+        firstName: string | null;
+        lastName: string | null;
+        username: string | null;
+        profileImage: string | null;
+      }>();
+    if (!row || !row.total) return null;
+    const amount = Number(row.total);
+    if (!Number.isFinite(amount)) return null;
+    const isAnonymous =
+      row.allAnonymous === 1 ||
+      row.allAnonymous === '1' ||
+      // class-validator/typeorm sometimes returns booleans via the
+      // numeric transformer; be defensive.
+      (row.allAnonymous as unknown) === true;
+    const composed =
+      [row.firstName, row.lastName]
+        .filter((s): s is string => !!s && s.length > 0)
+        .join(' ')
+        .trim() ||
+      row.username ||
+      null;
+    return {
+      donorId: row.donorId,
+      amount,
+      name: isAnonymous ? null : composed,
+      profileImage: isAnonymous ? null : row.profileImage,
+      isAnonymous,
+    };
+  }
+
+  // Distinct supporter count for the public Supporters chip. Counts
+  // unique donor_ids (a single donor giving multiple times counts
+  // once) including anonymous-but-authenticated donors.
+  private async getDistinctDonorsCount(campaignId: string): Promise<number> {
+    const mgr = this.campaignRepository.getManager();
+    const row = await mgr
+      .getRepository(Donation)
+      .createQueryBuilder('d')
+      .select('COUNT(DISTINCT d.donorId)', 'count')
+      .where('d.campaignId = :cid', { cid: campaignId })
+      .andWhere('d.donorId IS NOT NULL')
+      .getRawOne<{ count: string | null }>();
+    const n = Number(row?.count ?? 0);
+    return Number.isFinite(n) ? n : 0;
   }
 
   async getCampaignCategories(): Promise<

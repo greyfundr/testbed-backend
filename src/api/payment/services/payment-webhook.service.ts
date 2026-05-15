@@ -305,6 +305,49 @@ export class PaymentWebhookService {
     }
   }
 
+  // Client-initiated verification path. Used when the donor returns from
+  // the Paystack hosted page and the app pings us to confirm the charge
+  // before Paystack's async webhook arrives (which in local dev usually
+  // never does because Paystack can't reach localhost). Idempotent:
+  // if the Transaction is already COMPLETED we just return without
+  // re-creating the Donation row.
+  async finalizeCampaignDonationByReference(
+    reference: string,
+  ): Promise<{ processed: boolean; alreadyProcessed: boolean }> {
+    const transaction = await this.transactionRepo.findOne({
+      where: { reference },
+    });
+
+    if (!transaction) {
+      throw new Error(`Transaction with reference ${reference} not found`);
+    }
+
+    if (transaction.status === TransactionStatus.COMPLETED) {
+      this.logger.log(
+        `Verify-by-reference: ${reference} already processed — no-op`,
+      );
+      return { processed: false, alreadyProcessed: true };
+    }
+
+    // Confirm with Paystack — throws BadRequestException if not success.
+    // verifyTransaction returns the full data including metadata, which
+    // we pass through to processCampaignDonationWebhook below.
+    const verified = await this.paymentService.verifyTransaction(reference);
+
+    // Synthesize a webhook-shaped payload from the verify response.
+    // processCampaignDonationWebhook only reads reference, metadata,
+    // and amount — the rest of the PaystackChargeSuccessData fields
+    // are unused downstream, so the cast is safe.
+    const data = {
+      reference: verified.reference,
+      metadata: verified.metadata ?? {},
+      amount: verified.amount,
+    } as unknown as PaystackChargeSuccessData;
+
+    await this.processCampaignDonationWebhook(data);
+    return { processed: true, alreadyProcessed: false };
+  }
+
   private async processBillPaymentWebhook(
     data: PaystackChargeSuccessData,
   ): Promise<void> {

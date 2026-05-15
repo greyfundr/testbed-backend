@@ -12,11 +12,18 @@ import {
   IsPositive,
   IsNotEmpty,
   ValidateIf,
+  IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { CampaignCategory, DonationOnBehalfOf } from '../enums/campaign.enum';
+import {
+  ApprovalThresholdMode,
+  CampaignCategory,
+  CampaignStatus,
+  DonationOnBehalfOf,
+} from '../enums/campaign.enum';
 import { PaginationDto } from 'src/common/helpers';
+import { CreateVendorDto } from './campaign-vendor.dto';
 
 class CampaignOfferDto {
   @IsEnum(['auto', 'manual'])
@@ -27,6 +34,20 @@ class CampaignOfferDto {
 
   @IsString()
   reward: string;
+}
+
+class CampaignStoryBlockDto {
+  @IsString()
+  @IsIn(['lead', 'p', 'h', 'quote'])
+  type: 'lead' | 'p' | 'h' | 'quote';
+
+  @IsString()
+  @IsOptional()
+  text?: string;
+
+  @IsString()
+  @IsOptional()
+  by?: string;
 }
 
 class CampaignBudgetDto {
@@ -91,6 +112,72 @@ export class CreateCampaignDto {
   @IsOptional()
   @IsString({ each: true })
   participants?: string[];
+
+  @ApiPropertyOptional({
+    description: 'City / state for the location chip',
+    example: 'Maiduguri, Borno',
+  })
+  @IsString()
+  @IsOptional()
+  location?: string;
+
+  @ApiPropertyOptional({
+    description: 'Show URGENT badge on listings',
+    default: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  urgent?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Trust / accountability note shown under About on the details page',
+  })
+  @IsString()
+  @IsOptional()
+  accountabilityNote?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Optional typed story blocks. If omitted, description is auto-wrapped as one lead block.',
+    type: [CampaignStoryBlockDto],
+  })
+  @IsArray()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => CampaignStoryBlockDto)
+  story?: CampaignStoryBlockDto[];
+
+  @ApiPropertyOptional({
+    description:
+      "How the proposal approval threshold is computed. 'auto' uses ceil(approvers * 0.33), min 2. 'manual' uses approvalThresholdCount.",
+    enum: ApprovalThresholdMode,
+    default: ApprovalThresholdMode.AUTO,
+  })
+  @IsOptional()
+  @IsEnum(ApprovalThresholdMode)
+  approvalThresholdMode?: ApprovalThresholdMode;
+
+  @ApiPropertyOptional({
+    description:
+      "Manual approver count, applied only when approvalThresholdMode='manual'.",
+    example: 3,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  approvalThresholdCount?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Initial saved vendors / beneficiaries to seed for this campaign.',
+    type: [CreateVendorDto],
+  })
+  @IsArray()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => CreateVendorDto)
+  vendors?: CreateVendorDto[];
 }
 
 export class UpdateCampaignDto {
@@ -131,6 +218,24 @@ export class UpdateCampaignDto {
   @IsOptional()
   @IsString({ each: true })
   participants?: string[];
+}
+
+// Creator-only status transitions: pause an active campaign,
+// resume a paused one, or cancel it. Admin/automated statuses
+// (pending_approval, rejected, completed, expired) are intentionally
+// not accepted here.
+export class UpdateCampaignStatusDto {
+  @ApiProperty({
+    description: 'New status for the campaign',
+    enum: [CampaignStatus.ACTIVE, CampaignStatus.PAUSED, CampaignStatus.CANCELLED],
+    example: CampaignStatus.PAUSED,
+  })
+  @IsEnum([
+    CampaignStatus.ACTIVE,
+    CampaignStatus.PAUSED,
+    CampaignStatus.CANCELLED,
+  ])
+  status: CampaignStatus;
 }
 
 class ExternalPersonDto {
@@ -216,6 +321,15 @@ export class DonateDto {
   @IsString()
   @IsOptional()
   comment?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Referral code from an amplifier link. If valid, the donation is attributed.',
+    example: 'FUNKE128',
+  })
+  @IsString()
+  @IsOptional()
+  referrerCode?: string;
 
   @IsEnum(PaymentMethod)
   paymentMethod: PaymentMethod;

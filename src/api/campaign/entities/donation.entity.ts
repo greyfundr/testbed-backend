@@ -6,6 +6,7 @@ import { Transaction } from '../../transaction/entities';
 import { ColumnNumericTransformer } from '../../../common/transformers/column-numeric.transformer';
 import { Campaign } from './campaign.entity';
 import { DonationOnBehalfOf } from '../enums/campaign.enum';
+import { CampaignAmplifier } from './campaign-amplifier.entity';
 
 @Entity('donations')
 export class Donation extends AbstractEntity {
@@ -113,4 +114,21 @@ export class Donation extends AbstractEntity {
   })
   @Column({ type: 'text', nullable: true })
   comment?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'If donation was attributed to an amplifier referral link, the amplifier id',
+    example: 'uuid',
+  })
+  @Column({
+    type: 'varchar',
+    name: 'referrer_amplifier_id',
+    length: 36,
+    nullable: true,
+  })
+  referrerAmplifierId?: string | null;
+
+  @ManyToOne(() => CampaignAmplifier, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'referrer_amplifier_id' })
+  referrerAmplifier?: CampaignAmplifier | null;
 }

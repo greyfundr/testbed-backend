@@ -13,6 +13,7 @@ export enum CampaignCategory {
 export enum CampaignStatus {
   PENDING_APPROVAL = 'pending_approval',
   ACTIVE = 'active',
+  PAUSED = 'paused',
   REJECTED = 'rejected',
   COMPLETED = 'completed',
   CANCELLED = 'cancelled',
@@ -28,4 +29,28 @@ export enum DonationOnBehalfOf {
   SELF = 'self',
   USER = 'user',
   EXTERNAL = 'external',
+}
+
+export enum ApprovalThresholdMode {
+  AUTO = 'auto',
+  MANUAL = 'manual',
+}
+
+export enum CampaignVendorKind {
+  VENDOR = 'vendor',
+  INDIVIDUAL = 'individual',
+  INTERNAL = 'internal',
+}
+
+export enum ProposalStatus {
+  PENDING = 'pending',
+  APPROVED = 'approved',
+  REJECTED = 'rejected',
+  EXECUTED = 'executed',
+  CANCELLED = 'cancelled',
+}
+
+export enum ProposalVoteValue {
+  APPROVE = 'approve',
+  REJECT = 'reject',
 }

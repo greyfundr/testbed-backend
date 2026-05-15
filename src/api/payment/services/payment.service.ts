@@ -331,6 +331,7 @@ export class PaymentService {
     paid_at: Date;
     channel: string;
     customer: { customer_code: string; email: string };
+    metadata?: Record<string, any>;
   }> {
     const { data } = await this.client.get(`/transaction/verify/${reference}`);
     if (!data.status || data.data.status !== 'success') {

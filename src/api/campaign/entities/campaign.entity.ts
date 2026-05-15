@@ -10,7 +10,10 @@ import {
 import { ApiProperty } from '@nestjs/swagger';
 import { AbstractEntity } from '../../../common/entities';
 import { User } from '../../user/entities';
-import { CampaignStatus } from '../enums/campaign.enum';
+import {
+  ApprovalThresholdMode,
+  CampaignStatus,
+} from '../enums/campaign.enum';
 import { Donation } from './donation.entity';
 import { CampaignCategory } from './campaign-category.entity';
 import { CampaignLike } from './campaign-like.entity';
@@ -24,14 +27,34 @@ export interface CampaignOffer {
 }
 
 export interface CampaignBudget {
+  id?: string;
   item: string;
   cost: number;
   image: string;
+  docs?: number;
+  note?: string;
 }
 
 export interface CampaignImage {
   imageUrl: string;
   providerId: string;
+}
+
+export type CampaignStoryBlockType = 'lead' | 'p' | 'h' | 'quote';
+
+export interface CampaignStoryBlock {
+  type: CampaignStoryBlockType;
+  text: string;
+  by?: string;
+}
+
+export interface CampaignTier {
+  id: string;
+  tier: string;
+  min: number;
+  color?: string;
+  icon?: string;
+  perks: string[];
 }
 
 @Entity('campaigns')
@@ -152,4 +175,38 @@ export class Campaign extends AbstractEntity {
 
   @OneToMany(() => CampaignComment, (comment) => comment.campaign)
   comments: CampaignComment[];
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  location?: string | null;
+
+  @Column({ type: 'tinyint', default: 0 })
+  urgent: boolean = false;
+
+  @Column({
+    type: 'text',
+    nullable: true,
+    name: 'accountability_note',
+  })
+  accountabilityNote?: string | null;
+
+  @Column({ type: 'json', nullable: true })
+  story?: CampaignStoryBlock[] | null;
+
+  @Column({ type: 'json', nullable: true })
+  tiers?: CampaignTier[] | null;
+
+  @Column({
+    type: 'enum',
+    enum: ApprovalThresholdMode,
+    default: ApprovalThresholdMode.AUTO,
+    name: 'approval_threshold_mode',
+  })
+  approvalThresholdMode: ApprovalThresholdMode;
+
+  @Column({
+    type: 'int',
+    nullable: true,
+    name: 'approval_threshold_count',
+  })
+  approvalThresholdCount?: number | null;
 }

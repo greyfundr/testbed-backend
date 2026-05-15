@@ -20,6 +20,7 @@ import { Campaign, Donation } from '../entities';
 import {
   CreateCampaignDto,
   UpdateCampaignDto,
+  UpdateCampaignStatusDto,
   DonateDto,
   CampaignFilterDto,
 } from '../dto/campaign.dto';
@@ -133,6 +134,21 @@ export class CampaignController {
     @CurrentUser() user: User,
   ) {
     return this.campaignService.update(id, updateCampaignDto, user);
+  }
+
+  @ApiOperation({
+    summary:
+      "Update a campaign's status (creator only) — pause, resume, or cancel",
+  })
+  @ApiBearerAuth('JWT-auth')
+  @Patch(':id/status')
+  @UseGuards(JwtAuthGuard)
+  async updateStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdateCampaignStatusDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.campaignService.updateStatus(id, dto.status, user);
   }
 
   @ApiOperation({ summary: 'Donate to a campaign' })
