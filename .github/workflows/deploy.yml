@@ -1,0 +1,50 @@
+name: Deploy to testbed
+
+# Auto-deploys greyfundr/testbed-backend to dev.greyfundr.com on every
+# push to `main`. Click "Run workflow" in the Actions tab to deploy a
+# given ref on demand.
+#
+# Required repository secrets (Settings → Secrets and variables →
+# Actions → New repository secret):
+#   SSH_HOST         dev.greyfundr.com
+#   SSH_USER         deploy user on the testbed server
+#   SSH_PORT         22 (or your custom port)
+#   SSH_PRIVATE_KEY  full contents of the private key whose public
+#                    half lives in ~/.ssh/authorized_keys on the
+#                    testbed for SSH_USER
+#   BACKEND_PATH     absolute path of the backend repo on the server
+#                    e.g. /home/deploy/testbed-backend
+#   RESTART_CMD      command that restarts the running Node process
+#                    e.g. pm2 reload all
+#                         sudo systemctl restart greyfundr-backend
+#                         docker compose restart backend
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: testbed-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH into testbed and run the deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          port: ${{ secrets.SSH_PORT }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.BACKEND_PATH }}"
+            git fetch --all --prune
+            git reset --hard origin/main
+            npm ci
+            npm run build
+            npm run typeorm migration:run
+            ${{ secrets.RESTART_CMD }}
