@@ -395,21 +395,28 @@ export class DonationService {
     // strip the name/avatar before returning so the leaderboard
     // honours the donor's privacy choice. A donor with even one
     // non-anonymous donation has effectively opted into being named.
+    // Using explicit `addSelect` aliases instead of the array-syntax
+    // `.select([...])` so the raw row keys are predictable. The array
+    // syntax aliases joined columns as `{joinAlias}_{db_column}` (i.e.
+    // `donor_first_name`, snake_case) which mismatched the camelCase
+    // keys this method was reading — the leaderboard ended up
+    // returning null names.
     const rows = await this.donationRepository
       .createQueryBuilder('donation')
-      .leftJoinAndSelect('donation.donor', 'donor')
-      .leftJoinAndSelect('donor.profile', 'profile')
-      .select([
-        'donor.id',
-        'donor.firstName',
-        'donor.lastName',
-        'profile.image',
-        'SUM(donation.amount) as totalDonated',
-        'MIN(donation.isAnonymous) as allAnonymous',
-      ])
+      .leftJoin('donation.donor', 'donor')
+      .leftJoin('donor.profile', 'profile')
+      .select('donor.id', 'donorId')
+      .addSelect('donor.firstName', 'firstName')
+      .addSelect('donor.lastName', 'lastName')
+      .addSelect('profile.image', 'profileImage')
+      .addSelect('SUM(donation.amount)', 'totalDonated')
+      .addSelect('MIN(donation.isAnonymous)', 'allAnonymous')
       .where('donation.campaignId = :campaignId', { campaignId })
       .andWhere('donation.donorId IS NOT NULL')
       .groupBy('donor.id')
+      .addGroupBy('donor.firstName')
+      .addGroupBy('donor.lastName')
+      .addGroupBy('profile.image')
       .orderBy('totalDonated', 'DESC')
       .limit(limit)
       .getRawMany();
@@ -420,10 +427,10 @@ export class DonationService {
         r.allAnonymous === '1' ||
         r.allAnonymous === true;
       return {
-        donor_id: r.donor_id,
-        donor_first_name: isAnonymous ? null : r.donor_firstName,
-        donor_last_name: isAnonymous ? null : r.donor_lastName,
-        profile_image: isAnonymous ? null : r.profile_image,
+        donor_id: r.donorId,
+        donor_first_name: isAnonymous ? null : r.firstName,
+        donor_last_name: isAnonymous ? null : r.lastName,
+        profile_image: isAnonymous ? null : r.profileImage,
         isAnonymous,
         totalDonated: r.totalDonated,
       };
