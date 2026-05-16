@@ -218,7 +218,9 @@ export class CampaignService {
     const mapped = await Promise.all(
       data.map(async (campaign) => {
         try {
-          return await this.mapToResponse(campaign, currentUserId);
+          return await this.mapToResponse(campaign, currentUserId, {
+            lightweight: true,
+          });
         } catch (err) {
           this.logger.error(
             `findAll: mapToResponse failed for campaign ${campaign.id} — skipping`,
@@ -332,7 +334,77 @@ export class CampaignService {
   public async mapToResponse(
     campaign: Campaign,
     currentUserId?: string,
+    options: { lightweight?: boolean } = {},
   ): Promise<CampaignResponseDto> {
+    const { lightweight = false } = options;
+
+    // List views (home/charity feed) only render the card — title, image,
+    // target, current amount, donor count, days left. Skip the 9+
+    // per-campaign subqueries (organizers, top donor, top amplifiers,
+    // financial access, follow/like/save/comment lookups, etc.) that the
+    // card throws away. On the testbed Render instance those subqueries
+    // fan out to ~90+ DB calls for a 10-row page and exceeded the
+    // client's 15s timeout, leaving the home feed stuck on a spinner.
+    if (lightweight) {
+      const creatorId = campaign.creator?.id || campaign.creatorId;
+      const creator: CampaignCreatorDto = {
+        id: creatorId,
+        firstName: campaign.creator?.firstName ?? undefined,
+        lastName: campaign.creator?.lastName ?? undefined,
+        username: campaign.creator?.username ?? undefined,
+        profileImage: campaign.creator?.profile?.image ?? undefined,
+        accountType: campaign.creator?.accountType ?? undefined,
+        kycStatus: (campaign.creator as any)?.kyc?.status ?? undefined,
+        isFollowing: false,
+      };
+      return {
+        id: campaign.id,
+        title: campaign.title,
+        description: campaign.description,
+        category: campaign.category,
+        target: campaign.target,
+        currentAmount: campaign.currentAmount,
+        startDate: campaign.startDate,
+        endDate: campaign.endDate,
+        offers: campaign.offers,
+        budget: campaign.budget,
+        images: campaign.images,
+        status: campaign.status,
+        participants:
+          campaign.participants?.map((p) => ({
+            id: p.id,
+            firstName: p.firstName,
+            lastName: p.lastName,
+            username: p.username,
+            profileImage: p.profile?.image,
+          })) || [],
+        shareSlug: campaign.shareSlug,
+        shareUrl: campaign.shareLink as string,
+        creator,
+        createdAt: campaign.createdAt,
+        // `loadRelationCountAndMap('campaign.donorsCount', ...)` populates
+        // this on the list query, so the card can show the donor count
+        // without an extra round-trip.
+        donorsCount: (campaign as any).donorsCount ?? 0,
+        likesCount: 0,
+        commentsCount: 0,
+        isLiked: false,
+        isSaved: false,
+        location: campaign.location ?? null,
+        urgent: !!campaign.urgent,
+        accountabilityNote: campaign.accountabilityNote ?? null,
+        story: campaign.story ?? null,
+        tiers: campaign.tiers ?? null,
+        approvalThresholdMode: campaign.approvalThresholdMode,
+        approvalThresholdCount: campaign.approvalThresholdCount ?? null,
+        organizers: [],
+        topAmplifiers: [],
+        canSeeFinancials: false,
+        topDonorAmount: null,
+        topDonor: null,
+      };
+    }
+
     const likesCount = await this.campaignRepository
       .getManager()
       .getRepository(CampaignLike)
