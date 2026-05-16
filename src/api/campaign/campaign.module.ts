@@ -15,6 +15,7 @@ import {
   CampaignProposal,
   CampaignProposalAllocation,
   CampaignProposalVote,
+  CampaignProposalAssignment,
   CampaignUpdate,
 } from './entities';
 import { CampaignRepository, DonationRepository } from './repository';
@@ -63,6 +64,7 @@ import { User } from '../user/entities';
       CampaignProposal,
       CampaignProposalAllocation,
       CampaignProposalVote,
+      CampaignProposalAssignment,
       CampaignUpdate,
       // Needed by CampaignOrganizerService to look up invitees and
       // gate the create() flow when a userId is provided.

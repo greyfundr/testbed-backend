@@ -12,6 +12,7 @@ import { SettingsModule } from './api/settings/settings.module';
 import { environmentValidationSchema } from './config/env.validation';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ScheduleModule } from '@nestjs/schedule';
 import { NotificationModule } from './api/notification/notification.module';
 import { TransactionModule } from './api/transaction/transaction.module';
 import { WalletModule } from './api/wallet/wallet.module';
@@ -76,6 +77,7 @@ import { LoggerModule } from 'nestjs-pino';
       wildcard: true,
       delimiter: '.',
     }),
+    ScheduleModule.forRoot(),
     TransactionModule,
     WalletModule,
     PaymentModule,

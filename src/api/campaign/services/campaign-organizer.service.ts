@@ -140,9 +140,16 @@ export class CampaignOrganizerService {
     const saved = await this.organizerRepo.save(organizer);
 
     if (invitee) {
+      const inviteTitle = 'Campaign organiser invitation';
+      const inviteMessage = `You've been invited to be an organiser on "${campaign.title}" as ${dto.role}.`;
+      const inviteHtml = this.buildInviteEmailHtml(
+        invitee.firstName,
+        campaign.title,
+        dto.role,
+      );
       await this.notificationService.notify(invitee.id, 'campaignUpdates', {
-        title: 'Campaign organiser invitation',
-        message: `You've been invited to be an organiser on "${campaign.title}" as ${dto.role}.`,
+        title: inviteTitle,
+        message: inviteMessage,
         type: 'campaign',
         metadata: {
           kind: 'organizer_invitation',
@@ -151,6 +158,9 @@ export class CampaignOrganizerService {
           organizerId: saved.id,
           role: dto.role,
           pushToken: invitee.fcmToken,
+          phoneNumber: invitee.phoneNumber,
+          email: invitee.email,
+          emailHtml: inviteHtml,
         },
       });
     }
@@ -293,6 +303,39 @@ export class CampaignOrganizerService {
     }
     await this.organizerRepo.remove(organizer);
     return { success: true };
+  }
+
+  // Lightweight HTML body for the invitation email. Mailtrap accepts
+  // any HTML; this is intentionally inline-styled and minimal so it
+  // renders the same in every client.
+  private buildInviteEmailHtml(
+    firstName: string | null,
+    campaignTitle: string,
+    role: string,
+  ): string {
+    const safe = (s: string) =>
+      s.replace(/[&<>"']/g, (c) =>
+        c === '&'
+          ? '&amp;'
+          : c === '<'
+            ? '&lt;'
+            : c === '>'
+              ? '&gt;'
+              : c === '"'
+                ? '&quot;'
+                : '&#39;',
+      );
+    const greeting = firstName?.trim() ? safe(firstName.trim()) : 'there';
+    const title = safe(campaignTitle);
+    const safeRole = safe(role);
+    return `
+      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1a1a1a;line-height:1.55;font-size:15px;">
+        <p>Hi ${greeting},</p>
+        <p>You've been invited to join the campaign <strong>"${title}"</strong> as <strong>${safeRole}</strong>.</p>
+        <p>Open the GreyFundr app and head to <strong>Notifications</strong> to accept or decline this invitation.</p>
+        <p style="color:#6b6b73;font-size:13px;">If you weren't expecting this, you can safely ignore the email.</p>
+      </div>
+    `;
   }
 
   async follow(organizerId: string, userId: string) {

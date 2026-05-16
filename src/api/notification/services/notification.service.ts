@@ -128,6 +128,27 @@ export class NotificationService {
         this.logger.error(`Email failed for ${metadata.email}: ${e.message}`);
       }
     }
+
+    // Generic Mailtrap path for any notification that ships its own
+    // HTML body (e.g. organiser invitations). Kept separate from the
+    // termii branch above so the auth/OTP template flow is undisturbed.
+    if (
+      metadata?.email &&
+      metadata?.emailHtml &&
+      !['account', 'auth'].includes(type as string)
+    ) {
+      try {
+        await this.mailtrapService.sendEmail(
+          metadata.email,
+          title,
+          metadata.emailHtml,
+        );
+      } catch (e) {
+        this.logger.error(
+          `Mailtrap email failed for ${metadata.email}: ${e.message}`,
+        );
+      }
+    }
   }
 
   async getUserNotifications(

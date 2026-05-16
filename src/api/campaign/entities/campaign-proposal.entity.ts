@@ -86,4 +86,42 @@ export class CampaignProposal extends AbstractEntity {
 
   @OneToMany(() => CampaignProposalVote, (v) => v.proposal)
   votes: CampaignProposalVote[];
+
+  // ─── Random-donor approval flow ────────────────────────────────
+  // The proposal is routed sequentially to up to three random top
+  // donors. `pickedDonorIdsJson` is the initial pool, and the row
+  // currently waiting on a decision is denormalised onto
+  // `currentAssignmentId` + `assignmentExpiresAt` so the frontend
+  // can render a countdown without joining.
+
+  @Column({
+    type: 'varchar',
+    length: 36,
+    nullable: true,
+    name: 'current_assignment_id',
+  })
+  currentAssignmentId?: string | null;
+
+  @Column({
+    type: 'timestamp',
+    precision: 6,
+    nullable: true,
+    name: 'assignment_expires_at',
+  })
+  assignmentExpiresAt?: Date | null;
+
+  @Column({
+    type: 'json',
+    nullable: true,
+    name: 'picked_donor_ids_json',
+  })
+  pickedDonorIds?: string[] | null;
+
+  @Column({
+    type: 'varchar',
+    length: 64,
+    nullable: true,
+    name: 'rejection_reason',
+  })
+  rejectionReason?: string | null;
 }
