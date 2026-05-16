@@ -32,6 +32,12 @@ export class CampaignCreatorDto {
       "Creator's KYC status. Combined with a non-personal accountType, indicates a verified organization.",
   })
   kycStatus?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Whether the current viewer follows the creator (user-follow, not organizer-follow). Absent / false when the viewer is unauthenticated or is the creator themselves.',
+  })
+  isFollowing?: boolean;
 }
 
 export class CampaignResponseDto {

@@ -40,6 +40,7 @@ import { CampaignSaveService } from './campaign-save.service';
 import { CampaignOrganizerService } from './campaign-organizer.service';
 import { CampaignAmplifierService } from './campaign-amplifier.service';
 import { CampaignVendorService } from './campaign-vendor.service';
+import { FollowService } from '../../user/services/follow.service';
 
 @Injectable()
 export class CampaignService {
@@ -57,6 +58,7 @@ export class CampaignService {
     private readonly organizerService: CampaignOrganizerService,
     private readonly amplifierService: CampaignAmplifierService,
     private readonly vendorService: CampaignVendorService,
+    private readonly followService: FollowService,
   ) {}
 
   async create(
@@ -341,14 +343,23 @@ export class CampaignService {
       this.getDistinctDonorsCount(campaign.id),
     ]);
 
+    const creatorId = campaign.creator?.id || campaign.creatorId;
+    // Skip the lookup when there's no viewer or the viewer IS the
+    // creator — both cases render the chip as "You" / no button on
+    // the client and don't need a real follow value.
+    const creatorIsFollowed =
+      !!currentUserId && !!creatorId && currentUserId !== creatorId
+        ? await this.followService.isFollowing(currentUserId, creatorId)
+        : false;
     const creator: CampaignCreatorDto = {
-      id: campaign.creator?.id || campaign.creatorId,
+      id: creatorId,
       firstName: campaign.creator?.firstName ?? undefined,
       lastName: campaign.creator?.lastName ?? undefined,
       username: campaign.creator?.username ?? undefined,
       profileImage: campaign.creator?.profile?.image ?? undefined,
       accountType: campaign.creator?.accountType ?? undefined,
       kycStatus: (campaign.creator as any)?.kyc?.status ?? undefined,
+      isFollowing: creatorIsFollowed,
     };
 
     return {
