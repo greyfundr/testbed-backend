@@ -191,7 +191,13 @@ export class CampaignService {
       .leftJoinAndSelect('creator.profile', 'profile')
       .leftJoinAndSelect('campaign.category', 'category')
       .loadRelationCountAndMap('campaign.donorsCount', 'campaign.donations')
-      .where('campaign.status = :status', { status: CampaignStatus.ACTIVE })
+      // Auto-approval era: campaigns are live on creation. We also surface
+      // rows authored under the legacy approval flow (status =
+      // pending_approval) so they're not stranded. PAUSED / REJECTED /
+      // COMPLETED / CANCELLED / EXPIRED remain hidden from the public feed.
+      .where('campaign.status IN (:...visibleStatuses)', {
+        visibleStatuses: [CampaignStatus.ACTIVE, CampaignStatus.PENDING_APPROVAL],
+      })
       .orderBy('campaign.createdAt', 'DESC')
       .skip(skip)
       .take(limit);
