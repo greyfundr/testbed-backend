@@ -210,10 +210,30 @@ export class CampaignService {
 
     const [data, total] = await query.getManyAndCount();
 
+    // Per-campaign mapToResponse calls run extra subqueries (financial
+    // access, top donor, distinct donors, organizers, isFollowing).
+    // If any single campaign throws, do NOT take down the whole list —
+    // log the failing campaign id and skip it. Otherwise one corrupt
+    // row would freeze the home feed for everyone.
+    const mapped = await Promise.all(
+      data.map(async (campaign) => {
+        try {
+          return await this.mapToResponse(campaign, currentUserId);
+        } catch (err) {
+          this.logger.error(
+            `findAll: mapToResponse failed for campaign ${campaign.id} — skipping`,
+            err instanceof Error ? err.stack : String(err),
+          );
+          return null;
+        }
+      }),
+    );
+    const responses = mapped.filter(
+      (r): r is CampaignResponseDto => r !== null,
+    );
+
     return PaginationHelper.createResponse(
-      await Promise.all(
-        data.map((campaign) => this.mapToResponse(campaign, currentUserId)),
-      ),
+      responses,
       total,
       page ?? 1,
       limit ?? 10,
