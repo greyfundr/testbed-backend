@@ -101,7 +101,10 @@ export class CampaignService {
         ...campaignData,
         category: existingCategory,
         offers: createCampaignDto.offers ?? [],
-        budget: createCampaignDto.budget ?? [],
+        budget: (createCampaignDto.budget ?? []).map((b) => ({
+          ...b,
+          id: nanoid(12),
+        })),
         images: createCampaignDto.images ?? [],
         target: createCampaignDto.target,
         feePercentage,
@@ -248,6 +251,18 @@ export class CampaignService {
 
     if (updateData.target) {
       updateData.target = updateData.target;
+    }
+
+    // Manage-budget sheet sends the full list each save. Preserve ids
+    // for existing items so proposals' budgetRef stays valid; mint one
+    // for any new item and default image to '' so the entity column
+    // stays consistent.
+    if (updateData.budget) {
+      updateData.budget = updateData.budget.map((b) => ({
+        ...b,
+        id: b.id && b.id.length > 0 ? b.id : nanoid(12),
+        image: b.image ?? '',
+      }));
     }
 
     Object.assign(campaign, updateData);

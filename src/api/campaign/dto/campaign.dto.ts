@@ -62,6 +62,26 @@ class CampaignBudgetDto {
   image: string;
 }
 
+// Update-time budget item: same shape, but id/image are optional so
+// the Manage-budget sheet can preserve existing items by id and skip
+// images entirely. New items omit id and the service assigns one.
+class UpdateCampaignBudgetDto {
+  @IsString()
+  @IsOptional()
+  id?: string;
+
+  @IsString()
+  item: string;
+
+  @IsPositive()
+  @IsNumber()
+  cost: number;
+
+  @IsString()
+  @IsOptional()
+  image?: string;
+}
+
 class CampaignImageDto {
   @IsUrl()
   imageUrl: string;
@@ -213,6 +233,12 @@ export class UpdateCampaignDto {
   @ValidateNested({ each: true })
   @Type(() => CampaignImageDto)
   images?: CampaignImageDto[];
+
+  @IsArray()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => UpdateCampaignBudgetDto)
+  budget?: UpdateCampaignBudgetDto[];
 
   @IsArray()
   @IsOptional()
