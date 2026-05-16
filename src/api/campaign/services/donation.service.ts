@@ -395,35 +395,68 @@ export class DonationService {
     // strip the name/avatar before returning so the leaderboard
     // honours the donor's privacy choice. A donor with even one
     // non-anonymous donation has effectively opted into being named.
+    //
+    // Pattern mirrors CampaignService.getTopDonor — raw column names,
+    // explicit aliases, and every non-aggregated select column added
+    // to GROUP BY so MySQL's ONLY_FULL_GROUP_BY mode accepts it.
     const rows = await this.donationRepository
-      .createQueryBuilder('donation')
-      .leftJoinAndSelect('donation.donor', 'donor')
-      .leftJoinAndSelect('donor.profile', 'profile')
-      .select([
-        'donor.id',
-        'donor.firstName',
-        'donor.lastName',
-        'profile.image',
-        'SUM(donation.amount) as totalDonated',
-        'MIN(donation.isAnonymous) as allAnonymous',
-      ])
-      .where('donation.campaignId = :campaignId', { campaignId })
-      .andWhere('donation.donorId IS NOT NULL')
-      .groupBy('donor.id')
+      .createQueryBuilder('d')
+      .leftJoin('users', 'u', 'u.id = d.donorId')
+      .leftJoin('profiles', 'p', 'p.user_id = u.id')
+      .select('d.donorId', 'donorId')
+      .addSelect('u.first_name', 'firstName')
+      .addSelect('u.last_name', 'lastName')
+      .addSelect('u.username', 'username')
+      .addSelect('p.image', 'profileImage')
+      .addSelect('SUM(d.amount)', 'totalDonated')
+      .addSelect('MIN(d.isAnonymous)', 'allAnonymous')
+      .where('d.campaignId = :campaignId', { campaignId })
+      .andWhere('d.donorId IS NOT NULL')
+      .groupBy('d.donorId')
+      .addGroupBy('u.first_name')
+      .addGroupBy('u.last_name')
+      .addGroupBy('u.username')
+      .addGroupBy('p.image')
       .orderBy('totalDonated', 'DESC')
       .limit(limit)
-      .getRawMany();
+      .getRawMany<{
+        donorId: string;
+        firstName: string | null;
+        lastName: string | null;
+        username: string | null;
+        profileImage: string | null;
+        totalDonated: string | null;
+        allAnonymous: number | string | null;
+      }>();
 
     return rows.map((r) => {
       const isAnonymous =
         r.allAnonymous === 1 ||
         r.allAnonymous === '1' ||
-        r.allAnonymous === true;
+        (r.allAnonymous as unknown) === true;
+      // Fall back to username when both first/last name are empty so
+      // donors who signed up with only a handle still get a label
+      // instead of a blank row.
+      const composedName =
+        [r.firstName, r.lastName]
+          .filter((s): s is string => !!s && s.length > 0)
+          .join(' ')
+          .trim() ||
+        r.username ||
+        null;
+      const [firstName, lastName] = composedName
+        ? composedName.includes(' ')
+          ? [
+              composedName.slice(0, composedName.indexOf(' ')),
+              composedName.slice(composedName.indexOf(' ') + 1),
+            ]
+          : [composedName, null]
+        : [null, null];
       return {
-        donor_id: r.donor_id,
-        donor_first_name: isAnonymous ? null : r.donor_firstName,
-        donor_last_name: isAnonymous ? null : r.donor_lastName,
-        profile_image: isAnonymous ? null : r.profile_image,
+        donor_id: r.donorId,
+        donor_first_name: isAnonymous ? null : firstName,
+        donor_last_name: isAnonymous ? null : lastName,
+        profile_image: isAnonymous ? null : r.profileImage,
         isAnonymous,
         totalDonated: r.totalDonated,
       };
