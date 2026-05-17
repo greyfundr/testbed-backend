@@ -440,6 +440,7 @@ export class CampaignService {
       isSaved,
       organizers,
       topAmplifiers,
+      amplifiersTotal,
       financialAccess,
       topDonor,
       distinctDonorsCount,
@@ -449,6 +450,10 @@ export class CampaignService {
         : Promise.resolve(false),
       this.organizerService.list(campaign.id, currentUserId),
       this.amplifierService.topForCampaign(campaign.id, 5),
+      // Real Champion count — `topAmplifiers.length` only catches
+      // amplifiers who've actually influenced a donation, so it
+      // undercounts everyone else who's signed up to champion.
+      this.amplifierService.countForCampaign(campaign.id),
       this.computeFinancialAccess(campaign, currentUserId),
       this.getTopDonor(campaign.id),
       this.getDistinctDonorsCount(campaign.id),
@@ -503,11 +508,11 @@ export class CampaignService {
       // counted donation rows and was only wired on the listing query.
       donorsCount: distinctDonorsCount,
       likesCount,
-      // Length of the top-amplifiers list isn't the whole story (we cap
-      // at 5), but the heavy path doesn't take the loadRelationCount
-      // route. Use the cached topAmplifiers.length as a best-effort
-      // until someone wires a proper count subquery here too.
-      amplifiersCount: topAmplifiers.length,
+      // Real Champion count from a dedicated COUNT(*) on
+      // campaign_amplifiers — matches what the list endpoint surfaces
+      // via loadRelationCountAndMap. `topAmplifiers.length` is a cap
+      // (top 5) and only counts influencers, so it would undercount.
+      amplifiersCount: amplifiersTotal,
       commentsCount,
       isLiked,
       isSaved,

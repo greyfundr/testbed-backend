@@ -80,6 +80,14 @@ export class CampaignAmplifierService {
     return this.amplifierRepo.findOne({ where: { id } });
   }
 
+  // Real count of amplifier (Champion) rows for a campaign — used by
+  // the detail mapToResponse so the Champions stat doesn't undercount
+  // people who haven't yet influenced a donation. Counts every signup
+  // regardless of whether they've driven any contributions.
+  async countForCampaign(campaignId: string): Promise<number> {
+    return this.amplifierRepo.count({ where: { campaignId } });
+  }
+
   async topForCampaign(campaignId: string, limit = 10) {
     const rows = await this.donationRepo
       .createQueryBuilder('d')
