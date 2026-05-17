@@ -18,6 +18,7 @@ import { Donation } from './donation.entity';
 import { CampaignCategory } from './campaign-category.entity';
 import { CampaignLike } from './campaign-like.entity';
 import { CampaignComment } from './campaign-comment.entity';
+import { CampaignAmplifier } from './campaign-amplifier.entity';
 import { ColumnNumericTransformer } from '../../../common/transformers/column-numeric.transformer';
 
 export interface CampaignOffer {
@@ -175,6 +176,12 @@ export class Campaign extends AbstractEntity {
 
   @OneToMany(() => CampaignComment, (comment) => comment.campaign)
   comments: CampaignComment[];
+
+  // Lets the list query run loadRelationCountAndMap('amplifiersCount')
+  // so the public feed knows how many people have championed each
+  // campaign — without an N+1 subquery per row.
+  @OneToMany(() => CampaignAmplifier, (a) => a.campaign)
+  amplifiers: CampaignAmplifier[];
 
   @Column({ type: 'varchar', length: 120, nullable: true })
   location?: string | null;

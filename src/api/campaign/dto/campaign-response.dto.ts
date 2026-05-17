@@ -98,6 +98,12 @@ export class CampaignResponseDto {
   @ApiProperty()
   likesCount: number;
 
+  @ApiProperty({
+    description:
+      'Number of users who have championed (amplified) this campaign.',
+  })
+  amplifiersCount: number;
+
   @ApiProperty()
   commentsCount: number;
 

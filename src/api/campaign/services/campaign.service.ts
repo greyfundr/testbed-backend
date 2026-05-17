@@ -191,6 +191,15 @@ export class CampaignService {
       .leftJoinAndSelect('creator.profile', 'profile')
       .leftJoinAndSelect('campaign.category', 'category')
       .loadRelationCountAndMap('campaign.donorsCount', 'campaign.donations')
+      // Surface real likes + amplifiers (champions) counts on the
+      // list query so the lightweight mapToResponse below doesn't have
+      // to fire one COUNT subquery per campaign. Same shape as the
+      // existing donors count.
+      .loadRelationCountAndMap('campaign.likesCount', 'campaign.likes')
+      .loadRelationCountAndMap(
+        'campaign.amplifiersCount',
+        'campaign.amplifiers',
+      )
       // Auto-approval era: campaigns are live on creation. We also surface
       // rows authored under the legacy approval flow (status =
       // pending_approval) so they're not stranded. PAUSED / REJECTED /
@@ -386,7 +395,11 @@ export class CampaignService {
         // this on the list query, so the card can show the donor count
         // without an extra round-trip.
         donorsCount: (campaign as any).donorsCount ?? 0,
-        likesCount: 0,
+        // Real counts when the list query supplied them via
+        // loadRelationCountAndMap (see findAll). Falls back to 0 for
+        // any code path that calls mapToResponse without those joins.
+        likesCount: (campaign as any).likesCount ?? 0,
+        amplifiersCount: (campaign as any).amplifiersCount ?? 0,
         commentsCount: 0,
         isLiked: false,
         isSaved: false,
@@ -490,6 +503,11 @@ export class CampaignService {
       // counted donation rows and was only wired on the listing query.
       donorsCount: distinctDonorsCount,
       likesCount,
+      // Length of the top-amplifiers list isn't the whole story (we cap
+      // at 5), but the heavy path doesn't take the loadRelationCount
+      // route. Use the cached topAmplifiers.length as a best-effort
+      // until someone wires a proper count subquery here too.
+      amplifiersCount: topAmplifiers.length,
       commentsCount,
       isLiked,
       isSaved,
