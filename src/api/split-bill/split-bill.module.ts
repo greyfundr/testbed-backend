@@ -3,6 +3,7 @@ import { SplitBillController } from './controllers/split-bill.controller';
 import { SplitBillGovernanceController } from './controllers/split-bill-governance.controller';
 import { SplitBillService } from './services/split-bill.service';
 import { SplitBillGovernanceService } from './services/split-bill-governance.service';
+import { SplitBillUpdateService } from './services/split-bill-update.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   SplitBill,
@@ -12,6 +13,7 @@ import {
   SplitBillVendor,
   SplitBillProposal,
   SplitBillProposalVote,
+  SplitBillUpdate,
 } from './entities';
 import { UserModule } from '../user/user.module';
 import { WalletModule } from '../wallet/wallet.module';
@@ -30,6 +32,7 @@ import { SplitBillSubscriber } from './subscribers/split-bill.subscriber';
       SplitBillVendor,
       SplitBillProposal,
       SplitBillProposalVote,
+      SplitBillUpdate,
     ]),
     forwardRef(() => UserModule),
     forwardRef(() => WalletModule),
@@ -40,9 +43,14 @@ import { SplitBillSubscriber } from './subscribers/split-bill.subscriber';
   providers: [
     SplitBillService,
     SplitBillGovernanceService,
+    SplitBillUpdateService,
     PaymentService,
     SplitBillSubscriber,
   ],
-  exports: [SplitBillService, SplitBillGovernanceService],
+  exports: [
+    SplitBillService,
+    SplitBillGovernanceService,
+    SplitBillUpdateService,
+  ],
 })
 export class SplitBillModule {}

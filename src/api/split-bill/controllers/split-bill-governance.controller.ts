@@ -15,11 +15,13 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { User } from '../../user/entities';
 import { SplitBillGovernanceService } from '../services/split-bill-governance.service';
+import { SplitBillUpdateService } from '../services/split-bill-update.service';
 import {
   CastSplitBillProposalVoteDto,
   CreateSplitBillProposalDto,
   CreateSplitBillVendorDto,
 } from '../dtos/split-bill-governance.dto';
+import { CreateSplitBillUpdateDto } from '../dtos/split-bill-update.dto';
 
 @ApiTags('split-bills · governance')
 @ApiBearerAuth('JWT-auth')
@@ -28,6 +30,7 @@ import {
 export class SplitBillGovernanceController {
   constructor(
     private readonly governance: SplitBillGovernanceService,
+    private readonly updates: SplitBillUpdateService,
   ) {}
 
   // ─── Vendors ───────────────────────────────────────────────
@@ -95,5 +98,25 @@ export class SplitBillGovernanceController {
     @Body() dto: CastSplitBillProposalVoteDto,
   ) {
     return this.governance.castVote(billId, proposalId, user.id, dto);
+  }
+
+  // ─── Updates (creator-only announcements) ────────────────
+  @Get(':id/updates')
+  @ApiOperation({
+    summary: "List creator's announcements on a split bill",
+  })
+  listUpdates(@Param('id', ParseUUIDPipe) billId: string) {
+    return this.updates.list(billId);
+  }
+
+  @Post(':id/updates')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Post a new update (creator only)' })
+  createUpdate(
+    @Param('id', ParseUUIDPipe) billId: string,
+    @CurrentUser() user: User,
+    @Body() dto: CreateSplitBillUpdateDto,
+  ) {
+    return this.updates.create(billId, user, dto);
   }
 }

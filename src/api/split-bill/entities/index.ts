@@ -5,3 +5,4 @@ export * from './split-bill-comment.entity';
 export * from './split-bill-vendor.entity';
 export * from './split-bill-proposal.entity';
 export * from './split-bill-proposal-vote.entity';
+export * from './split-bill-update.entity';
