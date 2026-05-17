@@ -156,12 +156,24 @@ ${ogImage ? `<meta property="og:image" content="${this.escape(ogImage)}" />` : '
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f7f8fa;color:#161618;line-height:1.4}
+
+/* ─── Brand header ──────────────────────────────────── */
+.topbar{background:#fff;border-bottom:1px solid #ededf2}
+.topbar-inner{max-width:1100px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:8px;font-weight:800;font-size:16px;color:#017981;text-decoration:none}
+.brand-dot{width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#017981,#06a8a8);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:800}
+.topbar-cta{font-size:13px;color:#6b6b73;text-decoration:none}
+.topbar-cta:hover{color:#017981}
+
+/* ─── Mobile-first base (single column) ─────────────── */
 .wrap{max-width:520px;margin:0 auto;padding:16px}
+.layout{display:block}
 .card{background:#fff;border-radius:18px;overflow:hidden;border:1px solid #ededf2;box-shadow:0 4px 14px rgba(0,0,0,.04)}
 .hero{aspect-ratio:16/10;background:#eef0f3 center/cover no-repeat}
 .body{padding:18px}
 .title{font-size:18px;font-weight:800;margin-bottom:8px;line-height:1.3}
 .by{font-size:12px;color:#6b6b73;margin-bottom:16px}
+
 .amount-row{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:10px}
 .raised{font-size:22px;font-weight:800;color:#017981;letter-spacing:-.3px}
 .raised-sub{font-size:10.5px;font-weight:600;color:#6b6b73;letter-spacing:.4px;text-transform:uppercase}
@@ -169,9 +181,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .of{font-size:10.5px;font-weight:600;color:#6b6b73}
 .bar{height:10px;background:rgba(1,121,129,.1);border-radius:50px;overflow:hidden}
 .fill{height:100%;background:linear-gradient(90deg,#017981,#06a8a8);border-radius:50px;transition:width .6s ease}
-.about{margin-top:14px;font-size:13.5px;color:#41414a;white-space:pre-wrap}
+.about{margin-top:14px;font-size:13.5px;color:#41414a;white-space:pre-wrap;line-height:1.55}
+
 .champion-banner{margin-top:16px;padding:12px;border-radius:12px;background:rgba(249,115,22,.08);border:1px solid rgba(249,115,22,.2);font-size:12.5px;color:#9a4814;display:flex;gap:10px;align-items:center}
 .champion-banner .icon{width:28px;height:28px;border-radius:50%;background:#f97316;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px}
+
+/* On mobile the donate widget is just the lower half of the card */
+.donate-card{background:transparent;border:none;padding:0;box-shadow:none}
+.donate-card-title{display:none}
+
 .section-label{margin-top:20px;font-size:11px;font-weight:700;letter-spacing:.5px;color:#6b6b73;text-transform:uppercase}
 .amount-input{margin-top:10px;display:flex;align-items:center;gap:10px;background:#f4f4f7;border-radius:14px;padding:14px 16px;border:1.5px solid transparent;transition:border-color .15s}
 .amount-input:focus-within{border-color:#017981;background:#fff}
@@ -206,37 +224,84 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .success{margin-top:10px;padding:14px;border-radius:12px;background:#ecfdf5;color:#065f46;font-size:13px;display:none;text-align:center}
 .success.show{display:block}
 .success strong{display:block;font-size:15px;font-weight:800;margin-bottom:4px}
+
+/* ─── Desktop layout (>= 900px) ─────────────────────── */
+@media (min-width: 900px) {
+  .wrap{max-width:1100px;padding:32px 28px}
+  .layout{display:grid;grid-template-columns:1.6fr 1fr;gap:32px;align-items:start}
+  .card{border-radius:22px;box-shadow:0 8px 28px rgba(0,0,0,.06)}
+  .hero{aspect-ratio:16/9}
+  .body{padding:32px}
+  .title{font-size:30px;margin-bottom:10px;letter-spacing:-.3px}
+  .by{font-size:14px;margin-bottom:24px}
+  .raised{font-size:32px}
+  .percent{font-size:24px}
+  .raised-sub,.of{font-size:11.5px}
+  .bar{height:12px}
+  .about{margin-top:24px;font-size:15.5px}
+  .champion-banner{margin-top:24px;padding:16px;font-size:14px}
+  .champion-banner .icon{width:36px;height:36px;font-size:17px}
+
+  /* Donate column becomes its own card, sticky on desktop */
+  .donate-card{background:#fff;border:1px solid #ededf2;border-radius:22px;padding:24px;box-shadow:0 8px 28px rgba(0,0,0,.06);position:sticky;top:24px}
+  .donate-card-title{display:block;font-size:18px;font-weight:800;margin-bottom:4px;color:#161618}
+  .donate-card-sub{font-size:13px;color:#6b6b73;margin-bottom:18px}
+  .donate-card .section-label:first-of-type{margin-top:0}
+  .donate-card .cta{padding:16px;font-size:16px}
+}
 </style>
 </head>
 <body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="https://greyfundr.com">
+      <span class="brand-dot">G</span>
+      <span>GreyFundr</span>
+    </a>
+    <a class="topbar-cta" href="https://greyfundr.com" target="_blank" rel="noopener">Start your own campaign →</a>
+  </div>
+</header>
+
 <div class="wrap">
-  <div class="card">
-    <div class="hero" style="background-image:url('${this.escape(heroImage)}')"></div>
-    <div class="body">
-      <div class="title">${title}</div>
-      <div class="by">by ${this.escape(this.creatorName(campaign))}${daysLeft != null ? ` · ${daysLeft} day${daysLeft === 1 ? '' : 's'} left` : ''}</div>
+  <div class="layout">
 
-      <div class="amount-row">
-        <div>
-          <div class="raised">${raisedLabel}</div>
-          <div class="raised-sub">raised</div>
+    <!-- LEFT: campaign card (mobile: full width, desktop: ~60%) -->
+    <main class="card">
+      <div class="hero" style="background-image:url('${this.escape(heroImage)}')"></div>
+      <div class="body">
+        <div class="title">${title}</div>
+        <div class="by">by ${this.escape(this.creatorName(campaign))}${daysLeft != null ? ` · ${daysLeft} day${daysLeft === 1 ? '' : 's'} left` : ''}</div>
+
+        <div class="amount-row">
+          <div>
+            <div class="raised">${raisedLabel}</div>
+            <div class="raised-sub">raised</div>
+          </div>
+          <div style="text-align:right">
+            <div class="percent">${progress}%</div>
+            <div class="of">of ${targetLabel}</div>
+          </div>
         </div>
-        <div style="text-align:right">
-          <div class="percent">${progress}%</div>
-          <div class="of">of ${targetLabel}</div>
-        </div>
+        <div class="bar"><div class="fill" style="width:${progress}%"></div></div>
+
+        ${
+          championName
+            ? `<div class="champion-banner"><div class="icon">★</div><div><strong>${this.escape(championName)}</strong> is championing this cause. Your donation supports them too.</div></div>`
+            : ''
+        }
+
+        ${description ? `<div class="about">${this.escape(description)}</div>` : ''}
       </div>
-      <div class="bar"><div class="fill" style="width:${progress}%"></div></div>
+    </main>
 
-      ${
-        championName
-          ? `<div class="champion-banner"><div class="icon">★</div><div><strong>${this.escape(championName)}</strong> is championing this cause. Your donation supports them too.</div></div>`
-          : ''
-      }
+    <!-- RIGHT: donate widget. On mobile this stacks under the card.
+         On desktop it sits in its own white card and sticks to the
+         viewport top as the visitor scrolls the long campaign text. -->
+    <aside class="donate-card">
+      <div class="donate-card-title">Donate to this campaign</div>
+      <div class="donate-card-sub">Every contribution counts. Pay securely via Paystack.</div>
 
-      ${description ? `<div class="about">${this.escape(description)}</div>` : ''}
-
-      <div class="section-label">Donate</div>
+      <div class="section-label">Amount</div>
       <div class="amount-input">
         <span class="currency">₦</span>
         <input id="amount" type="text" inputmode="numeric" placeholder="0" />
@@ -282,7 +347,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         Donate via Paystack
         <span class="cta-sub">Card · Bank · USSD</span>
       </button>
-    </div>
+    </aside>
+
   </div>
   <div class="footer">Powered by <a href="https://greyfundr.com" target="_blank" rel="noopener">GreyFundr</a></div>
 </div>
