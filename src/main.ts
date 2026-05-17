@@ -36,6 +36,12 @@ async function bootstrap() {
     app.setGlobalPrefix('api', {
       exclude: [
         { path: 'l/:shortCode', method: RequestMethod.GET },
+        // Champion / amplifier landing page — public, no API prefix.
+        // Hit by champion referral URLs (e.g. dev.greyfundr.com/c/:slug
+        // ?ref=CODE). Visitors land here from shared links and can
+        // donate via Paystack inline; the donation is attributed back
+        // to the referring champion via the ref query.
+        { path: 'c/:slug', method: RequestMethod.GET },
         {
           path: '.well-known/apple-app-site-association',
           method: RequestMethod.GET,

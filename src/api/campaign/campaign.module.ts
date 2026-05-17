@@ -34,6 +34,7 @@ import {
 import { CampaignController } from './controllers/campaign.controller';
 import { CampaignOrganizerController } from './controllers/campaign-organizer.controller';
 import { CampaignExtrasController } from './controllers/campaign-extras.controller';
+import { ChampionPageController } from './controllers/champion-page.controller';
 import { CampaignGovernanceController } from './controllers/campaign-governance.controller';
 import { CampaignUpdateController } from './controllers/campaign-update.controller';
 import { WalletModule } from '../wallet/wallet.module';
@@ -85,6 +86,7 @@ import { User } from '../user/entities';
     CampaignExtrasController,
     CampaignGovernanceController,
     CampaignUpdateController,
+    ChampionPageController,
   ],
   providers: [
     CampaignService,
