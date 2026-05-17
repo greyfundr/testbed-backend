@@ -1,9 +1,12 @@
 import { forwardRef, Module } from '@nestjs/common';
 import { SplitBillController } from './controllers/split-bill.controller';
 import { SplitBillGovernanceController } from './controllers/split-bill-governance.controller';
+import { SplitBillOrganizerController } from './controllers/split-bill-organizer.controller';
 import { SplitBillService } from './services/split-bill.service';
 import { SplitBillGovernanceService } from './services/split-bill-governance.service';
 import { SplitBillUpdateService } from './services/split-bill-update.service';
+import { SplitBillRetentionService } from './services/split-bill-retention.service';
+import { SplitBillOrganizerService } from './services/split-bill-organizer.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   SplitBill,
@@ -14,7 +17,9 @@ import {
   SplitBillProposal,
   SplitBillProposalVote,
   SplitBillUpdate,
+  SplitBillOrganizer,
 } from './entities';
+import { User } from '../user/entities';
 import { UserModule } from '../user/user.module';
 import { WalletModule } from '../wallet/wallet.module';
 import { TransactionModule } from '../transaction/transaction.module';
@@ -34,6 +39,8 @@ import { SplitBillSubscriber } from './subscribers/split-bill.subscriber';
       SplitBillProposal,
       SplitBillProposalVote,
       SplitBillUpdate,
+      SplitBillOrganizer,
+      User,
     ]),
     forwardRef(() => UserModule),
     forwardRef(() => WalletModule),
@@ -41,11 +48,17 @@ import { SplitBillSubscriber } from './subscribers/split-bill.subscriber';
     DynamicLinkModule,
     forwardRef(() => NotificationModule),
   ],
-  controllers: [SplitBillController, SplitBillGovernanceController],
+  controllers: [
+    SplitBillController,
+    SplitBillGovernanceController,
+    SplitBillOrganizerController,
+  ],
   providers: [
     SplitBillService,
     SplitBillGovernanceService,
     SplitBillUpdateService,
+    SplitBillRetentionService,
+    SplitBillOrganizerService,
     PaymentService,
     SplitBillSubscriber,
   ],
@@ -53,6 +66,7 @@ import { SplitBillSubscriber } from './subscribers/split-bill.subscriber';
     SplitBillService,
     SplitBillGovernanceService,
     SplitBillUpdateService,
+    SplitBillOrganizerService,
   ],
 })
 export class SplitBillModule {}

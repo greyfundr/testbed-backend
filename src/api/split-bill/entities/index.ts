@@ -6,3 +6,4 @@ export * from './split-bill-vendor.entity';
 export * from './split-bill-proposal.entity';
 export * from './split-bill-proposal-vote.entity';
 export * from './split-bill-update.entity';
+export * from './split-bill-organizer.entity';
