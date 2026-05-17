@@ -32,6 +32,16 @@ export class UserController {
 
   @ApiBearerAuth('JWT-auth')
   @UseGuards(JwtAuthGuard)
+  @Get('me/stats')
+  @ApiOperation({
+    summary: "Counts shown in the dashboard header for the current user",
+  })
+  getMyStats(@CurrentUser() user: User) {
+    return this.userService.getMyStats(user.id);
+  }
+
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
   @Patch('profile')
   @ApiOperation({ summary: 'Update user profile' })
   updateProfile(

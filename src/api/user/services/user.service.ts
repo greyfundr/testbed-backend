@@ -75,6 +75,29 @@ export class UserService {
     };
   }
 
+  // Header stats for the dashboard's expanded view. Two raw COUNT(*)
+  // queries — championed = number of campaigns the user has amplified,
+  // splitBills = number of split-bill participations (created or
+  // invited). Soft-deleted rows excluded so closed/cancelled records
+  // don't inflate the figures.
+  async getMyStats(userId: string) {
+    const repo = (table: string) =>
+      this.dataSource
+        .createQueryBuilder()
+        .select('COUNT(*)', 'count')
+        .from(table, 't')
+        .where('t.user_id = :userId', { userId })
+        .andWhere('t.deleted_at IS NULL');
+
+    const championedRow = await repo('campaign_amplifiers').getRawOne();
+    const splitRow = await repo('split_bill_participants').getRawOne();
+
+    return {
+      championedCount: Number((championedRow as { count: string })?.count ?? 0),
+      splitBillsCount: Number((splitRow as { count: string })?.count ?? 0),
+    };
+  }
+
   async getUsers(filterDto: GetUsersFilterDto, currentUserId?: string) {
     const { name, email, phoneNumber, username, accountType } = filterDto;
 
