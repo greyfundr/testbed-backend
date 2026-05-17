@@ -29,6 +29,6 @@ export class PointsRule extends AbstractEntity {
   @Column({ name: 'is_active', type: 'tinyint', default: 1 })
   isActive: boolean;
 
-  @Column({ length: 255, nullable: true })
+  @Column({ type: 'varchar', length: 255, nullable: true })
   description?: string | null;
 }

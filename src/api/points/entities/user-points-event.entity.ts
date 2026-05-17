@@ -25,10 +25,10 @@ export class UserPointsEvent extends AbstractEntity {
   @Column({ length: 64 })
   section: string;
 
-  @Column({ name: 'source_type', length: 64, nullable: true })
+  @Column({ name: 'source_type', type: 'varchar', length: 64, nullable: true })
   sourceType?: string | null;
 
-  @Column({ name: 'source_ref_id', length: 36, nullable: true })
+  @Column({ name: 'source_ref_id', type: 'varchar', length: 36, nullable: true })
   sourceRefId?: string | null;
 
   @Column({ type: 'json', nullable: true })
@@ -42,6 +42,11 @@ export class UserPointsEvent extends AbstractEntity {
   })
   reversedAt?: Date | null;
 
-  @Column({ name: 'reversal_reason', length: 255, nullable: true })
+  @Column({
+    name: 'reversal_reason',
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+  })
   reversalReason?: string | null;
 }
