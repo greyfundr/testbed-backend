@@ -68,6 +68,28 @@ export enum MyBillsRole {
   PARTICIPANT = 'participant',
 }
 
+// ─── Governance ──────────────────────────────────────────────
+// Mirrors the campaign-side proposal/vote model, simplified for
+// split bills: all participants vote, majority approves.
+export enum SplitBillVendorKind {
+  VENDOR = 'vendor', // external business/account
+  INDIVIDUAL = 'individual', // a specific person (no GreyFundr account)
+  INTERNAL = 'internal', // another GreyFundr user (will receive in-app)
+}
+
+export enum SplitBillProposalStatus {
+  PENDING = 'pending', // open for voting
+  APPROVED = 'approved', // crossed the approval threshold
+  REJECTED = 'rejected', // enough rejection votes to block
+  EXECUTED = 'executed', // funds actually disbursed
+  CANCELLED = 'cancelled', // proposer or creator pulled it
+}
+
+export enum SplitBillProposalVoteValue {
+  APPROVE = 'approve',
+  REJECT = 'reject',
+}
+
 // export enum SplitMethod {
 //   EVEN = 'EVEN',
 //   MANUAL = 'MANUAL',
