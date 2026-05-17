@@ -281,6 +281,16 @@ export class UpdateSplitBillDto {
   imageUrl?: string;
 
   @ApiPropertyOptional({
+    description:
+      'Replace the multi-photo bill cover gallery. The first entry is also persisted as `imageUrl` for clients that still read the single field.',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  coverImages?: string[];
+
+  @ApiPropertyOptional({
     description: 'Replace receipts array',
     type: [String],
   })

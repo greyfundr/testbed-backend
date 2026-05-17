@@ -471,6 +471,15 @@ export class SplitBillService {
         updateData.splitMethod = dto.splitMethod;
       if (dto.dueDate !== undefined) updateData.dueDate = new Date(dto.dueDate);
       if (dto.imageUrl !== undefined) updateData.imageUrl = dto.imageUrl;
+      if (dto.coverImages !== undefined) {
+        updateData.coverImages = dto.coverImages;
+        // Mirror the first entry into imageUrl so legacy single-image
+        // consumers (older clients, list shaping in getMyActiveBills)
+        // see the new cover too. Empty array clears both.
+        updateData.imageUrl = dto.coverImages.length > 0
+          ? dto.coverImages[0]
+          : null;
+      }
       if (dto.receipts !== undefined) updateData.receipts = dto.receipts;
       if (dto.allowPartialPayment !== undefined)
         updateData.allowPartialPayment = dto.allowPartialPayment;

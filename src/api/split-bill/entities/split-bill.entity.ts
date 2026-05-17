@@ -45,6 +45,12 @@ export class SplitBill extends AbstractEntity {
   @Column({ type: 'varchar', length: 500, nullable: true, name: 'image_url' })
   imageUrl: string | null;
 
+  // Multi-photo bill cover gallery. The first entry mirrors
+  // `imageUrl` for legacy clients. Nullable so existing bills keep
+  // working unchanged.
+  @Column({ type: 'json', nullable: true, name: 'cover_images_json' })
+  coverImages: string[] | null;
+
   @Column({ type: 'json', nullable: true })
   receipts: string[] | null;
 
