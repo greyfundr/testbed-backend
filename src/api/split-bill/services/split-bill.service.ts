@@ -59,6 +59,9 @@ import { Settings } from 'src/api/settings/entities';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DynamicLinkService } from 'src/api/dynamic-link/services/dynamic-link.service';
 import { User, USER_SAFE_FIELDS } from 'src/api/user/entities';
+import { TermiiService } from 'src/common/services/termii.service';
+import { WhatsAppService } from 'src/common/services/whatsapp.service';
+import { NotificationService } from 'src/api/notification/services/notification.service';
 
 @Injectable()
 export class SplitBillService {
@@ -80,7 +83,113 @@ export class SplitBillService {
     private readonly dataSource: DataSource,
     private readonly eventEmitter: EventEmitter2,
     private readonly dynamicLinkService: DynamicLinkService,
+    private readonly termiiService: TermiiService,
+    private readonly whatsAppService: WhatsAppService,
+    private readonly notificationService: NotificationService,
   ) {}
+
+  // Fan out SMS + WhatsApp + in-app/push to a newly-added participant.
+  // Fire-and-forget — wrapped in try/catch per channel so a delivery
+  // hiccup on one provider doesn't block the API response or the other
+  // channels. Only fires for participants with a phone (SMS/WhatsApp)
+  // or a linked userId (in-app/push). Called after the addParticipant
+  // transaction has committed so a failed send never rolls back the
+  // participant row.
+  private async fanOutParticipantAdded(input: {
+    bill: SplitBill;
+    participant: SplitBillParticipant;
+    creatorName: string;
+    shareAmount: number;
+    isGuest: boolean;
+  }): Promise<void> {
+    const { bill, participant, creatorName, shareAmount, isGuest } = input;
+
+    // Resolve phone: guests carry it on the participant row; USER
+    // participants store it on their user record under phoneNumber.
+    let phone: string | null = null;
+    let displayName = 'there';
+    if (isGuest) {
+      phone = participant.guestPhone ?? null;
+      displayName = participant.guestName ?? 'there';
+    } else if (participant.userId) {
+      const userRow = await this.userRepo.findOne({
+        where: { id: participant.userId },
+        select: ['id', 'phoneNumber', 'firstName', 'lastName'],
+      });
+      phone = userRow?.phoneNumber ?? null;
+      displayName =
+        `${userRow?.firstName ?? ''} ${userRow?.lastName ?? ''}`.trim() ||
+        'there';
+    }
+    const guestName = displayName;
+    const billTitle = bill.title ?? 'a split bill';
+    const total = bill.totalAmount ?? 0;
+    const currency = bill.currency ?? 'NGN';
+    const link =
+      bill.shareLink ?? `https://greyfundr.com/bills/${bill.id}`;
+    const formatMoney = (n: number) =>
+      `${currency === 'NGN' ? '₦' : ''}${Number(n).toLocaleString()}`;
+
+    // ── SMS (short summary + link) ────────────────────────────
+    if (phone) {
+      const sms =
+        `GreyFundr: ${creatorName} added you to "${billTitle}". ` +
+        `Your share: ${formatMoney(shareAmount)}. View & pay: ${link}`;
+      try {
+        await this.termiiService.sendSMS(phone, sms);
+      } catch (err) {
+        this.logger.warn(
+          `SMS to ${phone} failed for bill ${bill.id}: ${(err as Error).message}`,
+        );
+      }
+
+      // ── WhatsApp (detailed body via Meta Graph API) ─────────
+      const detail =
+        `Hi ${guestName}, ${creatorName} added you to a split bill ` +
+        `on GreyFundr.\n\n` +
+        `Bill: ${billTitle}\n` +
+        `Total: ${formatMoney(total)}\n` +
+        `Your share: ${formatMoney(shareAmount)}\n` +
+        `Participants: ${bill.participants?.length ?? 0}\n\n` +
+        `View the bill, see everyone involved, and pay your share here:\n` +
+        `${link}\n\n` +
+        `Don't have the app? The link works in your browser.`;
+      try {
+        await this.whatsAppService.sendTemplate(phone, billTitle, detail);
+      } catch (err) {
+        this.logger.warn(
+          `WhatsApp to ${phone} failed for bill ${bill.id}: ${(err as Error).message}`,
+        );
+      }
+    }
+
+    // ── In-app + push (USER participants only) ────────────────
+    if (!isGuest && participant.userId) {
+      try {
+        await this.notificationService.notify(
+          participant.userId,
+          'billReminders',
+          {
+            title: 'Added to a split bill',
+            message:
+              `${creatorName} added you to "${billTitle}". ` +
+              `Your share: ${formatMoney(shareAmount)}.`,
+            type: 'split_bill',
+            metadata: {
+              kind: 'participant_added',
+              billId: bill.id,
+              participantId: participant.id,
+              shareLink: link,
+            },
+          },
+        );
+      } catch (err) {
+        this.logger.warn(
+          `Push to user ${participant.userId} failed for bill ${bill.id}: ${(err as Error).message}`,
+        );
+      }
+    }
+  }
 
   async createBill(
     creatorId: string,
@@ -1351,15 +1460,19 @@ export class SplitBillService {
 
       await qr.commitTransaction();
 
+      const creator = await this.userRepo.findOne({
+        where: { id: actorId },
+        select: ['firstName', 'lastName', 'email'],
+      });
+      const creatorName = creator
+        ? `${creator.firstName ?? ''} ${creator.lastName ?? ''}`.trim() ||
+          (creator.email ?? 'Someone')
+        : 'Someone';
+
       if (dto.type === 'USER' && dto.userId) {
         const targetUser = await this.userRepo.findOne({
           where: { id: dto.userId },
           select: ['id', 'email', 'firstName', 'lastName'],
-        });
-
-        const creator = await this.userRepo.findOne({
-          where: { id: actorId },
-          select: ['firstName', 'lastName', 'email'],
         });
 
         if (targetUser) {
@@ -1371,12 +1484,26 @@ export class SplitBillService {
             participantId: newParticipant.id,
             amountOwed: newParticipantAmount,
             currency: bill.currency,
-            creatorName: creator
-              ? `${creator.firstName ?? ''} ${creator.lastName ?? ''}`.trim() ||
-                creator.email
-              : 'Someone',
+            creatorName,
           });
         }
+      }
+
+      // SMS + WhatsApp + push notification fan-out. Awaited but
+      // wrapped per-channel so any one failure doesn't bubble up to
+      // the API caller — the participant is already saved.
+      try {
+        await this.fanOutParticipantAdded({
+          bill,
+          participant: newParticipant,
+          creatorName,
+          shareAmount: newParticipantAmount,
+          isGuest: dto.type !== 'USER',
+        });
+      } catch (err) {
+        this.logger.warn(
+          `Participant-added fan-out failed for bill ${bill.id}: ${(err as Error).message}`,
+        );
       }
 
       return { participant: newParticipant, adjustments };
