@@ -60,6 +60,12 @@ export enum ActivityActionType {
   REMINDER_SENT = 'reminder_sent',
   OVERDUE_MARKED = 'overdue_marked',
   QUERY_RAISED = 'query_raised',
+  PROPOSAL_CREATED = 'proposal_created',
+  PROPOSAL_VOTED = 'proposal_voted',
+  PROPOSAL_APPROVED = 'proposal_approved',
+  PROPOSAL_REJECTED = 'proposal_rejected',
+  PROPOSAL_EXECUTED = 'proposal_executed',
+  UPDATE_POSTED = 'update_posted',
 }
 
 export enum MyBillsRole {

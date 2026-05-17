@@ -20,6 +20,7 @@ import { WalletModule } from '../wallet/wallet.module';
 import { TransactionModule } from '../transaction/transaction.module';
 import { PaymentService } from '../payment/services';
 import { DynamicLinkModule } from '../dynamic-link/dynamic-link.module';
+import { NotificationModule } from '../notification/notification.module';
 import { SplitBillSubscriber } from './subscribers/split-bill.subscriber';
 
 @Module({
@@ -38,6 +39,7 @@ import { SplitBillSubscriber } from './subscribers/split-bill.subscriber';
     forwardRef(() => WalletModule),
     forwardRef(() => TransactionModule),
     DynamicLinkModule,
+    forwardRef(() => NotificationModule),
   ],
   controllers: [SplitBillController, SplitBillGovernanceController],
   providers: [

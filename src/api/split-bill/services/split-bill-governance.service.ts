@@ -8,12 +8,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
   SplitBill,
+  SplitBillActivity,
   SplitBillParticipant,
   SplitBillProposal,
   SplitBillProposalVote,
   SplitBillVendor,
 } from '../entities';
 import {
+  ActivityActionType,
   SplitBillProposalStatus,
   SplitBillProposalVoteValue,
 } from '../enums/split-bill.enum';
@@ -22,6 +24,7 @@ import {
   CreateSplitBillProposalDto,
   CreateSplitBillVendorDto,
 } from '../dtos/split-bill-governance.dto';
+import { NotificationService } from '../../notification/services/notification.service';
 
 // Governance for split bills. Mirrors the campaign-side flow but
 // simplified: every participant votes directly, threshold is a
@@ -40,6 +43,9 @@ export class SplitBillGovernanceService {
     private readonly proposalRepo: Repository<SplitBillProposal>,
     @InjectRepository(SplitBillProposalVote)
     private readonly voteRepo: Repository<SplitBillProposalVote>,
+    @InjectRepository(SplitBillActivity)
+    private readonly activityRepo: Repository<SplitBillActivity>,
+    private readonly notifications: NotificationService,
   ) {}
 
   // ─── Vendors ───────────────────────────────────────────────
@@ -120,7 +126,26 @@ export class SplitBillGovernanceService {
       votesFor: 0,
       votesAgainst: 0,
     });
-    return this.proposalRepo.save(p);
+    const saved = await this.proposalRepo.save(p);
+
+    // Activity log + fanout to all participants.
+    await this.activityRepo.save({
+      splitBillId: billId,
+      actorId: userId,
+      actionType: ActivityActionType.PROPOSAL_CREATED,
+      description: `Proposed "${saved.title}" for disbursement`,
+      amount: saved.totalAmount as unknown as number,
+    });
+    await this.fanoutToParticipants({
+      billId,
+      excludeUserId: userId,
+      title: 'New disbursement proposal',
+      message:
+        `A new proposal "${saved.title}" needs your vote. ` +
+        `${saved.votesFor}/${saved.requiredApprovals} approvals so far.`,
+      metadata: { proposalId: saved.id, billId },
+    });
+    return saved;
   }
 
   async castVote(
@@ -161,6 +186,7 @@ export class SplitBillGovernanceService {
     proposal.votesAgainst = tallies.reject;
 
     const totalParticipants = await this.countParticipants(billId);
+    const wasPending = proposal.status === SplitBillProposalStatus.PENDING;
     if (proposal.votesFor >= proposal.requiredApprovals) {
       proposal.status = SplitBillProposalStatus.APPROVED;
       proposal.decidedAt = new Date();
@@ -171,7 +197,88 @@ export class SplitBillGovernanceService {
       proposal.status = SplitBillProposalStatus.REJECTED;
       proposal.decidedAt = new Date();
     }
-    return this.proposalRepo.save(proposal);
+    const saved = await this.proposalRepo.save(proposal);
+
+    // Activity log for the vote itself.
+    await this.activityRepo.save({
+      splitBillId: billId,
+      actorId: userId,
+      actionType: ActivityActionType.PROPOSAL_VOTED,
+      description: `Voted ${dto.vote} on "${saved.title}"`,
+    });
+    // Notify the proposer that their proposal got a vote.
+    if (userId !== saved.proposerId) {
+      await this.notifications.notify(saved.proposerId, 'billReminders', {
+        title: 'New vote on your proposal',
+        message: `Someone voted ${dto.vote} on "${saved.title}".`,
+        type: 'split_bill',
+        metadata: { proposalId: saved.id, billId, kind: 'vote_cast' },
+      });
+    }
+    // If the vote flipped a pending proposal, fan out the result.
+    if (
+      wasPending &&
+      saved.status !== SplitBillProposalStatus.PENDING
+    ) {
+      const approved = saved.status === SplitBillProposalStatus.APPROVED;
+      await this.activityRepo.save({
+        splitBillId: billId,
+        actionType: approved
+          ? ActivityActionType.PROPOSAL_APPROVED
+          : ActivityActionType.PROPOSAL_REJECTED,
+        description: approved
+          ? `Proposal "${saved.title}" was approved`
+          : `Proposal "${saved.title}" was rejected`,
+        amount: approved ? (saved.totalAmount as unknown as number) : undefined,
+      });
+      await this.fanoutToParticipants({
+        billId,
+        title: approved
+          ? 'Disbursement approved'
+          : 'Disbursement rejected',
+        message: approved
+          ? `"${saved.title}" cleared the approval threshold and is ready to disburse.`
+          : `"${saved.title}" was rejected by the group.`,
+        metadata: {
+          proposalId: saved.id,
+          billId,
+          kind: approved ? 'proposal_approved' : 'proposal_rejected',
+        },
+      });
+    }
+    return saved;
+  }
+
+  // Fan a notification out to every participant on the bill,
+  // optionally excluding one user (e.g. the actor who triggered it).
+  private async fanoutToParticipants(args: {
+    billId: string;
+    title: string;
+    message: string;
+    excludeUserId?: string;
+    metadata?: Record<string, unknown>;
+  }) {
+    const parts = await this.participantRepo.find({
+      where: { splitBillId: args.billId },
+    });
+    const targets = new Set<string>();
+    for (const p of parts) {
+      if (!p.userId) continue;
+      if (args.excludeUserId && p.userId === args.excludeUserId) continue;
+      targets.add(p.userId);
+    }
+    for (const uid of targets) {
+      try {
+        await this.notifications.notify(uid, 'billReminders', {
+          title: args.title,
+          message: args.message,
+          type: 'split_bill',
+          metadata: args.metadata,
+        });
+      } catch (_err) {
+        // Don't let one bad recipient kill the rest of the fanout.
+      }
+    }
   }
 
   // ─── Helpers ───────────────────────────────────────────────

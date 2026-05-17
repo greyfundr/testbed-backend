@@ -5,12 +5,19 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { SplitBill, SplitBillUpdate } from '../entities';
+import {
+  SplitBill,
+  SplitBillActivity,
+  SplitBillParticipant,
+  SplitBillUpdate,
+} from '../entities';
 import { User } from '../../user/entities';
 import {
   CreateSplitBillUpdateDto,
   SplitBillUpdateResponseDto,
 } from '../dtos/split-bill-update.dto';
+import { ActivityActionType } from '../enums/split-bill.enum';
+import { NotificationService } from '../../notification/services/notification.service';
 
 // Creator-only "announcements" feed for a split bill. Mirrors the
 // campaign Updates service. Participants can read but not post —
@@ -22,6 +29,11 @@ export class SplitBillUpdateService {
     private readonly updateRepo: Repository<SplitBillUpdate>,
     @InjectRepository(SplitBill)
     private readonly billRepo: Repository<SplitBill>,
+    @InjectRepository(SplitBillParticipant)
+    private readonly participantRepo: Repository<SplitBillParticipant>,
+    @InjectRepository(SplitBillActivity)
+    private readonly activityRepo: Repository<SplitBillActivity>,
+    private readonly notifications: NotificationService,
   ) {}
 
   async list(billId: string): Promise<SplitBillUpdateResponseDto[]> {
@@ -57,6 +69,37 @@ export class SplitBillUpdateService {
       where: { id: saved.id },
       relations: ['author'],
     });
+
+    // Activity log + notify every participant on the bill.
+    await this.activityRepo.save({
+      splitBillId: billId,
+      actorId: user.id,
+      actionType: ActivityActionType.UPDATE_POSTED,
+      description: 'Posted a new update',
+    });
+    const parts = await this.participantRepo.find({
+      where: { splitBillId: billId },
+    });
+    const targets = new Set<string>();
+    for (const p of parts) {
+      if (!p.userId || p.userId === user.id) continue;
+      targets.add(p.userId);
+    }
+    for (const uid of targets) {
+      try {
+        await this.notifications.notify(uid, 'billReminders', {
+          title: 'New update on your bill',
+          message: dto.body.trim().length > 100
+            ? `${dto.body.trim().substring(0, 100)}…`
+            : dto.body.trim(),
+          type: 'split_bill',
+          metadata: { billId, kind: 'update_posted', updateId: saved.id },
+        });
+      } catch (_err) {
+        // Don't let one bad recipient kill the rest of the fanout.
+      }
+    }
+
     return this.toDto(withAuthor as SplitBillUpdate);
   }
 
