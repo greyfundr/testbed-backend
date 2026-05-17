@@ -161,15 +161,25 @@ export class PointsService implements OnModuleInit {
       }
 
       let points = rule.points ?? 0;
+      // ColumnNumericTransformer coerces NULL -> 0, so we can't use
+      // `!= null` to tell flat-vs-scaled. Treat anything <= 0 as
+      // "no multiplier, use flat points".
       if (
         rule.perKoboMultiplier != null &&
         Number.isFinite(rule.perKoboMultiplier) &&
+        rule.perKoboMultiplier > 0 &&
         input.amountInKobo &&
         input.amountInKobo > 0
       ) {
         points = Math.round(rule.perKoboMultiplier * input.amountInKobo);
       }
-      if (points <= 0) return null;
+      if (points <= 0) {
+        this.logger.warn(
+          `award skipped: computed points=${points} for ${input.actionCode} ` +
+            `(rule.points=${rule.points}, perKoboMultiplier=${rule.perKoboMultiplier}).`,
+        );
+        return null;
+      }
 
       const event = this.eventRepo.create({
         userId: input.userId,
