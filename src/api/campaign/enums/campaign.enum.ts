@@ -8,6 +8,12 @@ export enum CampaignCategory {
   DISASTER = 'disaster',
   RELIGION = 'religion',
   BUSINESS = 'business',
+  WEDDINGS = 'weddings',
+  MEMORIAL = 'memorial',
+  SPORTS = 'sports',
+  EMERGENCY = 'emergency',
+  ARTS = 'arts',
+  COMMUNITY = 'community',
 }
 
 export enum CampaignStatus {
