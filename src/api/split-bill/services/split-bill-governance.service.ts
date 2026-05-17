@@ -281,6 +281,54 @@ export class SplitBillGovernanceService {
     }
   }
 
+  // Creator-only: mark an APPROVED proposal as EXECUTED. This MVP
+  // only flips status + emits an activity entry + fans out a "funds
+  // disbursed" notification — actual money movement is handled
+  // externally by the creator. Once bill-level escrow consolidation
+  // exists we can wire the cross-wallet release here.
+  async executeProposal(
+    billId: string,
+    userId: string,
+    proposalId: string,
+  ) {
+    await this.assertBillCreator(billId, userId);
+    const proposal = await this.proposalRepo.findOne({
+      where: { id: proposalId, splitBillId: billId },
+      relations: ['vendor'],
+    });
+    if (!proposal) throw new NotFoundException('Proposal not found');
+    if (proposal.status !== SplitBillProposalStatus.APPROVED) {
+      throw new BadRequestException(
+        'Only approved proposals can be executed',
+      );
+    }
+    proposal.status = SplitBillProposalStatus.EXECUTED;
+    proposal.decidedAt = new Date();
+    const saved = await this.proposalRepo.save(proposal);
+
+    await this.activityRepo.save({
+      splitBillId: billId,
+      actorId: userId,
+      actionType: ActivityActionType.PROPOSAL_EXECUTED,
+      description: `Marked "${saved.title}" as disbursed`,
+      amount: saved.totalAmount as unknown as number,
+    });
+
+    await this.fanoutToParticipants({
+      billId,
+      title: 'Funds disbursed',
+      message:
+        `"${saved.title}" has been marked as disbursed by the bill creator.`,
+      metadata: {
+        proposalId: saved.id,
+        billId,
+        kind: 'proposal_executed',
+      },
+    });
+
+    return saved;
+  }
+
   // ─── Helpers ───────────────────────────────────────────────
   private async tallies(proposalId: string) {
     const rows = await this.voteRepo.find({ where: { proposalId } });

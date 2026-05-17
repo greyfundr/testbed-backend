@@ -100,6 +100,19 @@ export class SplitBillGovernanceController {
     return this.governance.castVote(billId, proposalId, user.id, dto);
   }
 
+  @Post(':id/proposals/:proposalId/execute')
+  @ApiOperation({
+    summary:
+      'Mark an approved proposal as executed (creator only). MVP records status + activity; money movement is manual.',
+  })
+  executeProposal(
+    @Param('id', ParseUUIDPipe) billId: string,
+    @Param('proposalId', ParseUUIDPipe) proposalId: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.governance.executeProposal(billId, user.id, proposalId);
+  }
+
   // ─── Updates (creator-only announcements) ────────────────
   @Get(':id/updates')
   @ApiOperation({
