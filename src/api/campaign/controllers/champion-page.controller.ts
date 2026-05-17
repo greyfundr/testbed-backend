@@ -181,6 +181,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .quick{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
 .quick button{flex:1;min-width:60px;padding:8px 0;border-radius:10px;background:#fff;border:1px solid #ededf2;color:#161618;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
 .quick button:hover{border-color:#017981;color:#017981}
+.field{margin-top:10px}
+.field input{width:100%;background:#f4f4f7;border:1.5px solid transparent;border-radius:14px;padding:12px 14px;font-size:14px;font-family:inherit;color:#161618;outline:none;transition:border-color .15s,background-color .15s}
+.field input:focus{border-color:#017981;background:#fff}
+.field input::placeholder{color:#9b9ba3}
+.field.invalid input{border-color:#dc2626;background:#fef2f2}
+.toggle{margin-top:10px;display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f4f4f7;border-radius:12px;cursor:pointer;user-select:none}
+.toggle input{display:none}
+.toggle .check{width:20px;height:20px;border-radius:6px;background:#fff;border:1.5px solid #c9c9d1;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s,border-color .15s}
+.toggle .check svg{width:12px;height:12px;color:#fff;opacity:0;transition:opacity .15s}
+.toggle input:checked + .check{background:#017981;border-color:#017981}
+.toggle input:checked + .check svg{opacity:1}
+.toggle .label{font-size:13px;font-weight:600;color:#161618}
+.toggle .sub{font-size:11px;color:#6b6b73;font-weight:500;display:block;margin-top:1px}
+.hidden{display:none}
 .cta{margin-top:18px;width:100%;padding:14px;border-radius:28px;background:#017981;color:#fff;font-weight:700;font-size:15px;border:none;cursor:pointer;font-family:inherit;box-shadow:0 4px 12px rgba(1,121,129,.3);transition:transform .1s,opacity .15s}
 .cta:hover{transform:translateY(-1px)}
 .cta:disabled{opacity:.55;cursor:not-allowed;transform:none}
@@ -235,6 +249,29 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <button data-amt="10000">₦10,000</button>
       </div>
 
+      <div class="section-label" style="margin-top:22px">Your details</div>
+
+      <label class="toggle">
+        <input id="anon" type="checkbox" />
+        <span class="check">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </span>
+        <span>
+          <span class="label">Donate anonymously</span>
+          <span class="sub">Your name won't appear on the campaign</span>
+        </span>
+      </label>
+
+      <div class="field" id="name-field">
+        <input id="name" type="text" placeholder="Your full name" autocomplete="name" />
+      </div>
+      <div class="field">
+        <input id="email" type="email" placeholder="Email (for your receipt)" autocomplete="email" />
+      </div>
+      <div class="field">
+        <input id="phone" type="tel" inputmode="tel" placeholder="Phone number" autocomplete="tel" maxlength="15" />
+      </div>
+
       <div class="error" id="error"></div>
       <div class="success" id="success">
         <strong>Thank you for donating!</strong>
@@ -255,6 +292,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 (function(){
   var data = ${inlineData};
   var amountInput = document.getElementById('amount');
+  var nameInput = document.getElementById('name');
+  var emailInput = document.getElementById('email');
+  var phoneInput = document.getElementById('phone');
+  var anonToggle = document.getElementById('anon');
+  var nameField = document.getElementById('name-field');
   var errorBox = document.getElementById('error');
   var successBox = document.getElementById('success');
   var donateBtn = document.getElementById('donate-btn');
@@ -273,10 +315,39 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     });
   });
 
-  function showError(msg){
+  // Anonymous toggle hides the name field and clears it. The donor
+  // still has to enter email + phone (we need email for the Paystack
+  // receipt, phone for follow-up).
+  anonToggle.addEventListener('change', function(){
+    if (anonToggle.checked){
+      nameField.classList.add('hidden');
+      nameInput.value = '';
+    } else {
+      nameField.classList.remove('hidden');
+    }
+  });
+
+  function showError(msg, badField){
     errorBox.textContent = msg;
     errorBox.classList.add('show');
-    setTimeout(function(){ errorBox.classList.remove('show'); }, 4000);
+    document.querySelectorAll('.field.invalid').forEach(function(f){
+      f.classList.remove('invalid');
+    });
+    if (badField){
+      var p = badField.closest('.field');
+      if (p) p.classList.add('invalid');
+      badField.focus();
+    }
+    setTimeout(function(){ errorBox.classList.remove('show'); }, 5000);
+  }
+
+  function isValidEmail(s){
+    return /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(s);
+  }
+  function isValidPhone(s){
+    var digits = s.replace(/[^0-9]/g, '');
+    // Accept 10-15 digits (NG mobile is 10 or 11 plus optional country code).
+    return digits.length >= 10 && digits.length <= 15;
   }
 
   donateBtn.addEventListener('click', function(){
@@ -287,19 +358,53 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     var raw = (amountInput.value || '').replace(/[^0-9]/g, '');
     var amount = parseInt(raw, 10);
     if (!amount || amount < 100){
-      showError('Enter an amount of at least ₦100.');
+      showError('Enter an amount of at least ₦100.', amountInput);
       return;
+    }
+
+    var isAnonymous = !!anonToggle.checked;
+    var donorName = (nameInput.value || '').trim();
+    var email = (emailInput.value || '').trim();
+    var phone = (phoneInput.value || '').trim();
+
+    if (!isAnonymous && donorName.length < 2){
+      showError('Please enter your name (or check "Donate anonymously").', nameInput);
+      return;
+    }
+    if (!isValidEmail(email)){
+      showError('Please enter a valid email address for your receipt.', emailInput);
+      return;
+    }
+    if (!isValidPhone(phone)){
+      showError('Please enter a valid phone number.', phoneInput);
+      return;
+    }
+
+    // Build a custom_fields list so the details show up nicely in the
+    // Paystack dashboard transaction view, alongside the structured
+    // metadata our backend reads.
+    var customFields = [
+      { display_name: 'Donor name', variable_name: 'donor_name', value: isAnonymous ? 'Anonymous' : donorName },
+      { display_name: 'Phone', variable_name: 'phone', value: phone },
+      { display_name: 'Campaign', variable_name: 'campaign', value: data.title || data.campaignId }
+    ];
+    if (data.referrerCode){
+      customFields.push({ display_name: 'Champion code', variable_name: 'referrer_code', value: data.referrerCode });
     }
 
     var handler = PaystackPop.setup({
       key: data.paystackPublicKey,
-      email: 'guest+' + Date.now() + '@greyfundr.com',
+      email: email,
       amount: amount * 100, // kobo
       currency: 'NGN',
       metadata: {
         campaign_id: data.campaignId,
         referrer_code: data.referrerCode || '',
-        source: 'champion_page'
+        donor_name: isAnonymous ? '' : donorName,
+        phone: phone,
+        is_anonymous: isAnonymous,
+        source: 'champion_page',
+        custom_fields: customFields
       },
       onClose: function(){},
       callback: function(response){
