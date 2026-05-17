@@ -129,12 +129,19 @@ export class PointsService implements OnModuleInit {
   // inactive — keeps the calling code free of try/catch for the happy
   // path where an admin has merely disabled a rule.
   async award(input: AwardInput): Promise<UserPointsEvent | null> {
+    this.logger.log(
+      `[GP-AWARD] award() entry: actionCode='${input.actionCode}' userId=${input.userId} ` +
+        `source=${input.sourceType}:${input.sourceRefId}`,
+    );
     try {
       // Self-heal: if onModuleInit failed silently and the rules
       // table is still empty by the time the first award lands,
       // seed it lazily. Cheap because count() is fast and the
       // happy path is `if (count > 0) return`.
       await this.seedDefaultRules();
+      this.logger.log(
+        `[GP-AWARD] seed step completed for ${input.actionCode}`,
+      );
 
       const rule = await this.ruleRepo.findOne({
         where: { actionCode: input.actionCode },
@@ -309,8 +316,18 @@ export class PointsService implements OnModuleInit {
     };
     championUserId?: string | null;
   }): Promise<void> {
+    this.logger.log(
+      `[GP-AWARD] awardForDonation entry: payerId=${args.payerId} ` +
+        `donation.id=${args?.donation?.id} onBehalfOf=${args?.donation?.onBehalfOf} ` +
+        `championUserId=${args.championUserId ?? 'none'}`,
+    );
     const { payerId, donation, championUserId } = args;
-    if (!payerId || !donation?.id) return;
+    if (!payerId || !donation?.id) {
+      this.logger.warn(
+        `[GP-AWARD] early return: missing payerId=${payerId} or donation.id=${donation?.id}`,
+      );
+      return;
+    }
 
     const isOnBehalfUser =
       donation.onBehalfOf === 'user' && !!donation.onBehalfOfUserId;
@@ -319,6 +336,13 @@ export class PointsService implements OnModuleInit {
       campaignId: donation.campaignId,
       donationAmount: donation.amount,
     };
+
+    this.logger.log(
+      `[GP-AWARD] computed: isOnBehalfUser=${isOnBehalfUser} ` +
+        `amountInKobo=${amountInKobo} actionToFire=${
+          isOnBehalfUser ? ACTION.DONATION_ON_BEHALF_PAYER : ACTION.DONATION_DIRECT
+        }`,
+    );
 
     if (isOnBehalfUser) {
       await this.award({

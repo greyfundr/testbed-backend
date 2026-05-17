@@ -71,14 +71,21 @@ export class DonationService {
         );
         championUserId = amp?.userId ?? null;
       }
+      this.logger.log(
+        `[GP-HOOK] pointsService injected=${!!this.pointsService} ` +
+          `awardForDonation typeof=${typeof this.pointsService?.awardForDonation}`,
+      );
       await this.pointsService.awardForDonation({
         payerId,
         donation,
         championUserId,
       });
+      this.logger.log(
+        `[GP-HOOK] awardForDonation returned for donation=${donation.id}`,
+      );
     } catch (err) {
       this.logger.error(
-        `[GP-HOOK] awardDonationPoints failed (donation=${donation.id}): ${(err as Error).message}`,
+        `[GP-HOOK] awardDonationPoints failed (donation=${donation.id}): ${(err as Error).message}\n${(err as Error).stack}`,
       );
     }
   }
