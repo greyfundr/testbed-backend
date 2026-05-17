@@ -58,7 +58,17 @@ export class PointsService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    await this.seedDefaultRules();
+    // Best-effort. If migrations haven't run yet on a fresh deploy
+    // the table won't exist; we must not crash bootstrap. The seed
+    // is retried on every subsequent boot until it succeeds.
+    try {
+      await this.seedDefaultRules();
+    } catch (err) {
+      this.logger.warn(
+        `seedDefaultRules skipped on boot: ${(err as Error).message}. ` +
+          `Run migrations and restart to seed the defaults.`,
+      );
+    }
   }
 
   // Inserts the canonical default values once. Subsequent boots see
