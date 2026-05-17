@@ -1489,22 +1489,24 @@ export class SplitBillService {
         }
       }
 
-      // SMS + WhatsApp + push notification fan-out. Awaited but
-      // wrapped per-channel so any one failure doesn't bubble up to
-      // the API caller — the participant is already saved.
-      try {
-        await this.fanOutParticipantAdded({
-          bill,
-          participant: newParticipant,
-          creatorName,
-          shareAmount: newParticipantAmount,
-          isGuest: dto.type !== 'USER',
-        });
-      } catch (err) {
+      // SMS + WhatsApp + push notification fan-out — fire-and-forget.
+      // Termii + the Meta Graph WhatsApp API can each take several
+      // seconds; awaiting them sequentially would push the API
+      // response past the Dio client's 15s timeout, making the
+      // frontend treat a successful add as a failure. We intentionally
+      // do NOT await this Promise so the participant returns to the
+      // caller immediately; delivery errors are logged by the helper.
+      void this.fanOutParticipantAdded({
+        bill,
+        participant: newParticipant,
+        creatorName,
+        shareAmount: newParticipantAmount,
+        isGuest: dto.type !== 'USER',
+      }).catch((err) => {
         this.logger.warn(
           `Participant-added fan-out failed for bill ${bill.id}: ${(err as Error).message}`,
         );
-      }
+      });
 
       return { participant: newParticipant, adjustments };
     } catch (err) {
