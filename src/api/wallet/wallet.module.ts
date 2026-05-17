@@ -1,11 +1,13 @@
 import { forwardRef, Module } from '@nestjs/common';
 import { WalletController } from './controllers/wallet.controller';
 import { WalletService } from './services/wallet.service';
+import { PendingPayoutService } from './services/pending-payout.service';
 import {
   Wallet,
   VirtualAccount,
   BankAccount,
   WithdrawalRequest,
+  PendingPayout,
 } from './entities';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
@@ -25,6 +27,7 @@ import { TransactionModule } from '../transaction/transaction.module';
       VirtualAccount,
       BankAccount,
       WithdrawalRequest,
+      PendingPayout,
     ]),
     forwardRef(() => PaymentModule),
     forwardRef(() => UserModule),
@@ -33,6 +36,7 @@ import { TransactionModule } from '../transaction/transaction.module';
   controllers: [WalletController],
   providers: [
     WalletService,
+    PendingPayoutService,
     WalletRepository,
     BankAccountRepository,
     WithdrawalRequestRepository,
@@ -40,6 +44,7 @@ import { TransactionModule } from '../transaction/transaction.module';
   ],
   exports: [
     WalletService,
+    PendingPayoutService,
     WalletRepository,
     BankAccountRepository,
     WithdrawalRequestRepository,

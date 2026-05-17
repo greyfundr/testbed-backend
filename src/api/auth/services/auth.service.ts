@@ -33,6 +33,7 @@ import { SettingsService } from '../../settings/services';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { OtpAuthService } from './otp-auth.service';
 import { WalletService } from '../../wallet/services';
+import { PendingPayoutService } from '../../wallet/services/pending-payout.service';
 import { AccountType } from '../../user/enums/user.enum';
 import * as crypto from 'crypto';
 import { WhatsAppService } from 'src/common/services/whatsapp.service';
@@ -48,6 +49,7 @@ export class AuthService {
     private readonly settingsService: SettingsService,
     private readonly eventEmitter: EventEmitter2,
     private readonly walletService: WalletService,
+    private readonly pendingPayoutService: PendingPayoutService,
     private readonly whatsAppService: WhatsAppService,
     @Inject(OtpAuthService) private readonly otpAuthService: OtpAuthService,
   ) {}
@@ -219,6 +221,22 @@ export class AuthService {
       user.hasVerifiedPhone = true;
       user.otpExpiration = null;
       await this.userRepository.save(user);
+
+      // Phone is now proven to belong to this user — consume any
+      // pending payouts parked against this number (e.g. refunds from
+      // bills that were cancelled before they signed up). Errors are
+      // swallowed inside the service so a claim hiccup never blocks
+      // login token issuance.
+      if (user.phoneNumber) {
+        this.pendingPayoutService
+          .claimForUser(user.id, user.phoneNumber)
+          .catch((err) => {
+            this.logger.warn(
+              `[verifyOtp] pending payout claim failed for ${user.id}: ${(err as Error)?.message}`,
+            );
+          });
+      }
+
       const tokens = await this.generateTokens(user.id);
       await this.updateRefreshToken(user.id, tokens.refreshToken);
       return tokens;

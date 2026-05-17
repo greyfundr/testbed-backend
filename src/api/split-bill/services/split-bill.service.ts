@@ -28,8 +28,11 @@ import {
   TransactionType,
   TransactionStatus,
   TransactionDirection,
+  LedgerAccountType,
 } from '../../transaction/enums/transaction.enum';
 import { WalletService } from '../../wallet/services';
+import { PendingPayoutService } from '../../wallet/services/pending-payout.service';
+import { PendingPayout } from '../../wallet/entities/pending-payout.entity';
 import {
   ShareAdjustment,
   ValidatedParticipant,
@@ -79,6 +82,7 @@ export class SplitBillService {
     private readonly userRepo: UserRepository,
     private readonly transactionRepo: TransactionRepository,
     private readonly walletService: WalletService,
+    private readonly pendingPayoutService: PendingPayoutService,
     private readonly paymentService: PaymentService,
     private readonly dataSource: DataSource,
     private readonly eventEmitter: EventEmitter2,
@@ -2209,6 +2213,14 @@ export class SplitBillService {
     return this.getBillById(billId, actorId);
   }
 
+  // Cancelling a bill with collected funds triggers an automatic refund
+  // pass per participant. Registered users get an immediate wallet credit.
+  // Guests (no userId, just a phone) get a PendingPayout row + SMS +
+  // WhatsApp invite to sign up — the row is consumed the moment they
+  // verify the same phone. Refund funds are debited from the bill
+  // creator's wallet (project decision 2026-05-17 — creator absorbs the
+  // Paystack fee since collected money may be split across wallet payers
+  // and Paystack, but the refund obligation is uniformly the creator's).
   async cancelBill(
     billId: string,
     actorId: string,
@@ -2217,6 +2229,10 @@ export class SplitBillService {
     const qr = this.dataSource.createQueryRunner();
     await qr.connect();
     await qr.startTransaction();
+
+    // Captured inside the transaction, fired after commit so a
+    // notification failure can never roll back a real refund.
+    const guestPayoutsToNotify: { id: string }[] = [];
 
     try {
       const bill = await qr.manager.findOne(SplitBill, {
@@ -2232,10 +2248,120 @@ export class SplitBillService {
       if (bill.status === SplitBillStatus.SETTLED)
         throw new BadRequestException('Cannot cancel a settled bill');
 
-      if (bill.totalCollected > 0) {
-        throw new BadRequestException(
-          'Cannot cancel a bill with existing payments. Refund all participants first, or contact support.',
+      // Snapshot every paid participant under a row lock so a concurrent
+      // payment can't slip in between our refund decision and commit.
+      const paidParticipants = await qr.manager.find(SplitBillParticipant, {
+        where: { splitBillId: billId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      const refundables = paidParticipants.filter((p) => p.amountPaid > 0);
+
+      const totalRefund = refundables.reduce(
+        (sum, p) => sum + Number(p.amountPaid),
+        0,
+      );
+
+      if (totalRefund > 0) {
+        // Pre-check creator wallet — surface a clean 422 instead of
+        // hitting debitWallet's generic insufficient-balance error and
+        // doing N partial credits first.
+        const creatorWallet = await this.walletService.getWalletByUserId(
+          bill.creatorId,
         );
+        if (creatorWallet.availableBalance < totalRefund) {
+          throw new BadRequestException(
+            `Insufficient wallet balance to refund participants. ` +
+              `Required: ₦${totalRefund.toLocaleString('en-NG')}, ` +
+              `Available: ₦${Number(creatorWallet.availableBalance).toLocaleString('en-NG')}. ` +
+              `Top up your wallet, then cancel the bill.`,
+          );
+        }
+
+        // Debit creator wallet once for the full refund. A single ledger
+        // entry on the creator side keeps reconciliation simple — the
+        // per-participant detail is in metadata and on each credit.
+        const debitTx = await qr.manager.save(Transaction, {
+          walletId: creatorWallet.id,
+          userId: bill.creatorId,
+          amount: totalRefund,
+          currency: bill.currency,
+          type: TransactionType.REVERSAL,
+          direction: TransactionDirection.DEBIT,
+          status: TransactionStatus.COMPLETED,
+          reference: `SB-CANCEL-${uuidv4().replace(/-/g, '').substring(0, 18).toUpperCase()}`,
+          description: `Refund disbursement for cancelled bill "${bill.title}"`,
+          sourceRef: { entity: 'split_bill', id: billId },
+          metadata: {
+            billId,
+            participantCount: refundables.length,
+            kind: 'split_bill_cancel_refund_debit',
+          },
+        });
+
+        await this.walletService.debitWallet({
+          walletId: creatorWallet.id,
+          amount: totalRefund,
+          transactionId: debitTx.id,
+          targetAccountType: LedgerAccountType.BILL_ESCROW,
+          targetEntityId: billId,
+          description: `Refund disbursement for cancelled bill "${bill.title}"`,
+          qr,
+        });
+
+        // Credit each participant. Registered users land in-wallet
+        // immediately; guests get a parked PendingPayout that the
+        // signup flow will consume.
+        for (const p of refundables) {
+          const amount = Number(p.amountPaid);
+          if (p.userId) {
+            const recipientWallet = await this.walletService.getWalletByUserId(
+              p.userId,
+            );
+            const creditTx = await qr.manager.save(Transaction, {
+              walletId: recipientWallet.id,
+              userId: p.userId,
+              amount,
+              currency: bill.currency,
+              type: TransactionType.REVERSAL,
+              direction: TransactionDirection.CREDIT,
+              status: TransactionStatus.COMPLETED,
+              reference: `SB-REFUND-${uuidv4().replace(/-/g, '').substring(0, 16).toUpperCase()}`,
+              description: `Refund from cancelled bill "${bill.title}"`,
+              sourceRef: { entity: 'split_bill', id: billId },
+              metadata: {
+                billId,
+                participantId: p.id,
+                kind: 'split_bill_cancel_refund_credit',
+              },
+            });
+            await this.walletService.creditWallet({
+              walletId: recipientWallet.id,
+              amount,
+              transactionId: creditTx.id,
+              sourceAccountType: LedgerAccountType.BILL_ESCROW,
+              sourceEntityId: billId,
+              description: `Refund from cancelled bill "${bill.title}"`,
+              qr,
+            });
+          } else if (p.guestPhone) {
+            const payout = await this.pendingPayoutService.createForGuestCancel(
+              {
+                phone: p.guestPhone,
+                amount,
+                billId,
+                participantId: p.id,
+                originPayerUserId: null,
+                billCreatorUserId: bill.creatorId,
+                qr,
+              },
+            );
+            guestPayoutsToNotify.push({ id: payout.id });
+          }
+          // If a participant has neither userId nor guestPhone, there is
+          // no-one to refund — log it and move on; the creator's debit
+          // already excluded these because we filter on amountPaid > 0
+          // and a row without identity can't have paid.
+        }
       }
 
       await qr.manager.update(SplitBill, billId, {
@@ -2250,10 +2376,36 @@ export class SplitBillService {
         actionType: ActivityActionType.CANCELLED,
         description: dto.reason ?? 'Bill cancelled by creator',
         billStatusAtTime: SplitBillStatus.CANCELLED,
-        metadata: { reason: dto.reason },
+        metadata: {
+          reason: dto.reason,
+          totalRefunded: totalRefund,
+          refundedParticipants: refundables.length,
+          guestPayouts: guestPayoutsToNotify.length,
+        },
       });
 
       await qr.commitTransaction();
+
+      // Out-of-band: notify guest payout recipients. Errors are
+      // swallowed inside notify(); never let a delivery hiccup poison
+      // a successful refund.
+      for (const ref of guestPayoutsToNotify) {
+        const fresh = await this.dataSource.manager.findOne(PendingPayout, {
+          where: { id: ref.id },
+        });
+        if (fresh) {
+          this.pendingPayoutService.notify(fresh).catch((err) => {
+            this.logger.warn(
+              `[cancelBill] notify failed for payout ${ref.id}: ${(err as Error)?.message}`,
+            );
+          });
+        }
+      }
+
+      this.eventEmitter.emit('split_bill.updated', {
+        billId,
+        type: 'CANCEL',
+      });
 
       return this.getBillById(billId, actorId);
     } catch (err) {
