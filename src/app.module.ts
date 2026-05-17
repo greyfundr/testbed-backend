@@ -22,6 +22,7 @@ import { SplitBillModule } from './api/split-bill/split-bill.module';
 import { UploadModule } from './api/upload/upload.module';
 import { EventModule } from './api/event/event.module';
 import { DynamicLinkModule } from './api/dynamic-link/dynamic-link.module';
+import { PointsModule } from './api/points/points.module';
 import { LoggerModule } from 'nestjs-pino';
 
 @Module({
@@ -86,6 +87,7 @@ import { LoggerModule } from 'nestjs-pino';
     UploadModule,
     EventModule,
     DynamicLinkModule,
+    PointsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

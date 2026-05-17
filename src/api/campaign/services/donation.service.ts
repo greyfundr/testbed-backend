@@ -29,6 +29,7 @@ import {
 import { DonationResponseDto, DonorDto } from '../dto/donation-response.dto';
 import { PaymentService } from 'src/api/payment/services';
 import { CampaignAmplifierService } from './campaign-amplifier.service';
+import { PointsService } from '../../points/services/points.service';
 
 @Injectable()
 export class DonationService {
@@ -43,7 +44,36 @@ export class DonationService {
     private readonly walletService: WalletService,
     private readonly eventEmitter: EventEmitter2,
     private readonly amplifierService: CampaignAmplifierService,
+    private readonly pointsService: PointsService,
   ) {}
+
+  // Resolves a donation's referrer-amplifier (if any) to the champion's
+  // userId, then awards every relevant GreyPoints ledger row in one
+  // call. Always wrapped in try/catch by the caller — a points hiccup
+  // must never block a confirmed donation.
+  private async awardDonationPoints(
+    donation: import('../entities').Donation,
+    payerId: string,
+  ): Promise<void> {
+    try {
+      let championUserId: string | null = null;
+      if (donation.referrerAmplifierId) {
+        const amp = await this.amplifierService.getById(
+          donation.referrerAmplifierId,
+        );
+        championUserId = amp?.userId ?? null;
+      }
+      await this.pointsService.awardForDonation({
+        payerId,
+        donation,
+        championUserId,
+      });
+    } catch (err) {
+      this.logger.error(
+        `awardDonationPoints failed (donation=${donation.id}): ${(err as Error).message}`,
+      );
+    }
+  }
 
   /** Resolve a referral code to its amplifier id, scoped to this campaign. */
   private async resolveReferrerAmplifierId(
@@ -227,6 +257,11 @@ export class DonationService {
         isAnonymous as boolean,
         customUsername as string,
       );
+
+      // GreyPoints — `user.id` is the actual payer; `savedDonation`
+      // carries every field the helper needs (campaignId, amount,
+      // onBehalfOf*, referrerAmplifierId).
+      await this.awardDonationPoints(savedDonation, user.id);
 
       return savedDonation;
     } catch (err) {

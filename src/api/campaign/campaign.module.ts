@@ -43,6 +43,7 @@ import { CampaignCategoryRepository } from './repository/campaign-category.repos
 import { PaymentService } from '../payment/services';
 import { CampaignInteractionController } from './controllers/campaign-interaction.controller';
 import { NotificationModule } from '../notification/notification.module';
+import { PointsModule } from '../points/points.module';
 import { CampaignSubscriber } from './subscribers/campaign.subscriber';
 import { DynamicLinkModule } from '../dynamic-link/dynamic-link.module';
 import { User } from '../user/entities';
@@ -75,6 +76,7 @@ import { User } from '../user/entities';
     forwardRef(() => UserModule),
     forwardRef(() => NotificationModule),
     DynamicLinkModule,
+    forwardRef(() => PointsModule),
   ],
   controllers: [
     CampaignController,

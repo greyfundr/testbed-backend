@@ -50,4 +50,7 @@ export interface PrivacyControls {
   showActiveCampaigns: boolean;
   showTrustScore: boolean;
   dataSharingConsent: boolean;
+  // GreyPoints visibility — default true (public). User can flip it off
+  // from the profile/settings screen.
+  showPointsPublicly?: boolean;
 }

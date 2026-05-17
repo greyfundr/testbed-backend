@@ -6,6 +6,7 @@ import { WalletModule } from '../wallet/wallet.module';
 import { TransactionModule } from '../transaction/transaction.module';
 import { EventModule } from '../event/event.module';
 import { UserModule } from '../user/user.module';
+import { PointsModule } from '../points/points.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { UserModule } from '../user/user.module';
     TransactionModule,
     forwardRef(() => EventModule),
     forwardRef(() => UserModule),
+    forwardRef(() => PointsModule),
   ],
   controllers: [PaymentWebhookController],
   providers: [PaymentService, PaymentWebhookService],

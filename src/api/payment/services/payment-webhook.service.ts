@@ -40,8 +40,9 @@ import {
 } from '../../event/enums/event.enum';
 import { Event, EventContribution } from 'src/api/event/entities';
 import { UserRepository } from 'src/api/user/repository';
-import { Campaign, Donation } from 'src/api/campaign/entities';
+import { Campaign, CampaignAmplifier, Donation } from 'src/api/campaign/entities';
 import { DonationOnBehalfOf } from 'src/api/campaign/enums/campaign.enum';
+import { PointsService } from 'src/api/points/services/points.service';
 
 @Injectable()
 export class PaymentWebhookService {
@@ -62,6 +63,8 @@ export class PaymentWebhookService {
     private readonly paymentService: PaymentService,
     private readonly dataSource: DataSource,
     private readonly eventEmitter: EventEmitter2,
+    @Inject(forwardRef(() => PointsService))
+    private readonly pointsService: PointsService,
   ) {}
 
   async dispatch(event: string, data: Record<string, any>): Promise<void> {
@@ -219,7 +222,12 @@ export class PaymentWebhookService {
       onBehalfOfUserId,
       onBehalfOfExternal,
       comment,
-    } = metadata;
+      // Was previously dropped on the floor, breaking champion
+      // attribution for Paystack-paid donations. Restored so we
+      // can both persist it on the Donation row and award the
+      // champion their GreyPoints.
+      referrerAmplifierId,
+    } = metadata as Record<string, any>;
 
     const amount = amountInKobo / 100;
 
@@ -264,9 +272,20 @@ export class PaymentWebhookService {
         onBehalfOfFullName: onBehalfOfExternal?.fullName,
         onBehalfOfPhone: onBehalfOfExternal?.phoneNumber,
         comment: comment || 'Donation via Paystack',
+        referrerAmplifierId: referrerAmplifierId ?? null,
       });
 
       const savedDonation = await qr.manager.save(donation);
+
+      // Resolve champion userId in the same transaction so we know
+      // who to award when we post the GreyPoints ledger rows below.
+      let championUserId: string | null = null;
+      if (referrerAmplifierId) {
+        const amp = await qr.manager.findOne(CampaignAmplifier, {
+          where: { id: referrerAmplifierId },
+        });
+        championUserId = amp?.userId ?? null;
+      }
 
       await qr.manager.update(Campaign, campaign.id, {
         currentAmount: () => `current_amount + ${amount}`,
@@ -291,6 +310,20 @@ export class PaymentWebhookService {
         isAnonymous as boolean,
         customUsername as string,
       );
+
+      // GreyPoints — `user.id` is the actual payer. Wrapped because a
+      // points hiccup must not roll back a settled donation.
+      try {
+        await this.pointsService.awardForDonation({
+          payerId: user.id,
+          donation: savedDonation,
+          championUserId,
+        });
+      } catch (err) {
+        this.logger.error(
+          `awardForDonation failed (donation=${savedDonation.id}): ${(err as Error).message}`,
+        );
+      }
 
       this.logger.log(`Successfully finalized Paystack donation: ${reference}`);
     } catch (err) {
@@ -484,6 +517,35 @@ export class PaymentWebhookService {
         amount: paidAmount,
         totalCollected: newTotalCollected,
       });
+
+      // GreyPoints — if this bill is a donation cause, the user who
+      // just paid earns split-donation points. Resolve their userId
+      // from the paying participant row.
+      try {
+        if (
+          bill.sourceBillType === 'campaign' &&
+          bill.sourceBillId &&
+          payerParticipantId
+        ) {
+          const payerParticipant = await this.dataSource
+            .getRepository(SplitBillParticipant)
+            .findOne({ where: { id: payerParticipantId } });
+          const payerUserId = payerParticipant?.userId ?? null;
+          if (payerUserId) {
+            await this.pointsService.awardForSplitBillDonation({
+              payerId: payerUserId,
+              splitBillId: bill.id,
+              campaignId: bill.sourceBillId,
+              amountPaid: paidAmount,
+              paymentRef: reference,
+            });
+          }
+        }
+      } catch (err) {
+        this.logger.error(
+          `awardForSplitBillDonation failed (bill=${billId}): ${(err as Error).message}`,
+        );
+      }
     } catch (err) {
       await qr.rollbackTransaction();
       this.logger.error(`Webhook error: ${err.message}`);

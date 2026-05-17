@@ -76,6 +76,10 @@ export class CampaignAmplifierService {
     });
   }
 
+  async getById(id: string) {
+    return this.amplifierRepo.findOne({ where: { id } });
+  }
+
   async topForCampaign(campaignId: string, limit = 10) {
     const rows = await this.donationRepo
       .createQueryBuilder('d')
