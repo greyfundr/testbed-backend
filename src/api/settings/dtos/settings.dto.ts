@@ -126,6 +126,13 @@ export class UpdatePrivacyControlsDto {
   @IsOptional()
   @IsBoolean()
   dataSharingConsent?: boolean;
+
+  // GreyPoints public visibility. When omitted, the existing value
+  // on the user's stored settings is kept.
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  showPointsPublicly?: boolean;
 }
 
 export class UpdateSettingsDto {

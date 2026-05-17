@@ -130,10 +130,28 @@ export class PointsService implements OnModuleInit {
   // path where an admin has merely disabled a rule.
   async award(input: AwardInput): Promise<UserPointsEvent | null> {
     try {
+      // Self-heal: if onModuleInit failed silently and the rules
+      // table is still empty by the time the first award lands,
+      // seed it lazily. Cheap because count() is fast and the
+      // happy path is `if (count > 0) return`.
+      await this.seedDefaultRules();
+
       const rule = await this.ruleRepo.findOne({
         where: { actionCode: input.actionCode },
       });
-      if (!rule || !rule.isActive) return null;
+      if (!rule) {
+        this.logger.warn(
+          `award skipped: no rule for actionCode='${input.actionCode}' ` +
+            `(user=${input.userId}, source=${input.sourceType}:${input.sourceRefId}).`,
+        );
+        return null;
+      }
+      if (!rule.isActive) {
+        this.logger.log(
+          `award skipped: rule '${input.actionCode}' is inactive.`,
+        );
+        return null;
+      }
 
       let points = rule.points ?? 0;
       if (
@@ -155,7 +173,12 @@ export class PointsService implements OnModuleInit {
         sourceRefId: input.sourceRefId,
         metadata: input.metadata ?? null,
       });
-      return await this.eventRepo.save(event);
+      const saved = await this.eventRepo.save(event);
+      this.logger.log(
+        `Awarded ${points} pts '${input.actionCode}' to user=${input.userId} ` +
+          `(source=${input.sourceType}:${input.sourceRefId}).`,
+      );
+      return saved;
     } catch (err) {
       // Awards must never block the user-facing action that triggered
       // them. Log and move on.
