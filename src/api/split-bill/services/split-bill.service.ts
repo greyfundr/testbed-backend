@@ -7,7 +7,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, QueryRunner, In, Not } from 'typeorm';
+import { Repository, DataSource, QueryRunner, In } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import {
   SplitBillActivity,
@@ -264,11 +264,14 @@ export class SplitBillService {
     billId: string,
     requestingUserId?: string,
   ): Promise<SplitBill> {
+    // Load the bill with the FULL participant roster (declined rows
+    // included). Filtering declined participants here made the bill
+    // disappear entirely whenever every participant declined — which
+    // happens often when a creator bills others without adding
+    // themselves. The creator needs to see declined rows so they can
+    // re-invite, replace, or cancel.
     const bill = await this.billRepo.findOne({
-      where: {
-        id: billId,
-        participants: { status: Not(ParticipantStatus.DECLINED) },
-      },
+      where: { id: billId },
       relations: [
         'participants',
         'participants.user',
