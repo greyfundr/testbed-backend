@@ -55,6 +55,14 @@ export class DonationService {
     donation: import('../entities').Donation,
     payerId: string,
   ): Promise<void> {
+    // Loud sentinel so we can confirm from logs that the hook was
+    // even reached. If this line doesn't show in Render logs after
+    // a wallet donation, the deploy didn't pick up the new code.
+    this.logger.log(
+      `[GP-HOOK] awardDonationPoints entered: donation=${donation.id} payer=${payerId} ` +
+        `amount=${donation.amount} onBehalfOf=${donation.onBehalfOf} ` +
+        `referrerAmplifierId=${donation.referrerAmplifierId ?? 'none'}`,
+    );
     try {
       let championUserId: string | null = null;
       if (donation.referrerAmplifierId) {
@@ -70,7 +78,7 @@ export class DonationService {
       });
     } catch (err) {
       this.logger.error(
-        `awardDonationPoints failed (donation=${donation.id}): ${(err as Error).message}`,
+        `[GP-HOOK] awardDonationPoints failed (donation=${donation.id}): ${(err as Error).message}`,
       );
     }
   }
