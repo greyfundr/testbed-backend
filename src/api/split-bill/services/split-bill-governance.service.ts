@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { randomUUID } from 'crypto';
 import {
   SplitBill,
   SplitBillActivity,
@@ -14,6 +15,7 @@ import {
   SplitBillProposalVote,
   SplitBillVendor,
 } from '../entities';
+import { SplitBillBudgetItem } from '../entities/split-bill.entity';
 import {
   ActivityActionType,
   SplitBillProposalStatus,
@@ -23,6 +25,7 @@ import {
   CastSplitBillProposalVoteDto,
   CreateSplitBillProposalDto,
   CreateSplitBillVendorDto,
+  UpdateSplitBillBudgetDto,
 } from '../dtos/split-bill-governance.dto';
 import { NotificationService } from '../../notification/services/notification.service';
 
@@ -84,6 +87,33 @@ export class SplitBillGovernanceService {
     if (!vendor) throw new NotFoundException('Vendor not found');
     await this.vendorRepo.softRemove(vendor);
     return { success: true };
+  }
+
+  // ─── Budget ────────────────────────────────────────────────
+  // Creator-only. Replaces the entire budget array. New items (no
+  // `id` from the wire) get a fresh UUID; existing items keep theirs
+  // so the frontend can reference them stably from disbursement
+  // proposals. Passing an empty array clears the budget.
+  async setBudget(
+    billId: string,
+    userId: string,
+    dto: UpdateSplitBillBudgetDto,
+  ) {
+    await this.assertBillCreator(billId, userId);
+    const bill = await this.billRepo.findOne({ where: { id: billId } });
+    if (!bill) throw new NotFoundException('Bill not found');
+
+    const items: SplitBillBudgetItem[] = (dto.budget ?? []).map((b) => ({
+      id: b.id?.trim() ? b.id : randomUUID(),
+      item: (b.item ?? '').trim(),
+      cost: Number(b.cost ?? 0),
+      image: b.image?.trim() ? b.image : null,
+      note: b.note?.trim() ? b.note : null,
+    }));
+
+    bill.budget = items;
+    await this.billRepo.save(bill);
+    return { budget: bill.budget };
   }
 
   // ─── Proposals ─────────────────────────────────────────────

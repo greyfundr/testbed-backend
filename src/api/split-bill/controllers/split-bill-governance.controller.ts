@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -20,6 +21,7 @@ import {
   CastSplitBillProposalVoteDto,
   CreateSplitBillProposalDto,
   CreateSplitBillVendorDto,
+  UpdateSplitBillBudgetDto,
 } from '../dtos/split-bill-governance.dto';
 import { CreateSplitBillUpdateDto } from '../dtos/split-bill-update.dto';
 
@@ -62,6 +64,20 @@ export class SplitBillGovernanceController {
     @CurrentUser() user: User,
   ) {
     return this.governance.deleteVendor(billId, user.id, vendorId);
+  }
+
+  // ─── Budget ────────────────────────────────────────────────
+  @Patch(':id/budget')
+  @ApiOperation({
+    summary:
+      'Replace the bill\'s budget items (creator only). Empty array clears the budget.',
+  })
+  setBudget(
+    @Param('id', ParseUUIDPipe) billId: string,
+    @CurrentUser() user: User,
+    @Body() dto: UpdateSplitBillBudgetDto,
+  ) {
+    return this.governance.setBudget(billId, user.id, dto);
   }
 
   // ─── Proposals ─────────────────────────────────────────────

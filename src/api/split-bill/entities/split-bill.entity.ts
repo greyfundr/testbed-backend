@@ -20,6 +20,17 @@ export interface SplitBillOffer {
   reward: string;
 }
 
+// Mirrors the Campaign budget shape so the two modules stay
+// uniform. Image is optional here because split bills are typically
+// more ad-hoc than campaign budgets — required-image is overkill.
+export interface SplitBillBudgetItem {
+  id?: string;
+  item: string;
+  cost: number;
+  image?: string | null;
+  note?: string | null;
+}
+
 @Entity('split_bills')
 @Index(['creatorId', 'status'])
 @Index(['status', 'dueDate'])
@@ -36,6 +47,16 @@ export class SplitBill extends AbstractEntity {
 
   @Column({ type: 'json', nullable: true })
   receipts: string[] | null;
+
+  // Optional budget line items the creator declares. Propose
+  // Disbursement allocates against these when present; otherwise it
+  // falls back to a free-form total amount.
+  @Column({
+    type: 'json',
+    nullable: true,
+    name: 'budget_items_json',
+  })
+  budget: SplitBillBudgetItem[] | null;
 
   @Column({
     type: 'decimal',
