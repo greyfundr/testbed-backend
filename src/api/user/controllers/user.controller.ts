@@ -6,6 +6,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
   Patch,
   Query,
   UseGuards,
@@ -79,5 +80,25 @@ export class UserController {
   @ApiOperation({ summary: 'Set fcm (push notifications) token' })
   setFcmToken(@CurrentUser() user: User, @Body() dto: SetFcmTokenDto) {
     return this.userService.updateFcmToken(user.id, dto.fcmToken);
+  }
+
+  // Public-profile fetch — returns the lightweight identity payload plus
+  // followers/following counts and relationship flags (iFollowThem,
+  // followsMe, isFriends, isSelf) that the OtherUserProfileScreen needs
+  // to render the Follow / Following / Friends button.
+  //
+  // Kept last so it can't shadow the static routes above (`profile`,
+  // `me/stats`, `set-fcm-token`).
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/public-profile')
+  @ApiOperation({
+    summary: "Public-facing profile for any user (counts + relationship)",
+  })
+  getPublicProfile(
+    @CurrentUser() viewer: User,
+    @Param('id') targetUserId: string,
+  ) {
+    return this.userService.getPublicProfile(targetUserId, viewer.id);
   }
 }

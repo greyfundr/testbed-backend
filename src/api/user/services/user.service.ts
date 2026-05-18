@@ -75,6 +75,128 @@ export class UserService {
     };
   }
 
+  // Public-profile fetch — used when one user views another user's
+  // profile screen. Returns the lightweight public-facing view
+  // (name, username, image, kyc status, account type) plus the
+  // four counts that anchor the screen (followers, following,
+  // campaigns created, bills created) and the relationship flags
+  // the UI needs to render the Follow / Following / Friends pill:
+  //   iFollowThem  — viewer → target
+  //   followsMe    — target → viewer
+  //   isFriends    — both true (mutual follow)
+  //   isSelf       — viewing your own profile
+  //
+  // Privacy honour: if the target's profileVisibility is PRIVATE
+  // and the viewer is neither a follower nor self, the response
+  // drops counts and downstream surfaces (campaigns / bills feed)
+  // so a stranger can't enumerate the user's activity. The basic
+  // identity fields (name, image, username) still ship so search
+  // results can render the row.
+  async getPublicProfile(targetUserId: string, viewerId: string) {
+    const user = await this.userRepository.findOne({
+      where: { id: targetUserId },
+      relations: ['profile', 'kycs', 'settings'],
+      select: {
+        ...USER_SAFE_FIELDS.reduce(
+          (obj, field) => ({ ...obj, [field]: true }),
+          {},
+        ),
+        profile: true,
+        kycs: true,
+        // settings join is for the privacy gate below; we don't
+        // surface settings on the response itself.
+      },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    const isSelf = user.id === viewerId;
+
+    const followRepo = this.dataSource.getRepository(Follow);
+    const [
+      followersCount,
+      followingCount,
+      iFollowRow,
+      followsMeRow,
+    ] = await Promise.all([
+      followRepo.count({ where: { followingId: targetUserId } }),
+      followRepo.count({ where: { followerId: targetUserId } }),
+      isSelf
+        ? Promise.resolve(null)
+        : followRepo.findOne({
+            where: { followerId: viewerId, followingId: targetUserId },
+          }),
+      isSelf
+        ? Promise.resolve(null)
+        : followRepo.findOne({
+            where: { followerId: targetUserId, followingId: viewerId },
+          }),
+    ]);
+    const iFollowThem = !!iFollowRow;
+    const followsMe = !!followsMeRow;
+    const isFriends = iFollowThem && followsMe;
+
+    // Privacy gate — if the profile is private and the viewer is
+    // not a current follower (and not the owner), zero out the
+    // activity-side fields and skip the campaign / bill counts.
+    const visibility = user.settings?.privacyControls?.profileVisibility;
+    const isLocked =
+      !isSelf && !iFollowThem && visibility && visibility !== 'public';
+
+    let campaignsCount = 0;
+    let billsCount = 0;
+    if (!isLocked) {
+      const [campRow, billRow] = await Promise.all([
+        this.dataSource
+          .getRepository(Campaign)
+          .createQueryBuilder('c')
+          .where('c.creator_id = :id', { id: targetUserId })
+          .andWhere('c.deleted_at IS NULL')
+          .getCount(),
+        this.dataSource
+          .getRepository(SplitBill)
+          .createQueryBuilder('b')
+          .where('b.creator_id = :id', { id: targetUserId })
+          .andWhere('b.deleted_at IS NULL')
+          .getCount(),
+      ]);
+      campaignsCount = campRow;
+      billsCount = billRow;
+    }
+
+    // Strip back to the minimum fields we want to expose for a
+    // public-facing profile — strip phone, email, pin, etc.
+    const safe = instanceToPlain(user) as Record<string, unknown>;
+    delete safe.pin;
+    delete safe.password;
+    delete safe.refreshToken;
+    delete safe.phoneOtp;
+    delete safe.emailOtp;
+    delete safe.bvn;
+    delete safe.passwordResetToken;
+    delete safe.passwordResetTokenExpiry;
+    delete safe.settings;
+    if (!isSelf) {
+      // Private-by-default contact fields. The viewer doesn't need
+      // someone else's email / phone — those leak too easily.
+      delete safe.email;
+      delete safe.phoneNumber;
+      delete safe.dateOfBirth;
+    }
+
+    return {
+      ...safe,
+      followersCount,
+      followingCount,
+      campaignsCount,
+      billsCount,
+      iFollowThem,
+      followsMe,
+      isFriends,
+      isSelf,
+      isProfileLocked: !!isLocked,
+    };
+  }
+
   // Header stats for the dashboard's expanded view. Two raw COUNT(*)
   // queries — championed = number of campaigns the user has amplified,
   // splitBills = number of split-bill participations (created or
