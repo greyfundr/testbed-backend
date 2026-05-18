@@ -35,6 +35,23 @@ export class SplitBillOrganizerController {
     return this.organizerService.list(splitBillId);
   }
 
+  // Creator-only listing that surfaces PENDING / DECLINED invites
+  // alongside ACCEPTED organisers so the Manage Organisers sheet can
+  // show "who I've invited" + a cancel-invite affordance.
+  @Get(':id/organizers/all')
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary:
+      'List every organiser row on a bill including pending/declined (creator only)',
+  })
+  listAll(
+    @CurrentUser() user: User,
+    @Param('id') splitBillId: string,
+  ) {
+    return this.organizerService.listForCreator(splitBillId, user.id);
+  }
+
   @Post(':id/organizers')
   @ApiBearerAuth('JWT-auth')
   @UseGuards(JwtAuthGuard)

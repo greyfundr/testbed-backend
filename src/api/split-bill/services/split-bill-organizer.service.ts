@@ -35,6 +35,25 @@ export class SplitBillOrganizerService {
     private readonly notificationService: NotificationService,
   ) {}
 
+  // Creator-only variant: returns every row on the bill regardless
+  // of status so the Manage Organisers sheet can render PENDING /
+  // DECLINED invitations the creator has sent. Throws if the caller
+  // isn't the creator so we don't leak invite state.
+  async listForCreator(splitBillId: string, requestUserId: string) {
+    const bill = await this.billRepo.findOne({ where: { id: splitBillId } });
+    if (!bill) throw new NotFoundException('Split bill not found');
+    if (bill.creatorId !== requestUserId) {
+      throw new ForbiddenException(
+        'Only the bill creator can see pending invitations',
+      );
+    }
+    return this.organizerRepo.find({
+      where: { splitBillId },
+      relations: ['user'],
+      order: { createdAt: 'ASC' },
+    });
+  }
+
   // Public rail surfaces only ACCEPTED organisers — pending and
   // rejected stay backend-side so participants don't see invitee
   // status leaks.
@@ -112,6 +131,18 @@ export class SplitBillOrganizerService {
     if (invitee) {
       const title = 'Split bill organiser invitation';
       const message = `You've been invited to help run "${bill.title}" as ${role}.`;
+      // Provide an HTML body so the mailtrap branch of notify() fires
+      // an email — without this metadata.emailHtml the invitee only
+      // gets in-app + push + WhatsApp, no email at all.
+      const emailHtml = `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1f2937;">
+          <h2 style="color: #017981; margin: 0 0 12px;">Organiser invitation</h2>
+          <p style="margin: 0 0 16px; line-height: 1.5;">${message}</p>
+          <p style="margin: 0 0 16px; line-height: 1.5;">Open the GreyFundr app to accept or decline this invitation. Once accepted, you'll be able to help manage participants, post updates, and review proposals on this bill.</p>
+          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
+          <p style="font-size: 12px; color: #6b7280; margin: 0;">If you weren't expecting this invitation, you can safely ignore this email.</p>
+        </div>
+      `;
       await this.notificationService.notify(invitee.id, 'billReminders', {
         title,
         message,
@@ -125,6 +156,7 @@ export class SplitBillOrganizerService {
           pushToken: invitee.fcmToken,
           phoneNumber: invitee.phoneNumber,
           email: invitee.email,
+          emailHtml,
         },
       });
     }
