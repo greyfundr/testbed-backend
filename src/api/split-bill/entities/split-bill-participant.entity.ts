@@ -101,6 +101,17 @@ export class SplitBillParticipant extends AbstractEntity {
   @Column({ type: 'varchar', default: ParticipantStatus.INVITED })
   status: ParticipantStatus;
 
+  /**
+   * Number of times this user/phone has declined an invite to this
+   * specific bill. Enforces the "2 strikes" rule: at 2 the creator
+   * can no longer re-invite (or re-add) the same person on this bill.
+   * Survives a soft-delete on the row — re-adding the same user does
+   * NOT reset the counter, so a creator can't bypass the rule by
+   * removing and re-adding.
+   */
+  @Column({ name: 'decline_count', type: 'int', unsigned: true, default: 0 })
+  declineCount: number;
+
   // ── Invite / Access ───────────────────────────────────────────────────────
 
   @Index({ unique: true })

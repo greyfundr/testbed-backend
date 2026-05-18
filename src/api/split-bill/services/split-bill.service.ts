@@ -1330,6 +1330,16 @@ export class SplitBillService {
         );
       }
 
+      // Look up any prior row for the same identity on this bill —
+      // INCLUDING soft-deleted rows — so a creator can't bypass the
+      // 2-strike rule by removing and re-adding the same person.
+      // If the prior row's declineCount is already at 2, block.
+      const priorRows = await qr.manager
+        .createQueryBuilder(SplitBillParticipant, 'p')
+        .where('p.split_bill_id = :billId', { billId })
+        .withDeleted()
+        .getMany();
+
       if (dto.type === 'USER') {
         if (!dto.userId)
           throw new BadRequestException(
@@ -1349,6 +1359,15 @@ export class SplitBillService {
           );
         }
 
+        const lockedRow = priorRows.find(
+          (p) => p.userId === dto.userId && (p.declineCount ?? 0) >= 2,
+        );
+        if (lockedRow) {
+          throw new ForbiddenException(
+            'This user has declined this bill twice — they can no longer be invited to it.',
+          );
+        }
+
         const alreadyIn = bill.participants.some(
           (p) => p.userId === dto.userId,
         );
@@ -1365,6 +1384,18 @@ export class SplitBillService {
           throw new BadRequestException(
             'name is required for GUEST participant',
           );
+
+        const lockedRow = priorRows.find(
+          (p) =>
+            !p.userId &&
+            p.guestPhone === dto.phone &&
+            (p.declineCount ?? 0) >= 2,
+        );
+        if (lockedRow) {
+          throw new ForbiddenException(
+            'This phone has declined this bill twice — they can no longer be invited to it.',
+          );
+        }
 
         const alreadyIn = bill.participants.some(
           (p) => !p.userId && p.guestPhone === dto.phone,
@@ -2574,9 +2605,13 @@ export class SplitBillService {
       throw new BadRequestException('Cannot decline after making a payment');
     }
 
+    // 2-strike rule: each decline bumps the counter. The reinvite path
+    // gates on declineCount < 2; once we hit 2 the creator can no
+    // longer re-invite (or re-add) this user on this bill.
     await this.participantRepo.update(participant.id, {
       status: ParticipantStatus.DECLINED,
       declinedAt: new Date(),
+      declineCount: (participant.declineCount ?? 0) + 1,
     });
 
     await this.activityRepo.save({
@@ -2619,6 +2654,112 @@ export class SplitBillService {
         pushToken: bill.creator?.fcmToken,
       });
     }
+  }
+
+  /**
+   * Creator re-invites a participant who has already declined once.
+   * - Requires the caller to be the bill creator.
+   * - Requires the participant's current status to be DECLINED.
+   * - 2-strike rule: refuses when declineCount is already ≥ 2.
+   *
+   * On success: clears declinedAt, flips status back to INVITED, mints
+   * a fresh invite code + extends inviteExpiresAt, and re-fires the
+   * participant-added fan-out so the invitee gets a new SMS / WhatsApp
+   * / push notification.
+   */
+  async reinviteParticipant(
+    billId: string,
+    participantId: string,
+    actorId: string,
+  ): Promise<SplitBillParticipant> {
+    const bill = await this.billRepo.findOne({
+      where: { id: billId },
+      relations: ['creator'],
+    });
+    if (!bill) throw new NotFoundException('Bill not found');
+    if (bill.creatorId !== actorId) {
+      throw new ForbiddenException(
+        'Only the bill creator can re-invite a participant',
+      );
+    }
+    if (
+      [
+        SplitBillStatus.SETTLED,
+        SplitBillStatus.CANCELLED,
+        SplitBillStatus.FUNDED,
+      ].includes(bill.status)
+    ) {
+      throw new BadRequestException(
+        `Cannot re-invite on a ${bill.status} bill`,
+      );
+    }
+
+    const participant = await this.participantRepo.findOne({
+      where: { id: participantId, splitBillId: billId },
+      relations: ['user'],
+    });
+    if (!participant) throw new NotFoundException('Participant not found');
+    if (participant.status !== ParticipantStatus.DECLINED) {
+      throw new BadRequestException(
+        'Only declined participants can be re-invited',
+      );
+    }
+    if ((participant.declineCount ?? 0) >= 2) {
+      throw new ForbiddenException(
+        'This participant has declined twice — they can no longer be invited to this bill.',
+      );
+    }
+
+    // Refresh invite — new code + new expiry window so the fresh
+    // notification carries a working link. Mirrors the original
+    // add-participant path's invite issuance.
+    const newInviteCode = uuidv4().replace(/-/g, '').substring(0, 12);
+    const newExpiry = new Date();
+    newExpiry.setDate(newExpiry.getDate() + 30);
+
+    await this.participantRepo.update(participant.id, {
+      status: ParticipantStatus.INVITED,
+      declinedAt: null,
+      invitedAt: new Date(),
+      inviteCode: newInviteCode,
+      inviteExpiresAt: newExpiry,
+    });
+
+    await this.activityRepo.save({
+      splitBillId: billId,
+      actorId,
+      actionType: ActivityActionType.PARTICIPANT_ADDED,
+      participantId: participant.id,
+      description: 'Participant re-invited after declining',
+      billStatusAtTime: bill.status,
+      metadata: {
+        kind: 'reinvite',
+        declineCount: participant.declineCount ?? 0,
+      },
+    });
+
+    // Pull the fresh row + fan out exactly like a brand-new invite so
+    // the invitee gets SMS / WhatsApp / push with a working link.
+    const updated = await this.participantRepo.findOne({
+      where: { id: participant.id },
+      relations: ['user'],
+    });
+    if (updated) {
+      const creatorName =
+        [bill.creator?.firstName, bill.creator?.lastName]
+          .filter((s) => (s ?? '').trim().length > 0)
+          .join(' ') || 'A creator';
+      // Fire-and-forget — same pattern as the add-participant flow.
+      void this.fanOutParticipantAdded({
+        bill,
+        participant: updated,
+        creatorName,
+        shareAmount: updated.amountOwed ?? 0,
+        isGuest: !updated.userId,
+      });
+    }
+
+    return updated ?? participant;
   }
 
   async getParticipantStatus(participantId: string, requestingUserId: string) {

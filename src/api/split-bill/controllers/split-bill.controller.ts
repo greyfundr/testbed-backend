@@ -294,6 +294,29 @@ export class SplitBillController {
     };
   }
 
+  // Creator re-invites a previously-declined participant. Enforces the
+  // 2-strike rule — refuses with 403 when declineCount is already at 2.
+  @ApiOperation({
+    summary: 'Re-invite a declined participant (creator only, 2-strike rule)',
+  })
+  @Post(':id/participants/:participantId/reinvite')
+  async reinviteParticipant(
+    @Param('id', ParseUUIDPipe) billId: string,
+    @Param('participantId', ParseUUIDPipe) participantId: string,
+    @CurrentUser() user: User,
+  ) {
+    const participant = await this.splitBillService.reinviteParticipant(
+      billId,
+      participantId,
+      user.id,
+    );
+    return {
+      success: true,
+      message: 'Participant re-invited successfully',
+      data: { participant },
+    };
+  }
+
   @ApiOperation({ summary: 'Get the status of a participant in a split bill' })
   @Get('participants/:participantId')
   async getParticipantStatus(
