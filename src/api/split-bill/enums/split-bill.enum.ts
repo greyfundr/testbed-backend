@@ -4,6 +4,17 @@ export enum SplitMethod {
   PERCENTAGE = 'PERCENTAGE', // each participant assigned a percentage
 }
 
+// Bill cadence — picked by the creator on the Edit Bill Info sheet.
+// Drives the "Recurrence type" tile on the bill summary card and
+// will back future auto-reset / next-cycle scheduling.
+export enum SplitBillRecurrenceFrequency {
+  ONE_OFF = 'ONE_OFF',
+  DAILY = 'DAILY',
+  WEEKLY = 'WEEKLY',
+  MONTHLY = 'MONTHLY',
+  YEARLY = 'YEARLY',
+}
+
 export enum SplitBillStatus {
   DRAFT = 'draft', // created but not yet sent to participants
   ACTIVE = 'active', // sent, accepting payments

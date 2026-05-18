@@ -26,6 +26,7 @@ import {
   SplitBillStatus,
   MyBillsRole,
   ParticipantStatus,
+  SplitBillRecurrenceFrequency,
 } from '../enums/split-bill.enum';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -200,11 +201,17 @@ export class CreateSplitBillDto {
   @IsBoolean()
   allowPartialPayment?: boolean;
 
-  // Creator toggles between one-off (false) and re-occurring (true)
-  // from the Edit Bill Info sheet.
+  // Legacy boolean — kept for old clients during rollover. New code
+  // should send `recurrenceFrequency` instead.
   @IsOptional()
   @IsBoolean()
   isRecurring?: boolean;
+
+  // Granular bill cadence: ONE_OFF / DAILY / WEEKLY / MONTHLY / YEARLY.
+  // Drives the "Recurrence type" tile on the bill summary card.
+  @IsOptional()
+  @IsEnum(SplitBillRecurrenceFrequency)
+  recurrenceFrequency?: SplitBillRecurrenceFrequency;
 
   @IsOptional()
   @IsNumber()
@@ -309,11 +316,17 @@ export class UpdateSplitBillDto {
   @IsBoolean()
   allowPartialPayment?: boolean;
 
-  // Creator toggles between one-off (false) and re-occurring (true)
-  // from the Edit Bill Info sheet.
+  // Legacy boolean — kept for old clients during rollover. New code
+  // should send `recurrenceFrequency` instead.
   @IsOptional()
   @IsBoolean()
   isRecurring?: boolean;
+
+  // Granular bill cadence: ONE_OFF / DAILY / WEEKLY / MONTHLY / YEARLY.
+  // Drives the "Recurrence type" tile on the bill summary card.
+  @IsOptional()
+  @IsEnum(SplitBillRecurrenceFrequency)
+  recurrenceFrequency?: SplitBillRecurrenceFrequency;
 
   @IsOptional()
   @IsNumber()

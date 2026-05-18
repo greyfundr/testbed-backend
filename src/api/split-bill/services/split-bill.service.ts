@@ -28,6 +28,7 @@ import {
   ParticipantRole,
   ActivityActionType,
   MyBillsRole,
+  SplitBillRecurrenceFrequency,
 } from '../enums';
 import {
   TransactionType,
@@ -670,6 +671,21 @@ export class SplitBillService {
       if (dto.recipientUserId !== undefined)
         updateData.recipientUserId = dto.recipientUserId;
       if (dto.offers !== undefined) updateData.offers = dto.offers;
+      // Cadence — mirror the frequency back to the legacy boolean so
+      // old clients continue to read a sane value. ONE_OFF → false,
+      // anything else → true.
+      if (dto.recurrenceFrequency !== undefined) {
+        updateData.recurrenceFrequency = dto.recurrenceFrequency;
+        updateData.isRecurring =
+          dto.recurrenceFrequency !== SplitBillRecurrenceFrequency.ONE_OFF;
+      } else if (dto.isRecurring !== undefined) {
+        // Old client sending just the boolean — collapse to a frequency
+        // so the new field stays in sync.
+        updateData.isRecurring = dto.isRecurring;
+        updateData.recurrenceFrequency = dto.isRecurring
+          ? SplitBillRecurrenceFrequency.MONTHLY
+          : SplitBillRecurrenceFrequency.ONE_OFF;
+      }
 
       if (Object.keys(updateData).length > 0) {
         await qr.manager.update(SplitBill, billId, updateData);

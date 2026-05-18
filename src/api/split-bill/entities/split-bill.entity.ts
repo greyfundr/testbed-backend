@@ -10,7 +10,11 @@ import { AbstractEntity } from '../../../common/entities';
 import { User } from '../../user/entities';
 import { SplitBillParticipant } from './split-bill-participant.entity';
 import { SplitBillActivity } from './split-bill-activity.entity';
-import { SplitMethod, SplitBillStatus } from '../enums/split-bill.enum';
+import {
+  SplitMethod,
+  SplitBillStatus,
+  SplitBillRecurrenceFrequency,
+} from '../enums/split-bill.enum';
 import { ColumnNumericTransformer } from '../../../common/transformers/column-numeric.transformer';
 import { SplitBillComment } from './split-bill-comment.entity';
 
@@ -95,12 +99,22 @@ export class SplitBill extends AbstractEntity {
   @Column({ type: 'timestamp', nullable: true, name: 'finalized_at' })
   finalizedAt: Date | null;
 
-  // Marks a bill as a recurring obligation (rent, subscription, etc.)
-  // — surfaced as the "Re-occurring" pill on the bill summary card.
-  // false = one-off bill (current behaviour). Future cadence + auto-
-  // reset logic will hang off this flag.
+  // Legacy boolean — kept for compatibility while clients migrate
+  // to the richer `recurrenceFrequency` enum below. Writes from the
+  // service now derive this from the enum (false when ONE_OFF).
   @Column({ default: false, name: 'is_recurring' })
   isRecurring: boolean;
+
+  // Granular bill cadence picked by the creator. ONE_OFF means a
+  // single-time bill; everything else means a recurring obligation
+  // that will eventually auto-reset on the chosen interval.
+  @Column({
+    type: 'enum',
+    enum: SplitBillRecurrenceFrequency,
+    default: SplitBillRecurrenceFrequency.ONE_OFF,
+    name: 'recurrence_frequency',
+  })
+  recurrenceFrequency: SplitBillRecurrenceFrequency;
 
   @Column({ default: true, name: 'allow_partial_payment' })
   allowPartialPayment: boolean;
