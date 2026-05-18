@@ -71,7 +71,11 @@ export class DynamicLinkRedirectController {
       .filter((p) => p.ios?.bundleId && p.ios?.teamId)
       .map((p) => ({
         appID: `${p.ios.teamId}.${p.ios.bundleId}`,
-        paths: ['/l/*'],
+        // /l/* — the canonical short link format (DynamicLink.shortCode).
+        // /c/* — the legacy bare-web share URL still emitted as a
+        // fallback when the dynamic-link service is unavailable.
+        // Listing both means iOS opens the app on either path.
+        paths: ['/l/*', '/c/*'],
       }));
 
     res.set('Content-Type', 'application/json').json({

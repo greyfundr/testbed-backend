@@ -8,6 +8,7 @@ import {
   DynamicLinkRepository,
 } from './repository';
 import { DynamicLinkRedirectController } from './controllers/dynamic-link-redirect.controller';
+import { SeedAdminController } from './controllers/seed-admin.controller';
 
 @Module({
   imports: [TypeOrmModule.forFeature([DynamicLink, DynamicLinkProject])],
@@ -17,6 +18,13 @@ import { DynamicLinkRedirectController } from './controllers/dynamic-link-redire
     DynamicLinkProjectRepository,
   ],
   exports: [DynamicLinkService],
-  controllers: [DynamicLinkController, DynamicLinkRedirectController],
+  controllers: [
+    DynamicLinkController,
+    DynamicLinkRedirectController,
+    // One-shot admin endpoint for seeding the well-known files'
+    // iOS team-id / Android SHA256. Delete once the row is seeded —
+    // remove this line + delete `controllers/seed-admin.controller.ts`.
+    SeedAdminController,
+  ],
 })
 export class DynamicLinkModule {}

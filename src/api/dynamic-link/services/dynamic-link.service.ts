@@ -211,11 +211,17 @@ export class DynamicLinkService implements OnModuleInit {
     campaignId: string,
     shareSlug: string,
     title?: string,
+    // Extra metadata merged into the generated link record so it
+    // appears as query params on the deep link (e.g. `ref` for
+    // champion attribution). Keeps the per-campaign cache key the
+    // same — multiple amplifiers reuse one link per campaign but
+    // each gets their own `ref` via the URL.
+    extraMetadata?: Record<string, string>,
   ): Promise<GeneratedLink> {
     return this.generate({
       type: 'campaign',
       resourceId: campaignId,
-      metadata: { slug: shareSlug },
+      metadata: { slug: shareSlug, ...(extraMetadata ?? {}) },
       ogTitle: title
         ? `Support "${title}" on GreyFundr`
         : 'Support this campaign',

@@ -7,6 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CampaignAmplifier, Donation, Campaign } from '../entities';
 import { UserRepository } from '../../user/repository/user.repository';
+import { DynamicLinkService } from '../../dynamic-link/services/dynamic-link.service';
 
 @Injectable()
 export class CampaignAmplifierService {
@@ -18,6 +19,7 @@ export class CampaignAmplifierService {
     @InjectRepository(Campaign)
     private readonly campaignRepo: Repository<Campaign>,
     private readonly userRepo: UserRepository,
+    private readonly dynamicLinkService: DynamicLinkService,
   ) {}
 
   async claim(campaignId: string, userId: string) {
@@ -30,7 +32,7 @@ export class CampaignAmplifierService {
       where: { campaignId, userId },
     });
     if (existing) {
-      return this.buildShareInfo(existing, campaign.shareSlug);
+      return this.buildShareInfo(existing, campaign);
     }
 
     const user = await this.userRepo.findOne({ where: { id: userId } });
@@ -58,7 +60,7 @@ export class CampaignAmplifierService {
 
     const amplifier = this.amplifierRepo.create({ campaignId, userId, code });
     await this.amplifierRepo.save(amplifier);
-    return this.buildShareInfo(amplifier, campaign.shareSlug);
+    return this.buildShareInfo(amplifier, campaign);
   }
 
   async listForCampaign(campaignId: string) {
@@ -135,11 +137,45 @@ export class CampaignAmplifierService {
     });
   }
 
-  private buildShareInfo(amplifier: CampaignAmplifier, shareSlug: string) {
-    const base = process.env.APP_BASE_URL?.replace(/\/$/, '') ?? '';
-    const shareUrl = base
-      ? `${base}/c/${shareSlug}?ref=${amplifier.code}`
-      : `/c/${shareSlug}?ref=${amplifier.code}`;
+  // Build the champion's share package. The shareUrl is routed
+  // through DynamicLinkService so the resulting `…/l/<code>` short
+  // link, when tapped on a phone, redirects into the app via the
+  // existing app-scheme deep-link path with `type`, `id`, `slug`,
+  // AND `ref` already in the query string. AppLinkService on the
+  // client extracts `ref` and the donate payload forwards it so the
+  // backend can attribute the donation to this amplifier.
+  //
+  // Falls back to the bare `…/c/<slug>?ref=<code>` web URL if the
+  // dynamic-link service is unavailable (e.g. the project row was
+  // never seeded). The web app reads the same `ref` query param
+  // from Uri.base on the client side as a safety net.
+  private async buildShareInfo(
+    amplifier: CampaignAmplifier,
+    campaign: Campaign,
+  ) {
+    const shareSlug = campaign.shareSlug ?? campaign.id;
+    let shareUrl = '';
+    try {
+      const link = await this.dynamicLinkService.forCampaign(
+        amplifier.campaignId,
+        shareSlug,
+        campaign.title,
+        // Tuck the amplifier code into the metadata so the redirect
+        // controller emits it alongside `type=campaign&id=…`.
+        { ref: amplifier.code },
+      );
+      shareUrl = link.shortUrl;
+    } catch {
+      // dynamic-link service can be missing in test envs; degrade
+      // gracefully to the bare web URL so a champion-claim never
+      // outright fails.
+    }
+    if (!shareUrl) {
+      const base = process.env.APP_BASE_URL?.replace(/\/$/, '') ?? '';
+      shareUrl = base
+        ? `${base}/c/${shareSlug}?ref=${amplifier.code}`
+        : `/c/${shareSlug}?ref=${amplifier.code}`;
+    }
     return {
       id: amplifier.id,
       code: amplifier.code,
