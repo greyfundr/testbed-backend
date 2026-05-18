@@ -95,6 +95,13 @@ export class SplitBill extends AbstractEntity {
   @Column({ type: 'timestamp', nullable: true, name: 'finalized_at' })
   finalizedAt: Date | null;
 
+  // Marks a bill as a recurring obligation (rent, subscription, etc.)
+  // — surfaced as the "Re-occurring" pill on the bill summary card.
+  // false = one-off bill (current behaviour). Future cadence + auto-
+  // reset logic will hang off this flag.
+  @Column({ default: false, name: 'is_recurring' })
+  isRecurring: boolean;
+
   @Column({ default: true, name: 'allow_partial_payment' })
   allowPartialPayment: boolean;
 

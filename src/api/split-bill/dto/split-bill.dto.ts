@@ -200,6 +200,12 @@ export class CreateSplitBillDto {
   @IsBoolean()
   allowPartialPayment?: boolean;
 
+  // Creator toggles between one-off (false) and re-occurring (true)
+  // from the Edit Bill Info sheet.
+  @IsOptional()
+  @IsBoolean()
+  isRecurring?: boolean;
+
   @IsOptional()
   @IsNumber()
   @Min(0)
@@ -302,6 +308,12 @@ export class UpdateSplitBillDto {
   @IsOptional()
   @IsBoolean()
   allowPartialPayment?: boolean;
+
+  // Creator toggles between one-off (false) and re-occurring (true)
+  // from the Edit Bill Info sheet.
+  @IsOptional()
+  @IsBoolean()
+  isRecurring?: boolean;
 
   @IsOptional()
   @IsNumber()
