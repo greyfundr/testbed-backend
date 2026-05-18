@@ -18,6 +18,7 @@ import { TransactionModule } from './api/transaction/transaction.module';
 import { WalletModule } from './api/wallet/wallet.module';
 import { PaymentModule } from './api/payment/payment.module';
 import { AdminModule } from './api/admin/admin.module';
+import { ChatModule } from './api/chat/chat.module';
 import { SplitBillModule } from './api/split-bill/split-bill.module';
 import { UploadModule } from './api/upload/upload.module';
 import { EventModule } from './api/event/event.module';
@@ -88,6 +89,7 @@ import { LoggerModule } from 'nestjs-pino';
     EventModule,
     DynamicLinkModule,
     PointsModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [AppService],

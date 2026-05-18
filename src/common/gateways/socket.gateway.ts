@@ -44,7 +44,10 @@ export class AppLiveGateway
   @SubscribeMessage('subscribeToResource')
   handleSubscribe(
     client: Socket,
-    payload: { resource: 'bill' | 'event' | 'campaign'; id: string },
+    payload: {
+      resource: 'bill' | 'event' | 'campaign' | 'user';
+      id: string;
+    },
   ): void {
     const room = `${payload.resource}_${payload.id}`;
     client.join(room);
@@ -54,7 +57,10 @@ export class AppLiveGateway
   @SubscribeMessage('unsubscribeFromResource')
   handleUnsubscribe(
     client: Socket,
-    payload: { resource: 'bill' | 'event' | 'campaign'; id: string },
+    payload: {
+      resource: 'bill' | 'event' | 'campaign' | 'user';
+      id: string;
+    },
   ): void {
     const room = `${payload.resource}_${payload.id}`;
     client.leave(room);
@@ -84,6 +90,31 @@ export class AppLiveGateway
     );
     this.server
       .to(`campaign_${payload.campaignId}`)
+      .emit('liveUpdate', payload);
+  }
+
+  // Direct-message fan-out. ChatService emits `chat.message` with the
+  // saved row; we push it into both the sender and recipient user
+  // rooms so an open PrivateChatScreen renders the bubble immediately
+  // without polling. The recipient also gets it for the chat-list
+  // unread badge update.
+  @OnEvent('chat.message')
+  handleChatMessage(payload: {
+    kind: string;
+    senderId: string;
+    recipientId: string;
+    message: unknown;
+  }) {
+    this.logger.log(
+      `Broadcasting chat message ${payload.senderId} → ${payload.recipientId}`,
+    );
+    this.server
+      .to(`user_${payload.recipientId}`)
+      .emit('liveUpdate', payload);
+    // Also echo to the sender so any other device they have logged in
+    // picks up the message in real time.
+    this.server
+      .to(`user_${payload.senderId}`)
       .emit('liveUpdate', payload);
   }
 }
