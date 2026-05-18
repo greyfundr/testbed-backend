@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -8,7 +9,7 @@ import { Repository, In, Brackets } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ChatMessage } from '../entities/chat-message.entity';
 import { User } from '../../user/entities';
-import { Block } from '../../user/entities';
+import { Block, Follow } from '../../user/entities';
 
 // One-on-one chat MVP. No threads table — a "conversation" is just
 // the union of messages where the (sender, recipient) pair matches
@@ -23,8 +24,29 @@ export class ChatService {
     private readonly userRepo: Repository<User>,
     @InjectRepository(Block)
     private readonly blockRepo: Repository<Block>,
+    @InjectRepository(Follow)
+    private readonly followRepo: Repository<Follow>,
     private readonly eventEmitter: EventEmitter2,
   ) {}
+
+  // Mutual-follow gate: chat is restricted to "friends" — pairs of
+  // users that follow each other in BOTH directions. Returns true
+  // when the two follow-rows exist.
+  private async _isMutualFollow(
+    userAId: string,
+    userBId: string,
+  ): Promise<boolean> {
+    if (userAId === userBId) return false;
+    const [aFollowsB, bFollowsA] = await Promise.all([
+      this.followRepo.findOne({
+        where: { followerId: userAId, followingId: userBId },
+      }),
+      this.followRepo.findOne({
+        where: { followerId: userBId, followingId: userAId },
+      }),
+    ]);
+    return !!aFollowsB && !!bFollowsA;
+  }
 
   // List paginated messages in a single conversation between viewer
   // and otherUserId. Newest-first; `before` is the createdAt cursor
@@ -92,6 +114,16 @@ export class ChatService {
       );
     }
 
+    // Mutual-follow gate (the "friends" rule): the two users must
+    // follow each other in BOTH directions. Pre-existing message
+    // history is preserved on either side — only NEW sends are gated.
+    const friends = await this._isMutualFollow(senderId, recipientId);
+    if (!friends) {
+      throw new ForbiddenException(
+        'You can only message people who follow you back. Ask them to follow you (or follow them) before starting a chat.',
+      );
+    }
+
     const saved = await this.messageRepo.save(
       this.messageRepo.create({
         senderId,
@@ -127,6 +159,59 @@ export class ChatService {
       .andWhere('read_at IS NULL')
       .execute();
     return result.affected ?? 0;
+  }
+
+  // List every "friend" (mutual follower) the viewer is allowed to
+  // message. Powers the New Message picker on the conversations list.
+  // Flags `alreadyChatting = true` so the picker can mark people the
+  // viewer already has an open thread with.
+  async listEligibleContacts(viewerId: string): Promise<
+    Array<{
+      id: string;
+      firstName: string | null;
+      lastName: string | null;
+      username: string | null;
+      image: string | null;
+      alreadyChatting: boolean;
+    }>
+  > {
+    // Pull both directions in parallel — the intersection is the set
+    // of mutual followers.
+    const [iFollow, theyFollow] = await Promise.all([
+      this.followRepo.find({ where: { followerId: viewerId } }),
+      this.followRepo.find({ where: { followingId: viewerId } }),
+    ]);
+    const iFollowIds = new Set(iFollow.map((f) => f.followingId));
+    const theyFollowIds = new Set(theyFollow.map((f) => f.followerId));
+    const mutualIds = [...iFollowIds].filter((id) => theyFollowIds.has(id));
+    if (mutualIds.length === 0) return [];
+
+    const users = await this.userRepo.find({
+      where: { id: In(mutualIds) },
+      select: ['id', 'firstName', 'lastName', 'username'],
+      relations: ['profile'],
+    });
+
+    // Which mutual followers does the viewer already have a thread
+    // with? Done as a single light query so the picker can render
+    // "Resume" vs "Start" labels without N+1 calls.
+    const existingChats = await this.messageRepo
+      .createQueryBuilder('m')
+      .select('DISTINCT IF(m.sender_id = :viewer, m.recipient_id, m.sender_id)', 'otherId')
+      .where('(m.sender_id = :viewer OR m.recipient_id = :viewer)', {
+        viewer: viewerId,
+      })
+      .getRawMany<{ otherId: string }>();
+    const chattingWith = new Set(existingChats.map((r) => r.otherId));
+
+    return users.map((u) => ({
+      id: u.id,
+      firstName: u.firstName ?? null,
+      lastName: u.lastName ?? null,
+      username: u.username ?? null,
+      image: u.profile?.image ?? null,
+      alreadyChatting: chattingWith.has(u.id),
+    }));
   }
 
   // Chat-list endpoint: every user the viewer has exchanged messages

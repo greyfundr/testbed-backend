@@ -30,6 +30,16 @@ export class ChatController {
     return this.chatService.listConversations(user.id);
   }
 
+  // Friends (mutual followers) the viewer can start a new chat with.
+  // Powers the New Message picker on the conversations list screen.
+  @Get('contacts')
+  @ApiOperation({
+    summary: 'List mutual followers eligible to message',
+  })
+  listEligibleContacts(@CurrentUser() user: User) {
+    return this.chatService.listEligibleContacts(user.id);
+  }
+
   // Paginated message list with a single other user. `before` is the
   // createdAt of the oldest message currently rendered; the response
   // returns up to `limit` older messages.
