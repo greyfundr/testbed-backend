@@ -217,6 +217,10 @@ export class DynamicLinkService implements OnModuleInit {
     // same — multiple amplifiers reuse one link per campaign but
     // each gets their own `ref` via the URL.
     extraMetadata?: Record<string, string>,
+    // Optional campaign hero image — when set, the dynamic-link
+    // redirect page renders it as the share card's hero. Without it
+    // the page falls back to a neutral brand-colour placeholder.
+    ogImage?: string,
   ): Promise<GeneratedLink> {
     return this.generate({
       type: 'campaign',
@@ -226,6 +230,7 @@ export class DynamicLinkService implements OnModuleInit {
         ? `Support "${title}" on GreyFundr`
         : 'Support this campaign',
       ogDescription: 'Every contribution counts. Tap to donate.',
+      ogImage,
     });
   }
 

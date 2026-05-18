@@ -156,6 +156,10 @@ export class CampaignAmplifierService {
     const shareSlug = campaign.shareSlug ?? campaign.id;
     let shareUrl = '';
     try {
+      // First campaign image (if any) drives the redirect page's
+      // hero card — without this the OS landing page falls back to
+      // a brand-colour placeholder.
+      const heroImage = campaign.images?.[0]?.imageUrl ?? undefined;
       const link = await this.dynamicLinkService.forCampaign(
         amplifier.campaignId,
         shareSlug,
@@ -163,6 +167,7 @@ export class CampaignAmplifierService {
         // Tuck the amplifier code into the metadata so the redirect
         // controller emits it alongside `type=campaign&id=…`.
         { ref: amplifier.code },
+        heroImage,
       );
       shareUrl = link.shortUrl;
     } catch {
