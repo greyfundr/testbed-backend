@@ -2762,7 +2762,7 @@ export class SplitBillService {
   ): Promise<SplitBillComment> {
     const participant = await this.participantRepo.findOne({
       where: { id: participantId, splitBillId: billId },
-      relations: ['splitBill', 'user'],
+      relations: ['splitBill', 'splitBill.creator', 'user'],
     });
 
     if (!participant) {
@@ -2802,7 +2802,7 @@ export class SplitBillService {
       displayType = 'full_name';
     }
 
-    return this.commentRepo.save(
+    const saved = await this.commentRepo.save(
       this.commentRepo.create({
         splitBillId: billId,
         participantId: participant.id,
@@ -2815,6 +2815,36 @@ export class SplitBillService {
         isEdited: false,
       }),
     );
+
+    // Notify the bill creator (skip when they comment on their own bill).
+    // Mirrors the campaign comment notification — socialInteractions channel.
+    const bill = participant.splitBill;
+    if (bill && bill.creatorId && bill.creatorId !== participant.userId) {
+      try {
+        await this.notificationService.notify(
+          bill.creatorId,
+          'socialInteractions',
+          {
+            title: 'New Comment',
+            message: `${displayName} commented on your bill: ${bill.title}`,
+            type: 'BILL_COMMENT',
+            metadata: {
+              billId,
+              authorId: participant.userId,
+              participantId: participant.id,
+              commentId: saved.id,
+              pushToken: bill.creator?.fcmToken,
+            },
+          },
+        );
+      } catch (err) {
+        this.logger.warn(
+          `Comment notify failed for bill ${billId}: ${(err as Error).message}`,
+        );
+      }
+    }
+
+    return saved;
   }
 
   async editComment(
