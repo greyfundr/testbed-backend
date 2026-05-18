@@ -222,11 +222,12 @@ export class PaymentWebhookService {
       onBehalfOfUserId,
       onBehalfOfExternal,
       comment,
-      // Was previously dropped on the floor, breaking champion
-      // attribution for Paystack-paid donations. Restored so we
-      // can both persist it on the Donation row and award the
-      // champion their GreyPoints.
-      referrerAmplifierId,
+      // Two shapes here: in-app donations send a pre-resolved
+      // `referrerAmplifierId` (UUID); public champion-page donations
+      // send `referrer_code` (short code) because the page never
+      // resolved it. Accept either; resolve the code below.
+      referrerAmplifierId: referrerAmplifierIdFromMeta,
+      referrer_code: referrerCodeFromMeta,
     } = metadata as Record<string, any>;
 
     const amount = amountInKobo / 100;
@@ -257,6 +258,27 @@ export class PaymentWebhookService {
         throw new Error('Campaign or User not found during webhook processing');
       }
 
+      // Resolve champion-link code → amplifier row. Public champion
+      // page only knows the code; we need the row's id to persist on
+      // the donation and to look up the champion's userId for points.
+      let referrerAmplifierId: string | null =
+        referrerAmplifierIdFromMeta ?? null;
+      let championUserId: string | null = null;
+      if (!referrerAmplifierId && referrerCodeFromMeta) {
+        const amp = await qr.manager.findOne(CampaignAmplifier, {
+          where: { code: referrerCodeFromMeta, campaignId: campaign.id },
+        });
+        if (amp) {
+          referrerAmplifierId = amp.id;
+          championUserId = amp.userId;
+        }
+      } else if (referrerAmplifierId) {
+        const amp = await qr.manager.findOne(CampaignAmplifier, {
+          where: { id: referrerAmplifierId },
+        });
+        championUserId = amp?.userId ?? null;
+      }
+
       transaction.status = TransactionStatus.COMPLETED;
       await qr.manager.save(transaction);
 
@@ -272,20 +294,10 @@ export class PaymentWebhookService {
         onBehalfOfFullName: onBehalfOfExternal?.fullName,
         onBehalfOfPhone: onBehalfOfExternal?.phoneNumber,
         comment: comment || 'Donation via Paystack',
-        referrerAmplifierId: referrerAmplifierId ?? null,
+        referrerAmplifierId,
       });
 
       const savedDonation = await qr.manager.save(donation);
-
-      // Resolve champion userId in the same transaction so we know
-      // who to award when we post the GreyPoints ledger rows below.
-      let championUserId: string | null = null;
-      if (referrerAmplifierId) {
-        const amp = await qr.manager.findOne(CampaignAmplifier, {
-          where: { id: referrerAmplifierId },
-        });
-        championUserId = amp?.userId ?? null;
-      }
 
       await qr.manager.update(Campaign, campaign.id, {
         currentAmount: () => `current_amount + ${amount}`,
