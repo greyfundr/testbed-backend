@@ -6,6 +6,7 @@ import { SplitBillService } from './services/split-bill.service';
 import { SplitBillGovernanceService } from './services/split-bill-governance.service';
 import { SplitBillUpdateService } from './services/split-bill-update.service';
 import { SplitBillRetentionService } from './services/split-bill-retention.service';
+import { SplitBillDueReminderService } from './services/split-bill-due-reminder.service';
 import { SplitBillOrganizerService } from './services/split-bill-organizer.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import {
@@ -64,6 +65,7 @@ import { SplitBillSubscriber } from './subscribers/split-bill.subscriber';
     SplitBillGovernanceService,
     SplitBillUpdateService,
     SplitBillRetentionService,
+    SplitBillDueReminderService,
     SplitBillOrganizerService,
     PaymentService,
     SplitBillSubscriber,
