@@ -108,6 +108,21 @@ export class SplitBillController {
     };
   }
 
+  @ApiOperation({ summary: 'Toggle a like on a split bill' })
+  @Post(':id/like')
+  @HttpCode(HttpStatus.OK)
+  async toggleLike(
+    @Param('id', ParseUUIDPipe) billId: string,
+    @CurrentUser() user: User,
+  ) {
+    const result = await this.splitBillService.toggleLike(billId, user.id);
+    return {
+      success: true,
+      message: result.isLiked ? 'Bill liked' : 'Bill unliked',
+      data: result,
+    };
+  }
+
   @ApiOperation({ summary: 'Update a split bill' })
   @Patch(':id')
   async updateBill(

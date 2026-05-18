@@ -18,6 +18,7 @@ import {
   SplitBillProposalVote,
   SplitBillUpdate,
   SplitBillOrganizer,
+  SplitBillLike,
 } from './entities';
 import { User } from '../user/entities';
 import { UserModule } from '../user/user.module';
@@ -40,6 +41,7 @@ import { SplitBillSubscriber } from './subscribers/split-bill.subscriber';
       SplitBillProposalVote,
       SplitBillUpdate,
       SplitBillOrganizer,
+      SplitBillLike,
       User,
     ]),
     forwardRef(() => UserModule),

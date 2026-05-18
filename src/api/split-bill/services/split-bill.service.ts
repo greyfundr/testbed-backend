@@ -14,6 +14,7 @@ import {
   SplitBill,
   SplitBillParticipant,
   SplitBillComment,
+  SplitBillLike,
 } from '../entities';
 import { Transaction } from '../../transaction/entities';
 import {
@@ -79,6 +80,8 @@ export class SplitBillService {
     private readonly activityRepo: Repository<SplitBillActivity>,
     @InjectRepository(SplitBillComment)
     private readonly commentRepo: Repository<SplitBillComment>,
+    @InjectRepository(SplitBillLike)
+    private readonly likeRepo: Repository<SplitBillLike>,
     private readonly userRepo: UserRepository,
     private readonly transactionRepo: TransactionRepository,
     private readonly walletService: WalletService,
@@ -418,7 +421,65 @@ export class SplitBillService {
       })) as SplitBillParticipant[];
     }
 
+    // Bolt on like state for the requester — kept off the entity so
+    // we don't pollute the table mapping. Two cheap reads: a count
+    // of all likes on this bill, and a one-row lookup for whether
+    // the requester themselves has liked it. Skip the lookup if
+    // there's no requester (e.g. unauthenticated guest path).
+    const likesCount = await this.likeRepo.count({
+      where: { splitBillId: billId },
+    });
+    let isLiked = false;
+    if (requestingUserId) {
+      const mine = await this.likeRepo.findOne({
+        where: { splitBillId: billId, userId: requestingUserId },
+      });
+      isLiked = !!mine;
+    }
+    (bill as SplitBill & { likesCount: number; isLiked: boolean }).likesCount =
+      likesCount;
+    (bill as SplitBill & { likesCount: number; isLiked: boolean }).isLiked =
+      isLiked;
+
     return bill;
+  }
+
+  // Toggle a like for the requesting user on this bill. Returns the
+  // post-toggle state so the client can render the new heart + count
+  // without a follow-up fetch. Idempotent at the row level — the
+  // unique (split_bill_id, user_id) constraint guarantees no
+  // duplicates if two taps race.
+  async toggleLike(
+    billId: string,
+    userId: string,
+  ): Promise<{ isLiked: boolean; likesCount: number }> {
+    const bill = await this.billRepo.findOne({ where: { id: billId } });
+    if (!bill) throw new NotFoundException('Bill not found');
+
+    const existing = await this.likeRepo.findOne({
+      where: { splitBillId: billId, userId },
+    });
+
+    if (existing) {
+      await this.likeRepo.remove(existing);
+    } else {
+      try {
+        await this.likeRepo.save(
+          this.likeRepo.create({ splitBillId: billId, userId }),
+        );
+      } catch {
+        // Race: a concurrent tap already inserted the like. Treat
+        // as success — the caller's intent (be liked) is satisfied.
+      }
+    }
+
+    const likesCount = await this.likeRepo.count({
+      where: { splitBillId: billId },
+    });
+    const after = await this.likeRepo.findOne({
+      where: { splitBillId: billId, userId },
+    });
+    return { isLiked: !!after, likesCount };
   }
 
   async getUserBills(
