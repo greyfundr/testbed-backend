@@ -1,5 +1,6 @@
 import {
   Controller,
+  Get,
   Post,
   Param,
   Req,
@@ -29,8 +30,21 @@ export class PaymentWebhookController {
   // Client-side verification fallback for Paystack donations. The web
   // sheet's success callback fires before Paystack's async webhook is
   // guaranteed to have hit our backend — especially in local dev where
-  // Paystack can't reach localhost. Hitting this endpoint re-uses the
-  // same finalization code path the webhook does, and is idempotent.
+  // Paystack can't reach localhost, and on testbed where Paystack's
+  // dashboard webhook URL is not pointed at this Render service.
+  // Idempotent + only writes data Paystack itself confirms, so the
+  // GET variant is exposed publicly so the static champion page can
+  // call it without holding a JWT.
+  @Get('verify/:reference')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Public verify-by-reference used by the champion page after a Paystack success callback',
+  })
+  async verifyDonationPublic(@Param('reference') reference: string) {
+    return this.webhookService.finalizeCampaignDonationByReference(reference);
+  }
+
   @Post('verify/:reference')
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
