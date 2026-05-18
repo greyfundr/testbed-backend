@@ -2975,15 +2975,26 @@ export class SplitBillService {
     page: number;
     totalPages: number;
   }> {
-    const [raw, total] = await this.commentRepo
+    // Pull the commenter's profile in the same query so the UI can
+    // render an avatar without a per-comment fetch. Guest comments
+    // (authorId === null) just leave avatarUrl as null and the client
+    // falls back to a letter avatar.
+    const raw = await this.commentRepo
       .createQueryBuilder('c')
+      .leftJoinAndSelect('c.author', 'author')
+      .leftJoinAndSelect('author.profile', 'profile')
       .where('c.splitBillId = :billId', { billId })
       .andWhere('c.deletedAt IS NULL')
       .orderBy('c.isPinned', 'DESC')
       .addOrderBy('c.createdAt', 'ASC')
       .skip((page - 1) * limit)
       .take(limit)
-      .getManyAndCount();
+      .getMany();
+    const total = await this.commentRepo
+      .createQueryBuilder('c')
+      .where('c.splitBillId = :billId', { billId })
+      .andWhere('c.deletedAt IS NULL')
+      .getCount();
 
     const comments = raw.map((c) => ({
       id: c.id,
@@ -2992,6 +3003,7 @@ export class SplitBillService {
       displayType: c.displayType,
       participantId: c.participantId,
       authorId: c.authorId,
+      avatarUrl: c.author?.profile?.image ?? null,
       isGuest: c.authorId === null,
       isPinned: c.isPinned,
       isEdited: c.isEdited,
