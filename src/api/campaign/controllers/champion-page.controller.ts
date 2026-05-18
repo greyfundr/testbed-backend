@@ -1,17 +1,32 @@
 import {
+  BadRequestException,
+  Body,
   Controller,
   Get,
   HttpStatus,
   Param,
+  Post,
   Query,
   Res,
   VERSION_NEUTRAL,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Response } from 'express';
+import { DataSource } from 'typeorm';
+import { v4 as uuidv4 } from 'uuid';
+import * as bcrypt from 'bcrypt';
 import { CampaignRepository } from '../repository/campaign.repository';
 import { CampaignAmplifierService } from '../services/campaign-amplifier.service';
 import { Campaign } from '../entities/campaign.entity';
+import { CampaignStatus } from '../enums/campaign.enum';
+import { UserRepository } from '../../user/repository';
+import { AccountType } from '../../user/enums/user.enum';
+import { Transaction } from '../../transaction/entities';
+import {
+  TransactionType,
+  TransactionDirection,
+  TransactionStatus,
+} from '../../transaction/enums/transaction.enum';
 
 // Public landing page for champion referral URLs:
 //   GET /c/:slug              -> generic campaign donate page
@@ -32,7 +47,156 @@ export class ChampionPageController {
     private readonly campaignRepo: CampaignRepository,
     private readonly amplifierService: CampaignAmplifierService,
     private readonly config: ConfigService,
+    private readonly userRepo: UserRepository,
+    private readonly dataSource: DataSource,
   ) {}
+
+  // Called by the static champion page right before it opens
+  // PaystackPop. Reserves a backend identity for the donor (find-or-
+  // create User by email), resolves the referrer code → amplifier
+  // (scoped to the campaign), and pre-creates a PENDING Transaction
+  // row keyed by a generated reference. The page then passes that
+  // same reference into PaystackPop so the post-payment GET
+  // /payment/verify/:reference call can find it and finalize the
+  // Donation row via processCampaignDonationWebhook.
+  @Post('c/:slug/init-donation')
+  async initChampionDonation(
+    @Param('slug') slug: string,
+    @Body()
+    body: {
+      amount?: number;
+      email?: string;
+      phone?: string;
+      donorName?: string;
+      isAnonymous?: boolean;
+      comment?: string;
+      referrerCode?: string;
+    },
+  ): Promise<{
+    reference: string;
+    userId: string;
+    referrerAmplifierId: string | null;
+  }> {
+    if (!/^[A-Za-z0-9_-]{6,32}$/.test(slug)) {
+      throw new BadRequestException('Invalid campaign slug');
+    }
+    const amount = Number(body.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new BadRequestException('Amount must be a positive number');
+    }
+    const email = (body.email || '').trim().toLowerCase();
+    const phone = (body.phone || '').trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new BadRequestException('A valid email is required');
+    }
+    if (!phone) {
+      throw new BadRequestException('Phone number is required');
+    }
+
+    const campaign = await this.campaignRepo.findOne({
+      where: { shareSlug: slug },
+    });
+    if (!campaign) throw new BadRequestException('Campaign not found');
+    if (campaign.status !== CampaignStatus.ACTIVE) {
+      throw new BadRequestException('Campaign is not active for donations');
+    }
+
+    let referrerAmplifierId: string | null = null;
+    const code = (body.referrerCode || '').trim();
+    if (code) {
+      const amp = await this.amplifierService.getByCode(code);
+      if (amp && amp.campaignId === campaign.id) {
+        referrerAmplifierId = amp.id;
+      }
+    }
+
+    const donor = await this.findOrCreateGuestDonor(
+      email,
+      phone,
+      body.donorName || '',
+    );
+
+    const reference = `CHA-${uuidv4().replace(/-/g, '').substring(0, 16).toUpperCase()}`;
+
+    await this.dataSource.transaction(async (em) => {
+      await em.save(
+        em.create(Transaction, {
+          walletId: null,
+          amount,
+          currency: 'NGN',
+          type: TransactionType.CAMPAIGN_DONATION,
+          direction: TransactionDirection.CREDIT,
+          status: TransactionStatus.PENDING,
+          reference,
+          gatewayReference: reference,
+          paymentGateway: 'paystack',
+          description: `Champion-page donation — ${campaign.title}`,
+          sourceRef: { entity: 'campaign', id: campaign.id },
+          metadata: {
+            campaignId: campaign.id,
+            userId: donor.id,
+            source: 'champion_page',
+            referrerAmplifierId,
+          },
+        }),
+      );
+    });
+
+    return { reference, userId: donor.id, referrerAmplifierId };
+  }
+
+  // Email-first lookup, phone fallback, otherwise create a fresh
+  // guest user with a random password (donor never logs in unless
+  // they later claim the account). Phone uniqueness is best-effort:
+  // if the supplied phone collides with a different user, we suffix
+  // it so the create still succeeds — the donor's intended phone is
+  // recorded on the Donation's customUsername / metadata trail
+  // upstream.
+  private async findOrCreateGuestDonor(
+    email: string,
+    phone: string,
+    donorName: string,
+  ) {
+    let user = await this.userRepo.findOne({ where: { email } as any });
+    if (user) return user;
+    user = await this.userRepo.findOne({
+      where: { phoneNumber: phone } as any,
+    });
+    if (user) return user;
+
+    const [firstName, ...rest] = (donorName || 'Donor').trim().split(/\s+/);
+    const lastName = rest.length > 0 ? rest.join(' ') : null;
+    const password = await bcrypt.hash(uuidv4(), 10);
+
+    const phoneCollision = await this.userRepo.findOne({
+      where: { phoneNumber: phone } as any,
+    });
+    const phoneToSave = phoneCollision
+      ? `${phone}#${uuidv4().substring(0, 6)}`
+      : phone;
+
+    try {
+      return await this.userRepo.create({
+        email,
+        phoneNumber: phoneToSave,
+        password,
+        firstName: firstName || 'Donor',
+        lastName,
+        accountType: AccountType.PERSONAL,
+        hasVerifiedPhone: false,
+        hasSubmittedBasicInfo: false,
+        hasCompletedKyc: false,
+        agreeToTerms: false,
+      } as any);
+    } catch (err) {
+      // Race: a concurrent init created the same email. Re-fetch.
+      const retry = await this.userRepo.findOne({
+        where: { email } as any,
+      });
+      if (retry) return retry;
+      throw err;
+    }
+  }
 
   @Get('c/:slug')
   async championPage(
@@ -136,6 +300,7 @@ export class ChampionPageController {
 
     const inlineData = JSON.stringify({
       campaignId: campaign.id,
+      slug: campaign.shareSlug,
       title: campaign.title,
       paystackPublicKey,
       referrerCode,
@@ -458,41 +623,87 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       customFields.push({ display_name: 'Champion code', variable_name: 'referrer_code', value: data.referrerCode });
     }
 
-    var handler = PaystackPop.setup({
-      key: data.paystackPublicKey,
-      email: email,
-      amount: amount * 100, // kobo
-      currency: 'NGN',
-      metadata: {
-        campaign_id: data.campaignId,
-        referrer_code: data.referrerCode || '',
-        donor_name: isAnonymous ? '' : donorName,
+    // Step 1: ask the backend to pre-create a PENDING Transaction + a
+    // guest User keyed by the donor's email. We need the returned
+    // reference (so Paystack uses the same one we'll verify later)
+    // and the user_id (so the webhook can attach the Donation to a
+    // real User row — donations.donor_id is NOT NULL).
+    donateBtn.disabled = true;
+    donateBtn.textContent = 'Preparing…';
+    fetch('/c/' + data.slug + '/init-donation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        amount: amount,
+        email: email,
         phone: phone,
-        is_anonymous: isAnonymous,
-        source: 'champion_page',
-        custom_fields: customFields
-      },
-      onClose: function(){},
-      callback: function(response){
-        // Verify on the backend — this is the moment the Donation row
-        // is created and the amplifier is credited via referrerCode.
-        donateBtn.disabled = true;
-        donateBtn.textContent = 'Confirming…';
-        fetch(data.apiBase + '/payment/verify/' + response.reference, {
-          method: 'GET',
-        }).then(function(r){ return r.json(); })
-          .then(function(){
-            successBox.classList.add('show');
-            donateBtn.style.display = 'none';
-          })
-          .catch(function(){
-            showError("We couldn't confirm your payment automatically. If you were charged, contact support — your reference is " + response.reference);
-            donateBtn.disabled = false;
-            donateBtn.innerHTML = 'Donate via Paystack<span class="cta-sub">Card · Bank · USSD</span>';
-          });
+        donorName: isAnonymous ? '' : donorName,
+        isAnonymous: isAnonymous,
+        referrerCode: data.referrerCode || '',
+      }),
+    }).then(function(r){
+      if (!r.ok) {
+        return r.json().then(function(j){
+          throw new Error(j.message || 'Could not initialize donation.');
+        });
       }
+      return r.json();
+    }).then(function(init){
+      var handler = PaystackPop.setup({
+        key: data.paystackPublicKey,
+        email: email,
+        amount: amount * 100, // kobo
+        currency: 'NGN',
+        ref: init.reference,
+        metadata: {
+          campaignId: data.campaignId,
+          user_id: init.userId,
+          referrerAmplifierId: init.referrerAmplifierId || null,
+          isAnonymous: isAnonymous,
+          customUsername: isAnonymous ? '' : donorName,
+          onBehalfOf: 'self',
+          onBehalfOfUserId: init.userId,
+          comment: '',
+          source: 'champion_page',
+          // Keep these aliases too so anything that reads the older
+          // metadata shape still sees the data.
+          campaign_id: data.campaignId,
+          referrer_code: data.referrerCode || '',
+          donor_name: isAnonymous ? '' : donorName,
+          phone: phone,
+          is_anonymous: isAnonymous,
+          custom_fields: customFields
+        },
+        onClose: function(){
+          donateBtn.disabled = false;
+          donateBtn.innerHTML = 'Donate via Paystack<span class="cta-sub">Card · Bank · USSD</span>';
+        },
+        callback: function(response){
+          // Step 2: verify-by-reference. Backend looks up the Transaction
+          // we created in step 1, asks Paystack to confirm the charge,
+          // then creates the Donation row + bumps current_amount +
+          // awards GreyPoints (including champion credit if attributed).
+          donateBtn.textContent = 'Confirming…';
+          fetch(data.apiBase + '/payment/verify/' + response.reference, {
+            method: 'GET',
+          }).then(function(r){ return r.json(); })
+            .then(function(){
+              successBox.classList.add('show');
+              donateBtn.style.display = 'none';
+            })
+            .catch(function(){
+              showError("We couldn't confirm your payment automatically. If you were charged, contact support — your reference is " + response.reference);
+              donateBtn.disabled = false;
+              donateBtn.innerHTML = 'Donate via Paystack<span class="cta-sub">Card · Bank · USSD</span>';
+            });
+        }
+      });
+      handler.openIframe();
+    }).catch(function(err){
+      showError(err && err.message ? err.message : 'Could not start the donation. Please try again.');
+      donateBtn.disabled = false;
+      donateBtn.innerHTML = 'Donate via Paystack<span class="cta-sub">Card · Bank · USSD</span>';
     });
-    handler.openIframe();
   });
 })();
 </script>

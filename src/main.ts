@@ -42,6 +42,11 @@ async function bootstrap() {
         // donate via Paystack inline; the donation is attributed back
         // to the referring champion via the ref query.
         { path: 'c/:slug', method: RequestMethod.GET },
+        // Init endpoint the static champion page calls before opening
+        // PaystackPop — pre-creates the PENDING Transaction and a
+        // guest User so the post-payment verify call has something
+        // to finalize. Public + no API prefix to match the page itself.
+        { path: 'c/:slug/init-donation', method: RequestMethod.POST },
         {
           path: '.well-known/apple-app-site-association',
           method: RequestMethod.GET,
