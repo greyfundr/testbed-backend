@@ -136,6 +136,20 @@ export class DynamicLinkRedirectController {
       ? `${this.config.get('WEB_BASE_URL')}/pay/split-bill/${billId}?inviteCode=${inviteCode}`
       : null;
 
+    // For campaign links, build a "donate on the web" URL pointing at
+    // the public champion landing page at `/c/<slug>?ref=<code>`. That
+    // page renders inline Paystack — gives web visitors a way to
+    // donate without installing the app. Falls back to null for
+    // non-campaign link types so the button only shows when relevant.
+    const appBaseUrl =
+      this.config.get<string>('APP_BASE_URL')?.replace(/\/$/, '') ?? '';
+    const campaignSlug = (link.metadata as { slug?: string } | null | undefined)?.slug;
+    const refCode = (link.metadata as { ref?: string } | null | undefined)?.ref;
+    const webDonateUrl =
+      link.type === 'campaign' && campaignSlug && appBaseUrl
+        ? `${appBaseUrl}/c/${campaignSlug}${refCode ? `?ref=${refCode}` : ''}`
+        : null;
+
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -271,6 +285,17 @@ export class DynamicLinkRedirectController {
     .btn-guest{background:transparent;color:var(--ink-500);border:1px solid var(--ink-200);font-size:13px}
     .btn-guest:hover{background:var(--canvas);color:var(--ink-700)}
 
+    /* Web-donate CTA. Visible at all breakpoints; styled as the
+       PRIMARY action on desktop and a SECONDARY outline on mobile/
+       tablet (where "Open in app" is the primary). The desktop swap
+       happens via the @media block further down. */
+    .btn-web{
+      background:#fff;color:var(--teal-700);
+      border:1.5px solid var(--teal-700);
+    }
+    .btn-web:hover{background:var(--teal-50)}
+    .btn-web svg{stroke:var(--teal-700)}
+
     .stores{display:flex;flex-direction:column;gap:8px}
     .divider{
       display:flex;align-items:center;gap:10px;margin:12px 0 8px;
@@ -321,6 +346,22 @@ export class DynamicLinkRedirectController {
       .panel-title{display:none}    /* desktop title lives in hero */
       .panel-sub{display:none}      /* desktop description lives in hero */
       .status{margin:6px 0 22px}
+      /* Desktop has no in-browser deep-link target (no mobile app
+         on desktop), so we (a) show the action panel immediately
+         instead of waiting on the 2.5s fallback, (b) hide the
+         "Opening the app…" pulse, (c) hide the "Open in GreyFundr"
+         button since it does nothing on web, and (d) promote the
+         web-donate button to the primary gradient style. */
+      .status{display:none !important}
+      .actions{display:flex !important}
+      #openBtn{display:none}
+      .btn-web{
+        background:linear-gradient(135deg,var(--teal-600),var(--teal-700));
+        color:#fff;border:none;box-shadow:var(--shadow-cta);
+      }
+      .btn-web:hover{box-shadow:0 16px 34px rgba(1,121,129,.4);background:linear-gradient(135deg,var(--teal-600),var(--teal-700))}
+      .btn-web svg{stroke:#fff}
+      .divider{margin-top:8px}
       .desktop-hero-sub{
         display:block;color:rgba(255,255,255,.92);font-size:14px;
         margin-top:6px;line-height:1.5;font-weight:500;
@@ -368,6 +409,10 @@ export class DynamicLinkRedirectController {
       </div>
 
       <div class="actions" id="actions">
+        ${webDonateUrl ? `<a class="btn btn-web" href="${this.escapeHtml(webDonateUrl)}" id="webBtn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M14 4h7v7"/><path d="M21 4 12 13"/></svg>
+          Donate in browser
+        </a>` : ''}
         <a class="btn btn-primary" href="${this.escapeHtml(deepLink)}" id="openBtn">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 5 7 7-7 7"/></svg>
           Open in GreyFundr
@@ -403,9 +448,20 @@ export class DynamicLinkRedirectController {
     var actions  = document.getElementById('actions');
     var appLaunched = false;
 
-    // Try the deep link immediately. If the app handles it the page
-    // backgrounds (blur / visibilitychange fires) and we hide the
-    // fallback. Otherwise after 2.5s we reveal the store buttons.
+    // Desktop has no app to open — skip the 2.5s deep-link wait and
+    // just show the action panel immediately. The web-donate button
+    // becomes the primary CTA via CSS.
+    var isDesktop = window.matchMedia('(min-width: 1024px)').matches;
+    if (isDesktop) {
+      status.style.display  = 'none';
+      actions.style.display = 'flex';
+      return;
+    }
+
+    // Mobile / tablet: try the deep link immediately. If the app
+    // handles it the page backgrounds (blur / visibilitychange fires)
+    // and we hide the fallback. Otherwise after 2.5s we reveal the
+    // store buttons + web-donate fallback.
     window.location.href = deepLink;
 
     var fallback = setTimeout(function () {
