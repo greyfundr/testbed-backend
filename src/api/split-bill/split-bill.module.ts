@@ -12,6 +12,7 @@ import {
   SplitBill,
   SplitBillActivity,
   SplitBillComment,
+  SplitBillCommentLike,
   SplitBillParticipant,
   SplitBillVendor,
   SplitBillProposal,
@@ -21,6 +22,7 @@ import {
   SplitBillLike,
 } from './entities';
 import { User } from '../user/entities';
+import { Follow } from '../user/entities/follow.entity';
 import { UserModule } from '../user/user.module';
 import { WalletModule } from '../wallet/wallet.module';
 import { TransactionModule } from '../transaction/transaction.module';
@@ -36,6 +38,7 @@ import { SplitBillSubscriber } from './subscribers/split-bill.subscriber';
       SplitBillParticipant,
       SplitBillActivity,
       SplitBillComment,
+      SplitBillCommentLike,
       SplitBillVendor,
       SplitBillProposal,
       SplitBillProposalVote,
@@ -43,6 +46,7 @@ import { SplitBillSubscriber } from './subscribers/split-bill.subscriber';
       SplitBillOrganizer,
       SplitBillLike,
       User,
+      Follow,
     ]),
     forwardRef(() => UserModule),
     forwardRef(() => WalletModule),

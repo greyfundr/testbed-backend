@@ -14,8 +14,12 @@ import {
   SplitBill,
   SplitBillParticipant,
   SplitBillComment,
+  SplitBillCommentLike,
   SplitBillLike,
+  SplitBillOrganizer,
 } from '../entities';
+import { Follow } from '../../user/entities/follow.entity';
+import { SplitBillOrganizerInvitationStatus } from '../entities/split-bill-organizer.entity';
 import { Transaction } from '../../transaction/entities';
 import {
   SplitMethod,
@@ -80,6 +84,10 @@ export class SplitBillService {
     private readonly activityRepo: Repository<SplitBillActivity>,
     @InjectRepository(SplitBillComment)
     private readonly commentRepo: Repository<SplitBillComment>,
+    @InjectRepository(SplitBillCommentLike)
+    private readonly commentLikeRepo: Repository<SplitBillCommentLike>,
+    @InjectRepository(Follow)
+    private readonly followRepo: Repository<Follow>,
     @InjectRepository(SplitBillLike)
     private readonly likeRepo: Repository<SplitBillLike>,
     private readonly userRepo: UserRepository,
@@ -3004,6 +3012,147 @@ export class SplitBillService {
       displayType = 'full_name';
     }
 
+    // ─── Visibility resolution ─────────────────────────────────
+    // 'public' (default) → everyone on the bill sees the row and it
+    // produces an activity-log entry. 'private' → only the sender
+    // and recipient participants see it; no activity-log fanout;
+    // mutual-follow gate enforced below.
+    const visibility: 'public' | 'private' =
+      dto.visibility === 'private' ? 'private' : 'public';
+    let recipientParticipantIds: string[] | null = null;
+    let parentCommentId: string | null = null;
+    const recipientUserIds = new Set<string>();
+
+    if (visibility === 'private') {
+      if (participant.isGuest || !participant.userId) {
+        throw new ForbiddenException(
+          'Guests cannot send private messages. Sign up to start a private chat.',
+        );
+      }
+      const requested = (dto.recipientParticipantIds ?? [])
+        .map((s) => (s ?? '').trim())
+        .filter((s) => s.length > 0);
+      if (requested.length === 0) {
+        throw new BadRequestException(
+          'Pick at least one recipient for a private message.',
+        );
+      }
+      const distinct = Array.from(new Set(requested));
+      // Sender can't pick themselves — they're always implicitly in
+      // the audience and "Private to me" is meaningless.
+      if (distinct.includes(participant.id)) {
+        throw new BadRequestException(
+          "You can't send a private message to yourself.",
+        );
+      }
+      const recipients = await this.participantRepo.find({
+        where: distinct.map((id) => ({ id, splitBillId: billId })),
+        relations: ['user'],
+      });
+      if (recipients.length !== distinct.length) {
+        throw new BadRequestException(
+          'One or more recipients are not on this bill.',
+        );
+      }
+      for (const r of recipients) {
+        if (!r.userId || r.userId.length === 0) {
+          throw new BadRequestException(
+            `${r.guestName ?? 'A guest'} hasn't signed up yet, so they can't receive a private message.`,
+          );
+        }
+        recipientUserIds.add(r.userId);
+      }
+      // Mutual-follow gate: sender↔each recipient must follow both
+      // ways. Two separate IN-queries beats one-per-recipient when
+      // there are many recipients in a group thread.
+      const followsOut = await this.followRepo.find({
+        where: {
+          followerId: participant.userId,
+          followingId: In(Array.from(recipientUserIds)),
+        },
+      });
+      const followsIn = await this.followRepo.find({
+        where: {
+          followerId: In(Array.from(recipientUserIds)),
+          followingId: participant.userId,
+        },
+      });
+      const followsOutSet = new Set(followsOut.map((f) => f.followingId));
+      const followsInSet = new Set(followsIn.map((f) => f.followerId));
+      const missingMutual: string[] = [];
+      for (const r of recipients) {
+        if (
+          !r.userId ||
+          !followsOutSet.has(r.userId) ||
+          !followsInSet.has(r.userId)
+        ) {
+          missingMutual.push(
+            (`${r.user?.firstName ?? ''} ${r.user?.lastName ?? ''}`.trim() ||
+              r.user?.username ||
+              'Someone'),
+          );
+        }
+      }
+      if (missingMutual.length > 0) {
+        throw new ForbiddenException(
+          `You can only privately message people who follow you back: ${missingMutual.join(', ')}.`,
+        );
+      }
+      recipientParticipantIds = distinct;
+    }
+
+    // ─── Reply threading ───────────────────────────────────────
+    // When parentCommentId is set, the new comment inherits the
+    // parent's audience exactly. We reject any attempt to broaden
+    // the audience or flip from private→public on a reply.
+    if (dto.parentCommentId && dto.parentCommentId.trim().length > 0) {
+      const parent = await this.commentRepo.findOne({
+        where: { id: dto.parentCommentId.trim(), splitBillId: billId },
+      });
+      if (!parent || parent.deletedAt) {
+        throw new NotFoundException('Parent comment not found on this bill.');
+      }
+      parentCommentId = parent.id;
+      if (parent.visibility === 'private') {
+        // Force the reply to match the parent's audience verbatim.
+        const parentAudience = new Set(parent.recipientParticipantIds ?? []);
+        parentAudience.add(parent.participantId);
+        // The sender must be inside the parent's audience to reply.
+        if (!parentAudience.has(participant.id)) {
+          throw new ForbiddenException(
+            "You can't reply to a private message you weren't part of.",
+          );
+        }
+        recipientParticipantIds = Array.from(parentAudience).filter(
+          (id) => id !== participant.id,
+        );
+        // Pick up the other participants' userIds for notification fanout.
+        if (visibility !== 'private') {
+          // Force private on a reply to a private parent so the thread
+          // stays scoped.
+        }
+        const otherRecipients = await this.participantRepo.find({
+          where: recipientParticipantIds.map((id) => ({
+            id,
+            splitBillId: billId,
+          })),
+        });
+        recipientUserIds.clear();
+        for (const r of otherRecipients) {
+          if (r.userId) recipientUserIds.add(r.userId);
+        }
+      }
+    }
+
+    const finalVisibility: 'public' | 'private' = parentCommentId
+      ? // If the parent is private, replies inherit private. If parent is
+        // public, the reply uses whatever the DTO asked for (defaulting
+        // to public above).
+        recipientParticipantIds && recipientParticipantIds.length > 0
+        ? 'private'
+        : 'public'
+      : visibility;
+
     const saved = await this.commentRepo.save(
       this.commentRepo.create({
         splitBillId: billId,
@@ -3013,40 +3162,146 @@ export class SplitBillService {
         displayName,
         displayType,
         content: dto.content.trim(),
+        visibility: finalVisibility,
+        recipientParticipantIds:
+          finalVisibility === 'private' ? recipientParticipantIds : null,
+        parentCommentId,
         isPinned: false,
         isEdited: false,
       }),
     );
 
-    // Notify the bill creator (skip when they comment on their own bill).
-    // Mirrors the campaign comment notification — socialInteractions channel.
+    // ─── Notification fanout ────────────────────────────────────
+    // Public: notify the bill creator (mirrors campaign comments).
+    // Private: notify ONLY the recipients — creator + organizers do
+    // not auto-see private comments per the privacy contract.
     const bill = participant.splitBill;
-    if (bill && bill.creatorId && bill.creatorId !== participant.userId) {
-      try {
-        await this.notificationService.notify(
-          bill.creatorId,
-          'socialInteractions',
-          {
-            title: 'New Comment',
-            message: `${displayName} commented on your bill: ${bill.title}`,
-            type: 'BILL_COMMENT',
+    if (finalVisibility === 'public') {
+      if (bill && bill.creatorId && bill.creatorId !== participant.userId) {
+        try {
+          await this.notificationService.notify(
+            bill.creatorId,
+            'socialInteractions',
+            {
+              title: 'New Comment',
+              message: `${displayName} commented on your bill: ${bill.title}`,
+              type: 'BILL_COMMENT',
+              metadata: {
+                billId,
+                authorId: participant.userId,
+                participantId: participant.id,
+                commentId: saved.id,
+                pushToken: bill.creator?.fcmToken,
+              },
+            },
+          );
+        } catch (err) {
+          this.logger.warn(
+            `Comment notify failed for bill ${billId}: ${(err as Error).message}`,
+          );
+        }
+      }
+    } else {
+      // Private — fan out to the explicit recipients (and the parent's
+      // audience when this is a reply).
+      for (const uid of recipientUserIds) {
+        if (uid === participant.userId) continue;
+        try {
+          await this.notificationService.notify(uid, 'socialInteractions', {
+            title: 'New private message',
+            message: `${displayName} sent you a private message on "${bill.title}"`,
+            type: 'BILL_PRIVATE_COMMENT',
             metadata: {
               billId,
               authorId: participant.userId,
               participantId: participant.id,
               commentId: saved.id,
-              pushToken: bill.creator?.fcmToken,
+              isPrivate: true,
             },
-          },
-        );
-      } catch (err) {
-        this.logger.warn(
-          `Comment notify failed for bill ${billId}: ${(err as Error).message}`,
-        );
+          });
+        } catch (err) {
+          this.logger.warn(
+            `Private comment notify failed for user ${uid}: ${(err as Error).message}`,
+          );
+        }
       }
     }
 
     return saved;
+  }
+
+  // Idempotent like-toggle on a comment. Returns the post-toggle
+  // state so the client can reconcile its optimistic update.
+  async toggleCommentLike(
+    commentId: string,
+    userId: string,
+  ): Promise<{ liked: boolean; likeCount: number }> {
+    const comment = await this.commentRepo.findOne({
+      where: { id: commentId },
+      relations: ['splitBill'],
+    });
+    if (!comment || comment.deletedAt) {
+      throw new NotFoundException('Comment not found');
+    }
+
+    // Reuse the same privacy filter the listing uses — you can't
+    // like a private comment you can't see.
+    const viewerParticipant = await this.participantRepo.findOne({
+      where: { splitBillId: comment.splitBillId, userId },
+    });
+    if (comment.visibility === 'private') {
+      const audience = new Set([
+        comment.participantId,
+        ...(comment.recipientParticipantIds ?? []),
+      ]);
+      if (!viewerParticipant || !audience.has(viewerParticipant.id)) {
+        throw new ForbiddenException(
+          'You cannot like a private comment you are not part of.',
+        );
+      }
+    }
+
+    const existing = await this.commentLikeRepo.findOne({
+      where: { commentId, userId },
+    });
+    let liked: boolean;
+    if (existing) {
+      await this.commentLikeRepo.remove(existing);
+      liked = false;
+    } else {
+      await this.commentLikeRepo.save(
+        this.commentLikeRepo.create({ commentId, userId }),
+      );
+      liked = true;
+      // Notify the comment author on a new like — skip when the
+      // author likes their own comment.
+      if (comment.authorId && comment.authorId !== userId) {
+        try {
+          await this.notificationService.notify(
+            comment.authorId,
+            'socialInteractions',
+            {
+              title: 'New like on your comment',
+              message: `Someone liked your comment on "${comment.splitBill?.title ?? 'a bill'}"`,
+              type: 'BILL_COMMENT_LIKE',
+              metadata: {
+                billId: comment.splitBillId,
+                commentId: comment.id,
+                likerUserId: userId,
+              },
+            },
+          );
+        } catch (err) {
+          this.logger.warn(
+            `Comment-like notify failed: ${(err as Error).message}`,
+          );
+        }
+      }
+    }
+    const likeCount = await this.commentLikeRepo.count({
+      where: { commentId },
+    });
+    return { liked, likeCount };
   }
 
   async editComment(
@@ -3108,6 +3363,7 @@ export class SplitBillService {
 
   async getBillComments(
     billId: string,
+    viewerUserId: string | null,
     page = 1,
     limit = 50,
   ): Promise<{
@@ -3116,26 +3372,76 @@ export class SplitBillService {
     page: number;
     totalPages: number;
   }> {
-    // Pull the commenter's profile in the same query so the UI can
-    // render an avatar without a per-comment fetch. Guest comments
-    // (authorId === null) just leave avatarUrl as null and the client
-    // falls back to a letter avatar.
-    const raw = await this.commentRepo
+    // Resolve the viewer's participantId on this bill — needed for
+    // the privacy filter (private comments are visible to the
+    // sender plus anyone in `recipient_participant_ids`).
+    let viewerParticipantId: string | null = null;
+    if (viewerUserId) {
+      const vp = await this.participantRepo.findOne({
+        where: { splitBillId: billId, userId: viewerUserId },
+      });
+      viewerParticipantId = vp?.id ?? null;
+    }
+
+    // Privacy filter:
+    //   - public comments: visible to everyone
+    //   - sender always sees their own private comments
+    //   - other viewers see private comments only if their
+    //     participantId is in `recipient_participant_ids`
+    // Built as a single SQL OR so pagination math stays consistent
+    // between the page query and the count query.
+    const qb = this.commentRepo
       .createQueryBuilder('c')
       .leftJoinAndSelect('c.author', 'author')
       .leftJoinAndSelect('author.profile', 'profile')
       .where('c.splitBillId = :billId', { billId })
       .andWhere('c.deletedAt IS NULL')
+      .andWhere(
+        // JSON_CONTAINS returns 1 if the participantId is in the
+        // recipient_participant_ids array. Wrapped in a string-cast
+        // because TypeORM serialises JSON params as raw strings on
+        // mysql; `JSON_QUOTE(:vpId)` wraps the value in JSON quotes
+        // so JSON_CONTAINS sees `"abc"` rather than `abc`.
+        viewerParticipantId
+          ? `(c.visibility = 'public'
+              OR c.participantId = :vpId
+              OR (
+                c.recipient_participant_ids IS NOT NULL
+                AND JSON_CONTAINS(c.recipient_participant_ids, JSON_QUOTE(:vpId))
+              ))`
+          : `c.visibility = 'public'`,
+        viewerParticipantId ? { vpId: viewerParticipantId } : {},
+      )
       .orderBy('c.isPinned', 'DESC')
-      .addOrderBy('c.createdAt', 'ASC')
+      .addOrderBy('c.createdAt', 'ASC');
+
+    const total = await qb.clone().getCount();
+    const raw = await qb
       .skip((page - 1) * limit)
       .take(limit)
       .getMany();
-    const total = await this.commentRepo
-      .createQueryBuilder('c')
-      .where('c.splitBillId = :billId', { billId })
-      .andWhere('c.deletedAt IS NULL')
-      .getCount();
+
+    // Batch-fetch like data so we don't N+1 across the page. likeCount
+    // per comment + which of them the viewer has liked.
+    const commentIds = raw.map((c) => c.id);
+    let likeCounts: Map<string, number> = new Map();
+    let likedSet: Set<string> = new Set();
+    if (commentIds.length > 0) {
+      const counts = await this.commentLikeRepo
+        .createQueryBuilder('l')
+        .select('l.commentId', 'commentId')
+        .addSelect('COUNT(*)', 'count')
+        .where('l.commentId IN (:...ids)', { ids: commentIds })
+        .groupBy('l.commentId')
+        .getRawMany<{ commentId: string; count: string }>();
+      likeCounts = new Map(counts.map((r) => [r.commentId, Number(r.count)]));
+      if (viewerUserId) {
+        const liked = await this.commentLikeRepo.find({
+          where: { commentId: In(commentIds), userId: viewerUserId },
+        });
+        likedSet = new Set(liked.map((l) => l.commentId));
+      }
+    }
 
     const comments = raw.map((c) => ({
       id: c.id,
@@ -3151,6 +3457,11 @@ export class SplitBillService {
       editedAt: c.editedAt,
       transactionId: c.transactionId,
       createdAt: c.createdAt,
+      visibility: c.visibility,
+      recipientParticipantIds: c.recipientParticipantIds ?? null,
+      parentCommentId: c.parentCommentId,
+      likeCount: likeCounts.get(c.id) ?? 0,
+      likedByMe: likedSet.has(c.id),
     }));
 
     return { comments, total, page, totalPages: Math.ceil(total / limit) };

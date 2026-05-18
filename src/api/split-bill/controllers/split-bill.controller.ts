@@ -478,12 +478,41 @@ export class SplitBillController {
 
   @ApiOperation({ summary: 'Get all comments on a split bill' })
   @Get(':billId/comments')
+  @UseGuards(JwtAuthGuard)
   async getBillComments(
+    @CurrentUser() user: User,
     @Param('billId') billId: string,
     @Query('page') page = 1,
     @Query('limit') limit = 50,
   ) {
-    return this.splitBillService.getBillComments(billId, +page, +limit);
+    // Authenticated now so the service can apply the privacy filter
+    // (private comments are visible only to the sender + listed
+    // recipients) and tag rows with the viewer's likedByMe flag.
+    return this.splitBillService.getBillComments(
+      billId,
+      user.id,
+      +page,
+      +limit,
+    );
+  }
+
+  // ─── Comment likes ──────────────────────────────────────────
+  // Idempotent toggle: POST adds the like if absent, removes it if
+  // present. Returns the post-toggle state so the client can
+  // reconcile its optimistic update.
+  @ApiOperation({ summary: 'Toggle a like on a split-bill comment' })
+  @Post('comments/:commentId/like')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async toggleCommentLike(
+    @CurrentUser() user: User,
+    @Param('commentId') commentId: string,
+  ) {
+    const result = await this.splitBillService.toggleCommentLike(
+      commentId,
+      user.id,
+    );
+    return { success: true, data: result };
   }
 
   @ApiOperation({

@@ -567,6 +567,44 @@ export class AddSplitBillCommentDto {
   @IsOptional()
   @IsIn(['full_name', 'username', 'anonymous'])
   displayType?: CommentDisplayType = 'full_name';
+
+  // 'public' (default) → everyone on the bill sees the comment and it
+  // produces activity-log rows. 'private' → only the sender +
+  // recipientParticipantIds can see it; no activity-log writes; the
+  // sender must mutually follow every recipient.
+  @ApiPropertyOptional({
+    description:
+      'Whether the comment is visible to everyone on the bill or only to selected recipients',
+    enum: ['public', 'private'],
+    default: 'public',
+  })
+  @IsOptional()
+  @IsIn(['public', 'private'])
+  visibility?: 'public' | 'private' = 'public';
+
+  // Required when visibility === 'private'. Array of
+  // `split_bill_participants.id` strings — the audience for the DM.
+  // Backend enforces mutual-follow between the sender and each
+  // recipient before saving the row.
+  @ApiPropertyOptional({
+    description:
+      'Participant IDs allowed to see this private comment (required when visibility=private)',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  recipientParticipantIds?: string[];
+
+  // When replying to an existing comment. The new comment inherits
+  // the parent's visibility + recipientParticipantIds — backend
+  // rejects any attempt to broaden the audience on a reply.
+  @ApiPropertyOptional({
+    description: 'ID of the comment this one is a reply to',
+  })
+  @IsOptional()
+  @IsUUID()
+  parentCommentId?: string;
 }
 
 export class EditSplitBillCommentDto {

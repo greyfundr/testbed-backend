@@ -59,6 +59,36 @@ export class SplitBillComment extends AbstractEntity {
   @Column({ type: 'text' })
   content: string;
 
+  @Column({
+    type: 'enum',
+    enum: ['public', 'private'],
+    default: 'public',
+  })
+  visibility: 'public' | 'private';
+
+  // Explicit audience for a private comment — JSON array of
+  // `split_bill_participants.id` strings. NULL for public.
+  // Visibility filter: viewer can read a private comment when their
+  // own participantId is in this list OR they're the sender.
+  @Column({
+    type: 'json',
+    nullable: true,
+    name: 'recipient_participant_ids',
+  })
+  recipientParticipantIds: string[] | null;
+
+  // Reply threading. A reply inherits the parent's visibility +
+  // recipient list — the API enforces that, so even if a client
+  // tries to broaden the audience the backend rejects.
+  @Index()
+  @Column({
+    type: 'varchar',
+    length: 36,
+    nullable: true,
+    name: 'parent_comment_id',
+  })
+  parentCommentId: string | null;
+
   @Column({ type: 'varchar', nullable: true, name: 'transaction_id' })
   transactionId: string | null;
 
