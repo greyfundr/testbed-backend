@@ -52,13 +52,33 @@ export class PendingPayout extends AbstractEntity {
   @Column({ name: 'source_bill_id', length: 36 })
   sourceBillId: string;
 
-  @Column({ name: 'source_participant_id', length: 36, nullable: true })
+  // Explicit `type: 'varchar'` is required on every nullable string
+  // column. TypeScript emits `Object` (not `String`) for the reflected
+  // type of a `string | null` union, which makes TypeORM bail with
+  // `DataTypeNotSupportedError: Data type "Object" ... is not supported
+  // by "mysql"`. Setting `type` short-circuits the reflection lookup.
+  @Column({
+    name: 'source_participant_id',
+    type: 'varchar',
+    length: 36,
+    nullable: true,
+  })
   sourceParticipantId: string | null;
 
-  @Column({ name: 'origin_payer_user_id', length: 36, nullable: true })
+  @Column({
+    name: 'origin_payer_user_id',
+    type: 'varchar',
+    length: 36,
+    nullable: true,
+  })
   originPayerUserId: string | null;
 
-  @Column({ name: 'bill_creator_user_id', length: 36, nullable: true })
+  @Column({
+    name: 'bill_creator_user_id',
+    type: 'varchar',
+    length: 36,
+    nullable: true,
+  })
   billCreatorUserId: string | null;
 
   @Column({
@@ -79,7 +99,12 @@ export class PendingPayout extends AbstractEntity {
   })
   claimedAt: Date | null;
 
-  @Column({ name: 'claimed_by_user_id', length: 36, nullable: true })
+  @Column({
+    name: 'claimed_by_user_id',
+    type: 'varchar',
+    length: 36,
+    nullable: true,
+  })
   claimedByUserId: string | null;
 
   @Column({
