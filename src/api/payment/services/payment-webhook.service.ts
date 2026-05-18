@@ -213,6 +213,11 @@ export class PaymentWebhookService {
     data: PaystackChargeSuccessData,
   ): Promise<void> {
     const { reference, metadata, amount: amountInKobo } = data;
+    this.logger.log(
+      `processCampaignDonationWebhook ref=${reference} amountKobo=${amountInKobo} metaKeys=${Object.keys(
+        metadata ?? {},
+      ).join(',')}`,
+    );
     const {
       campaignId,
       user_id: userId,
@@ -255,6 +260,9 @@ export class PaymentWebhookService {
       const user = await qr.manager.findOne(User, { where: { id: userId } });
 
       if (!campaign || !user) {
+        this.logger.error(
+          `Campaign or User not found ref=${reference} campaignId=${campaignId} userId=${userId} foundCampaign=${!!campaign} foundUser=${!!user}`,
+        );
         throw new Error('Campaign or User not found during webhook processing');
       }
 

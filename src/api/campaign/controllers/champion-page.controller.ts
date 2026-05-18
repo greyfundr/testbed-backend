@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   HttpStatus,
+  Logger,
   Param,
   Post,
   Query,
@@ -15,6 +16,15 @@ import { Response } from 'express';
 import { DataSource } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import * as bcrypt from 'bcrypt';
+import {
+  IsBoolean,
+  IsEmail,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 import { CampaignRepository } from '../repository/campaign.repository';
 import { CampaignAmplifierService } from '../services/campaign-amplifier.service';
 import { Campaign } from '../entities/campaign.entity';
@@ -27,6 +37,35 @@ import {
   TransactionDirection,
   TransactionStatus,
 } from '../../transaction/enums/transaction.enum';
+
+export class InitChampionDonationDto {
+  @IsNumber()
+  @Min(100)
+  amount: number;
+
+  @IsEmail()
+  email: string;
+
+  @IsString()
+  @IsNotEmpty()
+  phone: string;
+
+  @IsOptional()
+  @IsString()
+  donorName?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isAnonymous?: boolean;
+
+  @IsOptional()
+  @IsString()
+  comment?: string;
+
+  @IsOptional()
+  @IsString()
+  referrerCode?: string;
+}
 
 // Public landing page for champion referral URLs:
 //   GET /c/:slug              -> generic campaign donate page
@@ -43,6 +82,8 @@ import {
 // this route is reachable at /c/:slug (not /api/v1/c/:slug).
 @Controller({ path: '', version: VERSION_NEUTRAL })
 export class ChampionPageController {
+  private readonly logger = new Logger(ChampionPageController.name);
+
   constructor(
     private readonly campaignRepo: CampaignRepository,
     private readonly amplifierService: CampaignAmplifierService,
@@ -62,36 +103,21 @@ export class ChampionPageController {
   @Post('c/:slug/init-donation')
   async initChampionDonation(
     @Param('slug') slug: string,
-    @Body()
-    body: {
-      amount?: number;
-      email?: string;
-      phone?: string;
-      donorName?: string;
-      isAnonymous?: boolean;
-      comment?: string;
-      referrerCode?: string;
-    },
+    @Body() body: InitChampionDonationDto,
   ): Promise<{
     reference: string;
     userId: string;
     referrerAmplifierId: string | null;
   }> {
+    this.logger.log(
+      `init-donation slug=${slug} amount=${body?.amount} email=${body?.email} hasRef=${!!body?.referrerCode}`,
+    );
+
     if (!/^[A-Za-z0-9_-]{6,32}$/.test(slug)) {
       throw new BadRequestException('Invalid campaign slug');
     }
-    const amount = Number(body.amount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      throw new BadRequestException('Amount must be a positive number');
-    }
-    const email = (body.email || '').trim().toLowerCase();
-    const phone = (body.phone || '').trim();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      throw new BadRequestException('A valid email is required');
-    }
-    if (!phone) {
-      throw new BadRequestException('Phone number is required');
-    }
+    const email = body.email.trim().toLowerCase();
+    const phone = body.phone.trim();
 
     const campaign = await this.campaignRepo.findOne({
       where: { shareSlug: slug },
@@ -110,38 +136,62 @@ export class ChampionPageController {
       }
     }
 
-    const donor = await this.findOrCreateGuestDonor(
-      email,
-      phone,
-      body.donorName || '',
-    );
+    let donor;
+    try {
+      donor = await this.findOrCreateGuestDonor(
+        email,
+        phone,
+        body.donorName || '',
+      );
+    } catch (err) {
+      this.logger.error(
+        `init-donation donor lookup/create failed: ${(err as Error).message}`,
+        (err as Error).stack,
+      );
+      throw new BadRequestException(
+        'Could not record donor. Please check your email and try again.',
+      );
+    }
 
     const reference = `CHA-${uuidv4().replace(/-/g, '').substring(0, 16).toUpperCase()}`;
 
-    await this.dataSource.transaction(async (em) => {
-      await em.save(
-        em.create(Transaction, {
-          walletId: null,
-          amount,
-          currency: 'NGN',
-          type: TransactionType.CAMPAIGN_DONATION,
-          direction: TransactionDirection.CREDIT,
-          status: TransactionStatus.PENDING,
-          reference,
-          gatewayReference: reference,
-          paymentGateway: 'paystack',
-          description: `Champion-page donation — ${campaign.title}`,
-          sourceRef: { entity: 'campaign', id: campaign.id },
-          metadata: {
-            campaignId: campaign.id,
-            userId: donor.id,
-            source: 'champion_page',
-            referrerAmplifierId,
-          },
-        }),
+    try {
+      await this.dataSource.transaction(async (em) => {
+        await em.save(
+          em.create(Transaction, {
+            walletId: null,
+            amount: body.amount,
+            currency: 'NGN',
+            type: TransactionType.CAMPAIGN_DONATION,
+            direction: TransactionDirection.CREDIT,
+            status: TransactionStatus.PENDING,
+            reference,
+            gatewayReference: reference,
+            paymentGateway: 'paystack',
+            description: `Champion-page donation — ${campaign.title}`,
+            sourceRef: { entity: 'campaign', id: campaign.id },
+            metadata: {
+              campaignId: campaign.id,
+              userId: donor.id,
+              source: 'champion_page',
+              referrerAmplifierId,
+            },
+          }),
+        );
+      });
+    } catch (err) {
+      this.logger.error(
+        `init-donation transaction insert failed: ${(err as Error).message}`,
+        (err as Error).stack,
       );
-    });
+      throw new BadRequestException(
+        'Could not initialize the donation. Please try again.',
+      );
+    }
 
+    this.logger.log(
+      `init-donation OK reference=${reference} donor=${donor.id} amp=${referrerAmplifierId}`,
+    );
     return { reference, userId: donor.id, referrerAmplifierId };
   }
 
