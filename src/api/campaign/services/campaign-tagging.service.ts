@@ -1,4 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnApplicationBootstrap,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull } from 'typeorm';
 import { Campaign, CampaignCategory } from '../entities';
@@ -70,8 +74,30 @@ const TAG_PATTERNS: Array<{ tag: string; regex: RegExp }> = (() => {
 const MAX_TAGS_PER_CAMPAIGN = 6;
 
 @Injectable()
-export class CampaignTaggingService {
+export class CampaignTaggingService implements OnApplicationBootstrap {
   private readonly logger = new Logger(CampaignTaggingService.name);
+
+  // Runs once per process start. Tags any campaign whose `tags`
+  // column is still null — i.e. legacy rows that existed before the
+  // tagging service shipped + any row that slipped through the
+  // on-create hook (e.g. created during a brief deploy window).
+  // Detached from app start so a slow / failing run never blocks
+  // the service coming up to serve requests.
+  async onApplicationBootstrap(): Promise<void> {
+    setTimeout(() => {
+      this.backfillMissingTags(500)
+        .then((res) =>
+          this.logger.log(
+            `Boot-time tag backfill complete: ${res.processed} campaigns tagged`,
+          ),
+        )
+        .catch((err) =>
+          this.logger.warn(
+            `Boot-time tag backfill failed: ${(err as Error).message}`,
+          ),
+        );
+    }, 5000);
+  }
 
   constructor(
     @InjectRepository(Campaign)
