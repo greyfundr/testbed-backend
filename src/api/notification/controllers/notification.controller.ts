@@ -11,7 +11,6 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
-  ParseIntPipe,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
@@ -62,7 +61,7 @@ export class NotificationController {
   @ApiOperation({ summary: 'Delete a notification' })
   async deleteNotification(
     @CurrentUser() user: User,
-    @Param('id', ParseIntPipe) id: string,
+    @Param('id') id: string,
   ) {
     await this.notificationService.deleteNotification(user.id, id);
     return { success: true, message: 'Notification deleted' };
