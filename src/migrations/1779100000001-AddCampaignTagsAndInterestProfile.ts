@@ -21,10 +21,20 @@ export class AddCampaignTagsAndInterestProfile1779100000001
   implements MigrationInterface
 {
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`
-      ALTER TABLE \`campaigns\`
-        ADD COLUMN IF NOT EXISTS \`tags\` JSON NULL
-    `);
+    // Aiven MySQL doesn't support ADD COLUMN IF NOT EXISTS, so we
+    // check INFORMATION_SCHEMA first and only run the ALTER when
+    // the column is genuinely missing. Same idempotent intent.
+    const tagsCol = (await queryRunner.query(
+      `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'campaigns'
+          AND COLUMN_NAME = 'tags'`,
+    )) as Array<{ COLUMN_NAME: string }>;
+    if (tagsCol.length === 0) {
+      await queryRunner.query(
+        `ALTER TABLE \`campaigns\` ADD COLUMN \`tags\` JSON NULL`,
+      );
+    }
 
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS \`user_interest_profiles\` (
