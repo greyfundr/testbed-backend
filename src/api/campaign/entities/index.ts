@@ -14,3 +14,5 @@ export * from './campaign-proposal-allocation.entity';
 export * from './campaign-proposal-vote.entity';
 export * from './campaign-proposal-assignment.entity';
 export * from './campaign-update.entity';
+export * from './campaign-view.entity';
+export * from './user-interest-profile.entity';

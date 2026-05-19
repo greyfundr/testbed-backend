@@ -8,6 +8,8 @@ import {
   Body,
   Query,
   UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
@@ -16,6 +18,8 @@ import { User } from '../../user/entities/user.entity';
 import { CampaignSaveService } from '../services/campaign-save.service';
 import { CampaignAmplifierService } from '../services/campaign-amplifier.service';
 import { CampaignExpenditureService } from '../services/campaign-expenditure.service';
+import { CampaignFeedService } from '../services/campaign-feed.service';
+import { CampaignTaggingService } from '../services/campaign-tagging.service';
 import {
   CreateExpenditureDto,
   UpdateExpenditureDto,
@@ -28,7 +32,69 @@ export class CampaignExtrasController {
     private readonly saveService: CampaignSaveService,
     private readonly amplifierService: CampaignAmplifierService,
     private readonly expenditureService: CampaignExpenditureService,
+    private readonly feedService: CampaignFeedService,
+    private readonly taggingService: CampaignTaggingService,
   ) {}
+
+  /* ===== FOR YOU FEED ===== */
+
+  @Get('campaigns/feed')
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary:
+      'Personalized For You feed — ranks active campaigns by tag-match × freshness × trending × locality',
+  })
+  async forYouFeed(
+    @CurrentUser() user: User,
+    @Query('limit') limit?: string,
+    @Query('cursor') cursor?: string,
+  ) {
+    const parsedLimit = limit ? parseInt(limit, 10) : undefined;
+    const parsedCursor = cursor ? parseFloat(cursor) : undefined;
+    return this.feedService.getForYouFeed(user, {
+      limit: Number.isFinite(parsedLimit) ? parsedLimit : undefined,
+      cursor: Number.isFinite(parsedCursor) ? parsedCursor : undefined,
+    });
+  }
+
+  // Beacon called by the campaign details screen on open + close.
+  // Public (no auth required) so anonymous viewers also contribute
+  // to the trending sub-score. user_id is captured if a token is
+  // present; otherwise the row is a guest view.
+  @Post('campaigns/:id/view')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Record a campaign-detail view (and optional dwell time)',
+  })
+  async recordView(
+    @Param('id') campaignId: string,
+    @Body() body: { dwellMs?: number; userId?: string },
+  ) {
+    await this.feedService.recordView({
+      campaignId,
+      userId: body?.userId ?? null,
+      dwellMs: body?.dwellMs ?? null,
+    });
+  }
+
+  // One-off admin endpoint to derive tags for every campaign that
+  // still has tags = NULL. Operators can poke this while the For
+  // You feed is being rolled out so the first cohort of donors
+  // already have a rich pool to rank.
+  @Post('campaigns/admin/backfill-tags')
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary:
+      'Backfill topic tags on campaigns whose tags column is still null (admin)',
+  })
+  async backfillTags(@Query('limit') limit?: string) {
+    const parsed = limit ? parseInt(limit, 10) : 500;
+    return this.taggingService.backfillMissingTags(
+      Number.isFinite(parsed) ? parsed : 500,
+    );
+  }
 
   /* ===== SAVES ===== */
 

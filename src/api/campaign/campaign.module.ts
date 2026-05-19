@@ -17,6 +17,8 @@ import {
   CampaignProposalVote,
   CampaignProposalAssignment,
   CampaignUpdate,
+  CampaignView,
+  UserInterestProfile,
 } from './entities';
 import { CampaignRepository, DonationRepository } from './repository';
 import {
@@ -31,6 +33,9 @@ import {
   CampaignProposalService,
   CampaignUpdateService,
 } from './services';
+import { CampaignTaggingService } from './services/campaign-tagging.service';
+import { CampaignFeedService } from './services/campaign-feed.service';
+import { UserInterestProfileService } from './services/user-interest-profile.service';
 import { CampaignController } from './controllers/campaign.controller';
 import { CampaignOrganizerController } from './controllers/campaign-organizer.controller';
 import { CampaignExtrasController } from './controllers/campaign-extras.controller';
@@ -68,6 +73,8 @@ import { User } from '../user/entities';
       CampaignProposalVote,
       CampaignProposalAssignment,
       CampaignUpdate,
+      CampaignView,
+      UserInterestProfile,
       // Needed by CampaignOrganizerService to look up invitees and
       // gate the create() flow when a userId is provided.
       User,
@@ -104,6 +111,9 @@ import { User } from '../user/entities';
     CampaignVendorService,
     CampaignProposalService,
     CampaignUpdateService,
+    CampaignTaggingService,
+    CampaignFeedService,
+    UserInterestProfileService,
   ],
   exports: [
     CampaignService,

@@ -186,6 +186,14 @@ export class Campaign extends AbstractEntity {
   @Column({ type: 'varchar', length: 120, nullable: true })
   location?: string | null;
 
+  // Topic tags derived by CampaignTaggingService from the title +
+  // description + category. Drives the For You feed's content-based
+  // ranking — cosine similarity between this list and the viewer's
+  // user_interest_profile.tagWeights. Nullable so untagged legacy
+  // rows keep working; backfilled by a one-off job.
+  @Column({ type: 'json', nullable: true })
+  tags?: string[] | null;
+
   @Column({ type: 'tinyint', default: 0 })
   urgent: boolean = false;
 

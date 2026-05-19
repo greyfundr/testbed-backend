@@ -41,6 +41,7 @@ import { CampaignOrganizerService } from './campaign-organizer.service';
 import { CampaignAmplifierService } from './campaign-amplifier.service';
 import { CampaignVendorService } from './campaign-vendor.service';
 import { FollowService } from '../../user/services/follow.service';
+import { CampaignTaggingService } from './campaign-tagging.service';
 
 @Injectable()
 export class CampaignService {
@@ -59,6 +60,7 @@ export class CampaignService {
     private readonly amplifierService: CampaignAmplifierService,
     private readonly vendorService: CampaignVendorService,
     private readonly followService: FollowService,
+    private readonly taggingService: CampaignTaggingService,
   ) {}
 
   async create(
@@ -148,6 +150,20 @@ export class CampaignService {
         campaignTitle: campaign.title,
         creatorId: user.id,
       });
+
+      // Derive topic tags so the new campaign immediately enters the
+      // For You ranking pool with non-null tags. Best-effort: the
+      // tagger is keyword-based and pure, so it's unlikely to fail,
+      // but a hiccup here must not roll back the (already committed)
+      // campaign row.
+      try {
+        await this.taggingService.retagCampaign(savedCampaign.id);
+      } catch (tagErr) {
+        this.logger.warn(
+          `Campaign ${savedCampaign.id} created but tag derivation failed`,
+          tagErr as Error,
+        );
+      }
     } catch (err) {
       await qr.rollbackTransaction();
       throw err;
