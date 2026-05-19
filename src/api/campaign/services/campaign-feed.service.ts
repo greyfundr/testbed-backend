@@ -60,17 +60,16 @@ export class CampaignFeedService {
     const userTags = await this.profileService.getProfile(user.id);
     const hasProfile = Object.keys(userTags).length > 0;
 
-    // Candidate pool — limit to active campaigns, exclude ones the
-    // user already donated to (they're already supporters; the feed
-    // should expand their world, not replay it). We keep liked /
-    // saved campaigns in the pool because re-encountering them is
-    // useful (the user might want to revisit / donate more).
+    // Candidate pool — every active campaign. We deliberately don't
+    // exclude the user's own campaigns or campaigns they've already
+    // donated to; instead we DOWN-RANK them in the score so the
+    // feed always has content even for power users / testbed users
+    // who created or donated to most of the pool.
     const candidates = await this.campaignRepo
       .createQueryBuilder('c')
       .leftJoinAndSelect('c.creator', 'creator')
       .leftJoinAndSelect('c.category', 'category')
       .where('c.status = :status', { status: CampaignStatus.ACTIVE })
-      .andWhere('c.creatorId != :uid', { uid: user.id })
       .orderBy('c.createdAt', 'DESC')
       .limit(200)
       .getMany();
@@ -85,9 +84,13 @@ export class CampaignFeedService {
     const candidateIds = candidates.map((c) => c.id);
     const trendingCounts = await this.loadTrendingCounts(candidateIds);
 
-    // Donations the user has already made — used to exclude them
-    // from the feed so we don't re-recommend campaigns they've
-    // already backed.
+    // Campaigns the user already donated to + their own campaigns:
+    // both still appear in the feed but with a softening multiplier
+    // applied to the final score (defined inline below). Donated-to
+    // is a weaker penalty than own-creator since revisiting a
+    // campaign you backed before is a reasonable suggestion ("top
+    // up your previous donation"); the user's own campaign is the
+    // weakest fit ("nothing new here") so it sinks further.
     const donatedToIds = await this.donationRepo
       .createQueryBuilder('d')
       .select('DISTINCT d.campaign_id', 'cid')
@@ -98,7 +101,6 @@ export class CampaignFeedService {
     const now = Date.now();
 
     const scored = candidates
-      .filter((c) => !donatedToIds.has(c.id))
       .map((c) => {
         const contentScore = hasProfile
           ? this.cosineSimilarity(userTags, c.tags ?? [])
@@ -117,11 +119,22 @@ export class CampaignFeedService {
 
         const localityScore = this.localityMatch(user, c) ? 1 : 0;
 
-        const score =
+        // Soft penalties — we don't filter these campaigns out, we
+        // just push them down so fresh / interesting alternatives
+        // rank above them. A user's OWN campaign sinks hardest
+        // (×0.3) because there's no discovery value; an already-
+        // donated-to campaign is gentler (×0.7) because revisiting
+        // a backed cause is a reasonable nudge to top up.
+        let penalty = 1;
+        if (c.creatorId === user.id) penalty *= 0.3;
+        if (donatedToIds.has(c.id)) penalty *= 0.7;
+
+        const score = penalty * (
           SCORE_WEIGHTS.content * contentScore +
           SCORE_WEIGHTS.freshness * freshnessScore +
           SCORE_WEIGHTS.trending * trendingScore +
-          SCORE_WEIGHTS.locality * localityScore;
+          SCORE_WEIGHTS.locality * localityScore
+        );
 
         const reason = this.explain({
           contentScore,
