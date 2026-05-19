@@ -198,6 +198,9 @@ export class SplitBillParticipant extends AbstractEntity {
   }
 
   get isFullyPaid(): boolean {
-    return this.amountPaid >= this.effectiveAmountOwed;
+    // ₦1 tolerance for FP-rounding dust (₦10,000 / 3 = 3,333.33…).
+    // Matches the write-path tolerance in split-bill.service.ts so
+    // every code path agrees on what "settled" means.
+    return this.effectiveAmountOwed - this.amountPaid < 1;
   }
 }

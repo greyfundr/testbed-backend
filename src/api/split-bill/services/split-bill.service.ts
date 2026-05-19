@@ -1924,11 +1924,16 @@ export class SplitBillService {
           );
           const newAmountPaid = p.amountPaid + paymentForThisParticipant;
           const totalOwed = p.amountOwed + p.balanceAdjustment;
-          const isFullyPaid = newAmountPaid >= totalOwed;
+          const rawRemaining = Math.max(0, totalOwed - newAmountPaid);
+          // Sub-naira residue is FP-rounding dust from how shares get
+          // divided (e.g. ₦10,000 / 3 = 3,333.33…). Treat anything under
+          // ₦1 as fully paid — the user can't clear it anyway because
+          // Paystack's minimum is ₦500.
+          const isFullyPaid = rawRemaining < 1;
 
           await qr.manager.update(SplitBillParticipant, p.id, {
             amountPaid: newAmountPaid,
-            amountRemaining: Math.max(0, totalOwed - newAmountPaid),
+            amountRemaining: isFullyPaid ? 0 : rawRemaining,
             status: isFullyPaid
               ? ParticipantStatus.PAID
               : ParticipantStatus.PARTIAL,
@@ -2189,8 +2194,12 @@ export class SplitBillService {
       const effectiveOwed =
         participant.amountOwed + participant.balanceAdjustment;
       const newAmountPaid = participant.amountPaid + verifiedAmount;
-      const newAmountRemaining = Math.max(0, effectiveOwed - newAmountPaid);
-      const participantFullyPaid = newAmountRemaining === 0;
+      const rawRemaining = Math.max(0, effectiveOwed - newAmountPaid);
+      // Sub-naira residue is FP-rounding dust from how shares get
+      // divided — treat anything under ₦1 as fully paid. Paystack's
+      // ₦500 minimum means the user couldn't clear it anyway.
+      const participantFullyPaid = rawRemaining < 1;
+      const newAmountRemaining = participantFullyPaid ? 0 : rawRemaining;
 
       // 4. Update Participant
       await qr.manager.update(SplitBillParticipant, participantId, {
