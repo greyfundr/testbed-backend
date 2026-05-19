@@ -79,7 +79,15 @@ export class CampaignFeedService {
       .limit(200)
       .getMany();
 
+    this.logger.log(
+      `getForYouFeed user=${user.id} candidates=${candidates.length} hasProfile=${hasProfile}`,
+    );
+
     if (candidates.length === 0) {
+      this.logger.warn(
+        `getForYouFeed: zero candidates for user=${user.id}. ` +
+          `Check campaign.status values in DB — feed accepts ACTIVE + PENDING_APPROVAL.`,
+      );
       return { items: [], nextCursor: null };
     }
 
@@ -163,6 +171,10 @@ export class CampaignFeedService {
     );
     const nextCursor =
       page.length === limit ? page[page.length - 1]._feedScore : null;
+
+    this.logger.log(
+      `getForYouFeed user=${user.id} scored=${scored.length} returned=${page.length} top=${page[0]?._reason ?? 'n/a'}`,
+    );
 
     return { items: page, nextCursor };
   }
