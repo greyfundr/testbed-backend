@@ -38,7 +38,13 @@ export class CampaignExtrasController {
 
   /* ===== FOR YOU FEED ===== */
 
-  @Get('campaigns/feed')
+  // Path is `/campaigns/for-you` (NOT `/campaigns/feed`) because
+  // CampaignController registers `@Get(':id')` for "get campaign by
+  // id" first in the module's controller list. That route would
+  // greedily match `/campaigns/feed` as if 'feed' were an id, return
+  // 404 ('Campaign with id feed not found'), and our handler never
+  // runs. Hyphenated path can't collide with a UUID-shaped id.
+  @Get('campaigns/for-you')
   @ApiBearerAuth('JWT-auth')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
