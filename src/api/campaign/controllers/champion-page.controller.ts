@@ -733,8 +733,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           // we created in step 1, asks Paystack to confirm the charge,
           // then creates the Donation row + bumps current_amount +
           // awards GreyPoints (including champion credit if attributed).
+          // /api/v1 is the global prefix on the payment controller — the
+          // page lives at /c/:slug (excluded from the prefix), so apiBase
+          // does NOT include /api/v1 and we have to add it back here.
+          // Until this line was added, every verify call landed on a
+          // 404 and the donation was silently dropped.
           donateBtn.textContent = 'Confirming…';
-          fetch(data.apiBase + '/payment/verify/' + response.reference, {
+          fetch(data.apiBase + '/api/v1/payment/verify/' + response.reference, {
             method: 'GET',
           }).then(function(r){ return r.json(); })
             .then(function(){
