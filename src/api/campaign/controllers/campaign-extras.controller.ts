@@ -38,13 +38,15 @@ export class CampaignExtrasController {
 
   /* ===== FOR YOU FEED ===== */
 
-  // Path is `/campaigns/for-you` (NOT `/campaigns/feed`) because
+  // Path is `/me/for-you` (NOT under `/campaigns/*`) because
   // CampaignController registers `@Get(':id')` for "get campaign by
-  // id" first in the module's controller list. That route would
-  // greedily match `/campaigns/feed` as if 'feed' were an id, return
-  // 404 ('Campaign with id feed not found'), and our handler never
-  // runs. Hyphenated path can't collide with a UUID-shaped id.
-  @Get('campaigns/for-you')
+  // id". Across-controller route ordering means anything matching
+  // `/campaigns/<single-segment>` gets caught by that dynamic route
+  // first — including 'feed' and 'for-you' — returning a 404
+  // 'Campaign with id … not found'. Mirroring the existing
+  // `/me/saved-campaigns` pattern puts this endpoint in a separate
+  // URL space where no collision is possible.
+  @Get('me/for-you')
   @ApiBearerAuth('JWT-auth')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
