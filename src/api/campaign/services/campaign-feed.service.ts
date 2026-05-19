@@ -60,16 +60,21 @@ export class CampaignFeedService {
     const userTags = await this.profileService.getProfile(user.id);
     const hasProfile = Object.keys(userTags).length > 0;
 
-    // Candidate pool — every active campaign. We deliberately don't
-    // exclude the user's own campaigns or campaigns they've already
-    // donated to; instead we DOWN-RANK them in the score so the
-    // feed always has content even for power users / testbed users
-    // who created or donated to most of the pool.
+    // Candidate pool — every campaign visible to the public Explore
+    // feed. Matches CampaignService.getAll's status filter (ACTIVE +
+    // PENDING_APPROVAL) so the For You tab can never show LESS than
+    // Explore for the same user. We deliberately don't exclude the
+    // user's own campaigns or campaigns they've already donated to;
+    // instead we DOWN-RANK them in the score so the feed always has
+    // content even for power users / testbed users who created or
+    // donated to most of the pool.
     const candidates = await this.campaignRepo
       .createQueryBuilder('c')
       .leftJoinAndSelect('c.creator', 'creator')
       .leftJoinAndSelect('c.category', 'category')
-      .where('c.status = :status', { status: CampaignStatus.ACTIVE })
+      .where('c.status IN (:...statuses)', {
+        statuses: [CampaignStatus.ACTIVE, CampaignStatus.PENDING_APPROVAL],
+      })
       .orderBy('c.createdAt', 'DESC')
       .limit(200)
       .getMany();
